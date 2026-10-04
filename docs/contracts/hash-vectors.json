@@ -1,0 +1,203 @@
+{
+  "version": 1,
+  "spec": "PRD 10.6. destination_hash = sha256_hex(JCS({account_id, platform, text, settings, scheduled_at, media:[{sha256, alt_text}] in position order})); approval_hash = sha256_hex(JCS({post_id, revision_id, destinations:[destination_hash ordered by destination id]})). JCS = RFC 8785 (npm canonicalize). scheduled_at = UTC, truncated to the second, Z suffix. No Unicode normalization.",
+  "destination": [
+    {
+      "name": "romanian-text-empty-settings",
+      "note": "LinkedIn post, Romanian text without diacritics, empty settings, no media.",
+      "input": {
+        "account_id": "0b6f3c2a-6a51-4c1e-9d2f-1f0e8a7b6c5d",
+        "platform": "linkedin-page",
+        "text": "Ai pana pe 25 mai sa depui Declaratia Unica. Afla ce trebuie sa stii despre castigurile din crypto.",
+        "settings": {},
+        "scheduled_at": "2026-11-02T08:00:00Z",
+        "media": []
+      },
+      "canonical": "{\"account_id\":\"0b6f3c2a-6a51-4c1e-9d2f-1f0e8a7b6c5d\",\"media\":[],\"platform\":\"linkedin-page\",\"scheduled_at\":\"2026-11-02T08:00:00Z\",\"settings\":{},\"text\":\"Ai pana pe 25 mai sa depui Declaratia Unica. Afla ce trebuie sa stii despre castigurile din crypto.\"}",
+      "hash": "057fbaac90b4feec5b4651f13b9446a5289dcf2045b02dae61c2d7f9ed1b274d"
+    },
+    {
+      "name": "emoji-x-one-image",
+      "note": "X post with emoji (surrogate pairs and a ZWJ sequence), a URL and a neutral setting.",
+      "input": {
+        "account_id": "5e0c9a1b-2d3f-4e5a-8b7c-6d5e4f3a2b1c",
+        "platform": "x",
+        "text": "Termenul se apropie 📅 Verifica-ti tranzactiile inainte de 25 mai 👩‍💻 https://thecrypto.support/ghid/declaratia-unica",
+        "settings": {
+          "who_can_reply": "everyone"
+        },
+        "scheduled_at": "2026-11-02T10:30:00Z",
+        "media": [
+          {
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "alt_text": "Card cu textul: Declaratia Unica, termen 25 mai"
+          }
+        ]
+      },
+      "canonical": "{\"account_id\":\"5e0c9a1b-2d3f-4e5a-8b7c-6d5e4f3a2b1c\",\"media\":[{\"alt_text\":\"Card cu textul: Declaratia Unica, termen 25 mai\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}],\"platform\":\"x\",\"scheduled_at\":\"2026-11-02T10:30:00Z\",\"settings\":{\"who_can_reply\":\"everyone\"},\"text\":\"Termenul se apropie 📅 Verifica-ti tranzactiile inainte de 25 mai 👩‍💻 https://thecrypto.support/ghid/declaratia-unica\"}",
+      "hash": "32d8447b521293e0a8efc4b6b6f741747529944f6b6a97ba86b320ce9f471a4c"
+    },
+    {
+      "name": "instagram-multiple-images",
+      "note": "Three images in position order; the order is part of the hash.",
+      "input": {
+        "account_id": "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f",
+        "platform": "instagram",
+        "text": "Trei lucruri de stiut despre impozitul pe castigurile crypto. Gasesti ghidul complet in bio.",
+        "settings": {
+          "post_type": "post"
+        },
+        "scheduled_at": "2026-11-03T16:00:00Z",
+        "media": [
+          {
+            "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+            "alt_text": "Pasul 1: aduna tranzactiile"
+          },
+          {
+            "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+            "alt_text": "Pasul 2: calculeaza castigul"
+          },
+          {
+            "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+            "alt_text": ""
+          }
+        ]
+      },
+      "canonical": "{\"account_id\":\"c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f\",\"media\":[{\"alt_text\":\"Pasul 1: aduna tranzactiile\",\"sha256\":\"1111111111111111111111111111111111111111111111111111111111111111\"},{\"alt_text\":\"Pasul 2: calculeaza castigul\",\"sha256\":\"2222222222222222222222222222222222222222222222222222222222222222\"},{\"alt_text\":\"\",\"sha256\":\"3333333333333333333333333333333333333333333333333333333333333333\"}],\"platform\":\"instagram\",\"scheduled_at\":\"2026-11-03T16:00:00Z\",\"settings\":{\"post_type\":\"post\"},\"text\":\"Trei lucruri de stiut despre impozitul pe castigurile crypto. Gasesti ghidul complet in bio.\"}",
+      "hash": "1f1d6dd56681ca1f725641aff49dff11277ba69e1d825e64a3dc6b8f78ee65bb"
+    },
+    {
+      "name": "devto-article-nested-settings",
+      "note": "Article with markdown (newlines, quotes, backslash, tab), nested settings given in non-sorted key order, and a number.",
+      "input": {
+        "account_id": "0b6f3c2a-6a51-4c1e-9d2f-1f0e8a7b6c5d",
+        "platform": "devto",
+        "text": "# Cum calculezi impozitul\n\nPasul 1: exporta tranzactiile in \"CSV\".\n\tCod: `C:\\export\\tranzactii.csv`\n",
+        "settings": {
+          "title": "Cum calculezi impozitul pe crypto",
+          "tags": [
+            "crypto",
+            "taxes",
+            "romania"
+          ],
+          "canonical_url": "https://thecrypto.support/ghid/impozit-crypto",
+          "cover_media_id": "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a",
+          "series": {
+            "name": "Ghiduri",
+            "part": 2
+          }
+        },
+        "scheduled_at": "2026-11-04T07:15:00Z",
+        "media": [
+          {
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "alt_text": "Coperta articolului"
+          }
+        ]
+      },
+      "canonical": "{\"account_id\":\"0b6f3c2a-6a51-4c1e-9d2f-1f0e8a7b6c5d\",\"media\":[{\"alt_text\":\"Coperta articolului\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}],\"platform\":\"devto\",\"scheduled_at\":\"2026-11-04T07:15:00Z\",\"settings\":{\"canonical_url\":\"https://thecrypto.support/ghid/impozit-crypto\",\"cover_media_id\":\"9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a\",\"series\":{\"name\":\"Ghiduri\",\"part\":2},\"tags\":[\"crypto\",\"taxes\",\"romania\"],\"title\":\"Cum calculezi impozitul pe crypto\"},\"text\":\"# Cum calculezi impozitul\\n\\nPasul 1: exporta tranzactiile in \\\"CSV\\\".\\n\\tCod: `C:\\\\export\\\\tranzactii.csv`\\n\"}",
+      "hash": "b20e455dee33b18eacb6f92ed217805873b75cabcc8b275a6114cbf18ccd102e"
+    },
+    {
+      "name": "utf8-diacritics-and-control",
+      "note": "Bytes outside ASCII are hashed as UTF-8, without Unicode normalization (the content rules reject diacritics, the hash still has to be defined for them). U+2028 and a control character test JCS escaping.",
+      "input": {
+        "account_id": "5e0c9a1b-2d3f-4e5a-8b7c-6d5e4f3a2b1c",
+        "platform": "facebook",
+        "text": "Știai că taxa e 10%? Rând nou\u0007",
+        "settings": {},
+        "scheduled_at": "2026-12-31T22:59:59Z",
+        "media": []
+      },
+      "canonical": "{\"account_id\":\"5e0c9a1b-2d3f-4e5a-8b7c-6d5e4f3a2b1c\",\"media\":[],\"platform\":\"facebook\",\"scheduled_at\":\"2026-12-31T22:59:59Z\",\"settings\":{},\"text\":\"Știai că taxa e 10%? Rând nou\\u0007\"}",
+      "hash": "648ce41920dc3cf01709ff5e92902fc2962eb0fb7f2bfbe9934989819c8dbfeb"
+    },
+    {
+      "name": "empty-text-two-images-same-hash",
+      "note": "Empty text; the same image twice with different alt texts.",
+      "input": {
+        "account_id": "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f",
+        "platform": "facebook",
+        "text": "",
+        "settings": {},
+        "scheduled_at": "2027-03-28T07:00:00Z",
+        "media": [
+          {
+            "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "alt_text": "Prima"
+          },
+          {
+            "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "alt_text": "A doua"
+          }
+        ]
+      },
+      "canonical": "{\"account_id\":\"c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f\",\"media\":[{\"alt_text\":\"Prima\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"},{\"alt_text\":\"A doua\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"}],\"platform\":\"facebook\",\"scheduled_at\":\"2027-03-28T07:00:00Z\",\"settings\":{},\"text\":\"\"}",
+      "hash": "2b1660e7263150d790387be0b5fd1d1ebe482ad9eb0b48cf0d713ab325a8bf44"
+    }
+  ],
+  "approval": [
+    {
+      "name": "single-destination",
+      "note": "One destination.",
+      "input": {
+        "post_id": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+        "revision_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "destinations": [
+          {
+            "id": "0b6f3c2a-6a51-4c1e-9d2f-1f0e8a7b6c5d",
+            "destination_hash": "057fbaac90b4feec5b4651f13b9446a5289dcf2045b02dae61c2d7f9ed1b274d"
+          }
+        ]
+      },
+      "canonical": "{\"destinations\":[\"057fbaac90b4feec5b4651f13b9446a5289dcf2045b02dae61c2d7f9ed1b274d\"],\"post_id\":\"7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d\",\"revision_id\":\"1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d\"}",
+      "hash": "6654ba70d03677aa5127dcfff954846975240dfa702c3c8cf2bbc9e413ba0af8"
+    },
+    {
+      "name": "three-destinations-unsorted",
+      "note": "Destinations given out of order; hashes are listed by ascending destination id.",
+      "input": {
+        "post_id": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+        "revision_id": "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+        "destinations": [
+          {
+            "id": "f0000000-0000-4000-8000-000000000003",
+            "destination_hash": "32d8447b521293e0a8efc4b6b6f741747529944f6b6a97ba86b320ce9f471a4c"
+          },
+          {
+            "id": "10000000-0000-4000-8000-000000000001",
+            "destination_hash": "1f1d6dd56681ca1f725641aff49dff11277ba69e1d825e64a3dc6b8f78ee65bb"
+          },
+          {
+            "id": "a0000000-0000-4000-8000-000000000002",
+            "destination_hash": "b20e455dee33b18eacb6f92ed217805873b75cabcc8b275a6114cbf18ccd102e"
+          }
+        ]
+      },
+      "canonical": "{\"destinations\":[\"1f1d6dd56681ca1f725641aff49dff11277ba69e1d825e64a3dc6b8f78ee65bb\",\"b20e455dee33b18eacb6f92ed217805873b75cabcc8b275a6114cbf18ccd102e\",\"32d8447b521293e0a8efc4b6b6f741747529944f6b6a97ba86b320ce9f471a4c\"],\"post_id\":\"7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d\",\"revision_id\":\"2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e\"}",
+      "hash": "f01e7de65cc269eba920718b7fda676793b98d7e4a74d30774729e092240596a"
+    }
+  ],
+  "timestamp_normalization": [
+    {
+      "input": "2026-11-02T08:00:00Z",
+      "expected": "2026-11-02T08:00:00Z"
+    },
+    {
+      "input": "2026-11-02T08:00:00.999Z",
+      "expected": "2026-11-02T08:00:00Z"
+    },
+    {
+      "input": "2026-10-25T03:30:00.750+02:00",
+      "expected": "2026-10-25T01:30:00Z"
+    },
+    {
+      "input": "2026-10-25T03:30:00+03:00",
+      "expected": "2026-10-25T00:30:00Z"
+    },
+    {
+      "input": "2027-03-28T04:00:00+03:00",
+      "expected": "2027-03-28T01:00:00Z"
+    }
+  ]
+}

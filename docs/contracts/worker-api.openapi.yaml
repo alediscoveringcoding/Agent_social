@@ -1,0 +1,566 @@
+openapi: 3.1.0
+info:
+  title: Social publishing worker API
+  version: 1.0.0-draft
+  summary: Site API consumed by the Track B worker (PRD section 10.3).
+  description: |
+    Draft written by Track A from the implementation in `site/src/app/api/worker/social/v1/`
+    (tests: `site/src/lib/social/__tests__/worker-api.test.ts`). Pending review by Track B;
+    frozen at M0/L0 per PRD section 10.
+
+    Conventions
+    - Every call: `Authorization: Bearer ${WORKER_TOKEN}`, `X-Worker-Id`, optional `X-Worker-Version`,
+      JSON body (an empty body is read as `{}`). Every authenticated call updates
+      `social_workers.last_seen_at`.
+    - Timestamps in responses are ISO 8601 UTC to the second with a `Z` suffix.
+    - Errors are `{"error": {"code", "message", "details"?}}`.
+    - **409 = lease lost**: stop work on that job at once (do not call Postiz, do not retry the call).
+    - Unknown body fields are ignored, so the worker can send a field before the site reads it.
+    - Leases last 10 minutes. `/heartbeat` extends a delivery lease; generation leases have no heartbeat.
+    - Kill switch: unless the site's `SOCIAL_PUBLISHING_ENABLED` is exactly `true`, `/deliveries/claim`
+      returns `{"jobs": []}` (no publish, poll or reconcile jobs) and `/submitting` answers 409 and puts
+      the job back in the queue.
+
+    Interpretations to confirm (not spelled out in the PRD)
+    - Poll and reconcile pacing: the contract has no "still pending" outcome. A poll/reconcile job is
+      offered again 60 s after it was claimed: to ANY worker once its lease has expired, and to the SAME
+      worker that holds the lease as soon as 60 s have passed. A worker that finds nothing new simply
+      does not report.
+    - `retry` is accepted from `claimed`, `submitting` and `submitted`; the worker must only send it when
+      Postiz definitely did not create the post (otherwise `reconciling`).
+    - `/submitted` is accepted from `submitting` (normal), `reconciling` (reconcile found the post) and,
+      as a protocol slip, `claimed`: losing track of a post that exists is what causes duplicates.
+    - A daily-cap breach found at claim time leaves the job queued (it fails as STALE when its window
+      closes); no new error code was introduced.
+servers:
+  - url: http://localhost:3000/api/worker/social/v1
+    description: Localhost MVP (amendments 01 and 02)
+security:
+  - workerToken: []
+paths:
+  /deliveries/claim:
+    post:
+      summary: Claim due publish jobs, then reconcile and poll jobs (leased 10 min)
+      description: |
+        Runs the sweeper first (lease expiry, STALE, manual_due, worker_silent). Publish jobs need: status
+        queued, run_at reached, backoff over, inside run_at + stale window (2 h), account auto + connected +
+        not paused + not disabled in Postiz, approval of the revision still active, and the account's daily
+        cap not reached for that Bucharest day. Each publish claim increments `attempt_no`.
+      parameters:
+        - $ref: '#/components/parameters/WorkerId'
+        - $ref: '#/components/parameters/WorkerVersion'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                limit: { type: integer, minimum: 1, maximum: 5, default: 1 }
+      responses:
+        '200':
+          description: Leased jobs (possibly none)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobs]
+                properties:
+                  jobs:
+                    type: array
+                    items: { $ref: '#/components/schemas/DeliveryJob' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '503': { $ref: '#/components/responses/NotConfigured' }
+  /deliveries/{id}/heartbeat:
+    post:
+      summary: Extend the lease by 10 minutes
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/WorkerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttemptBody' }
+      responses:
+        '200':
+          description: Lease extended
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lease_expires_at]
+                properties:
+                  lease_expires_at: { type: string, format: date-time }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/LeaseLost' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /deliveries/{id}/submitting:
+    post:
+      summary: Must succeed right before the Postiz create call
+      description: |
+        Last gate. Past the stale window the job fails as STALE (event delivery_stale); with the kill switch
+        off, a paused / disconnected account or a revoked approval the job goes back to `queued`. All of
+        these answer 409. Repeating the call for the same attempt answers 200 with `idempotent: true`.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/WorkerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttemptBody' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/LeaseLost' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /deliveries/{id}/submitted:
+    post:
+      summary: Report the Postiz post id after create (idempotent)
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/WorkerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attempt_no, postiz_post_id]
+              properties:
+                attempt_no: { type: integer, minimum: 1 }
+                postiz_post_id: { type: string, minLength: 1, maxLength: 200 }
+                postiz_group: { type: [string, 'null'], maxLength: 200 }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/LeaseLost' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /deliveries/{id}/result:
+    post:
+      summary: Report the outcome of a publish, poll or reconcile job
+      description: |
+        - `published` (from submitting, submitted, reconciling): stores `remote_url`.
+        - `failed` (needs `error_code`): AUTH_EXPIRED also sets the account to reconnect_required
+          (event account_reconnect_required); PERMISSION_DENIED sets developer_setup_required.
+          Event delivery_failed.
+        - `retry` (needs `error_code`): back to queued after 1 / 5 / 15 min, or `retry_after_seconds`
+          (capped at 1 h); after the 3rd attempt (2nd for MEDIA_FETCH_FAILED) it fails instead.
+        - `reconciling` (from submitting, submitted): unknown result; reconcile jobs follow.
+        - `not_found` (from reconciling): the first time back to queued, the second time failed
+          RECONCILE_MISS (a person decides).
+        Repeating the same final report answers 200 with `idempotent: true`. A transition that does not
+        apply to the job's state answers 409 `INVALID_TRANSITION`.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/WorkerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attempt_no, outcome]
+              properties:
+                attempt_no: { type: integer, minimum: 1 }
+                outcome: { type: string, enum: [published, failed, retry, reconciling, not_found] }
+                remote_url: { type: [string, 'null'], pattern: '^https?://', maxLength: 2048 }
+                error_code: { $ref: '#/components/schemas/ErrorCode' }
+                error_message: { type: [string, 'null'], maxLength: 4000 }
+                retry_after_seconds: { type: [integer, 'null'], minimum: 0, maximum: 86400 }
+      responses:
+        '200':
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, const: true }
+                  status: { type: string, description: Job status after the report }
+                  idempotent: { type: boolean }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/LeaseLost' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /generation/claim:
+    post:
+      summary: Claim queued generation requests (leased 10 min, max 3 attempts)
+      description: Not affected by the kill switch (drafts publish nothing).
+      parameters:
+        - $ref: '#/components/parameters/WorkerId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                limit: { type: integer, minimum: 1, maximum: 5, default: 1 }
+      responses:
+        '200':
+          description: Leased requests (possibly none)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requests]
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      type: object
+                      required: [request_id, brand, input, lease_expires_at]
+                      properties:
+                        request_id: { type: string, format: uuid }
+                        brand: { type: string, description: 'Brand slug: taxes-support, the-crypto-support, comets-of-web3' }
+                        input: { $ref: '#/components/schemas/GenerationInput' }
+                        lease_expires_at: { type: string, format: date-time }
+  /generation/{id}/drafts:
+    post:
+      summary: Deliver drafts; idempotent on request id + client_ref
+      description: |
+        Accepted while the caller holds the lease, or after the request is already done (re-delivery: every
+        draft is skipped). Marks the request done and emits drafts_ready. Drafts that fail the content rules
+        are stored with their validation for a person to fix; they are never rejected for content.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/WorkerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [drafts]
+              properties:
+                drafts:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: { $ref: '#/components/schemas/Draft' }
+      responses:
+        '200':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [created, skipped]
+                properties:
+                  created: { type: integer }
+                  skipped: { type: integer }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/LeaseLost' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /generation/{id}/failed:
+    post:
+      summary: Report a generation failure (event generation_failed)
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/WorkerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [error_code]
+              properties:
+                error_code: { $ref: '#/components/schemas/ErrorCode' }
+                error_message: { type: [string, 'null'], maxLength: 4000 }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/LeaseLost' }
+        '422': { $ref: '#/components/responses/Invalid' }
+  /accounts/sync:
+    post:
+      summary: Upsert Postiz channels by integration id; report recent Postiz posts
+      description: |
+        A channel new to the site is created PAUSED, with no brand, mode auto: it publishes nothing until a
+        person assigns and unpauses it. `refresh_needed: true` sets reconnect_required (event once, on the
+        change); a later sync without it sets connected again. Statuses the site set for its own reasons
+        (developer_setup_required, approval_pending, manual) are kept. Unknown providers are ignored and
+        listed. A recent Postiz post that no job created raises foreign_post once (skipped while a job on
+        that channel is between /submitting and /submitted).
+      parameters:
+        - $ref: '#/components/parameters/WorkerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [integrations]
+              properties:
+                integrations:
+                  type: array
+                  maxItems: 500
+                  items:
+                    type: object
+                    required: [postiz_integration_id, provider, name]
+                    properties:
+                      postiz_integration_id: { type: string }
+                      provider:
+                        type: string
+                        description: 'Postiz provider id: x, facebook, instagram, instagram-standalone (or instagram.standalone), linkedin-page (or linkedin.page), devto (or dev.to), hashnode'
+                      name: { type: string }
+                      picture_url: { type: [string, 'null'] }
+                      profile_url: { type: [string, 'null'] }
+                      disabled: { type: boolean }
+                      refresh_needed: { type: boolean }
+                      rules:
+                        type: [object, 'null']
+                        description: 'Channel rules from Postiz. `max_length` (or `maxLength`), when present, lowers the length limit.'
+                postiz_recent_posts:
+                  type: array
+                  maxItems: 2000
+                  items:
+                    type: object
+                    required: [postiz_post_id, integration_id]
+                    properties:
+                      postiz_post_id: { type: string }
+                      integration_id: { type: string }
+                      created_at: { type: [string, 'null'], format: date-time }
+      responses:
+        '200':
+          description: Synced
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  upserted: { type: integer }
+                  ignored:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        postiz_integration_id: { type: string }
+                        reason: { type: string }
+                  foreign_posts: { type: integer }
+components:
+  securitySchemes:
+    workerToken:
+      type: http
+      scheme: bearer
+      description: WORKER_TOKEN, at least 32 characters, compared in constant time. The site refuses every call (503) when it is unset or shorter.
+  parameters:
+    WorkerId:
+      name: X-Worker-Id
+      in: header
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9._:-]{1,64}$' }
+    WorkerVersion:
+      name: X-Worker-Version
+      in: header
+      required: false
+      schema: { type: string, maxLength: 64 }
+    JobId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RequestId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Ok:
+      description: Done
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ok: { type: boolean, const: true }
+              idempotent: { type: boolean }
+    BadRequest:
+      description: Missing or malformed X-Worker-Id, or a body that is not JSON
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: Missing or wrong bearer token
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: No such job / request (also for an id that is not a UUID)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    LeaseLost:
+      description: Lease lost (code LEASE_LOST) or a transition that does not apply (INVALID_TRANSITION). Stop work on this job.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Invalid:
+      description: Body does not match the contract (code INVALID_BODY, `details` lists path + message)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotConfigured:
+      description: WORKER_TOKEN is not configured on the site (code NOT_CONFIGURED)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [UNAUTHORIZED, WORKER_ID_REQUIRED, INVALID_JSON, INVALID_BODY, NOT_FOUND, LEASE_LOST, INVALID_TRANSITION, NOT_CONFIGURED, INTERNAL] }
+            message: { type: string }
+            details: {}
+    AttemptBody:
+      type: object
+      required: [attempt_no]
+      properties:
+        attempt_no: { type: integer, minimum: 1 }
+    ErrorCode:
+      type: string
+      pattern: '^[A-Z][A-Z0-9_]*$'
+      maxLength: 64
+      description: PRD 10.7 codes (RATE_LIMITED, TRANSIENT, MEDIA_FETCH_FAILED, AUTH_EXPIRED, PERMISSION_DENIED, VALIDATION_REJECTED, HASH_MISMATCH, UNKNOWN_RESULT, STALE, RECONCILE_MISS); any UPPER_SNAKE_CASE code is stored.
+    Platform:
+      type: string
+      enum: [facebook, instagram, linkedin-page, x, devto, hashnode, substack, producthunt]
+    DeliveryJob:
+      type: object
+      required: [job_id, kind, attempt_no, lease_expires_at, run_at, account, destination, media, postiz, attempt_started_at]
+      properties:
+        job_id: { type: string, format: uuid }
+        kind: { type: string, enum: [publish, poll, reconcile] }
+        attempt_no: { type: integer, minimum: 1, description: Send back on every call for this job }
+        lease_expires_at: { type: string, format: date-time }
+        run_at: { type: string, format: date-time }
+        account:
+          type: object
+          required: [id, platform, postiz_integration_id]
+          properties:
+            id: { type: string, format: uuid }
+            platform: { $ref: '#/components/schemas/Platform' }
+            postiz_integration_id: { type: [string, 'null'] }
+        destination:
+          type: object
+          required: [id, text, settings, scheduled_at, destination_hash]
+          properties:
+            id: { type: string, format: uuid }
+            text: { type: string }
+            settings: { type: object, description: Neutral settings of PRD 10.5 }
+            scheduled_at: { type: string, format: date-time, description: 'Already in hash form: UTC, seconds, Z' }
+            destination_hash:
+              type: string
+              description: |
+                sha256_hex(JCS({account_id: account.id, platform: account.platform, text, settings, scheduled_at,
+                media: [{sha256, alt_text}] in array order})). Recompute and compare before publishing; report
+                failed HASH_MISMATCH on a difference. Vectors: docs/contracts/hash-vectors.json.
+        media:
+          type: array
+          description: In position order (the order is part of the hash).
+          items:
+            type: object
+            required: [media_id, url, mime, sha256, alt_text]
+            properties:
+              media_id: { type: string, format: uuid }
+              url: { type: [string, 'null'], description: 'Signed Storage URL, 1 h TTL; null if signing failed (report MEDIA_FETCH_FAILED as retry)' }
+              mime: { type: string, enum: [image/png, image/jpeg, image/webp] }
+              sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+              alt_text: { type: string }
+        postiz:
+          type: [object, 'null']
+          description: For poll and reconcile jobs, when known
+          properties:
+            post_id: { type: string }
+            group: { type: [string, 'null'] }
+        attempt_started_at:
+          type: [string, 'null']
+          format: date-time
+          description: For poll and reconcile jobs, when /submitting was called for this attempt (else when it was claimed)
+    GenerationInput:
+      type: object
+      description: PRD 10.5 generation input, as the admin form stores it
+      properties:
+        source:
+          oneOf:
+            - type: object
+              required: [type, url]
+              properties:
+                type: { const: article }
+                url: { type: string }
+            - type: object
+              required: [type, topic]
+              properties:
+                type: { const: topic }
+                topic: { type: string }
+                hooks: { type: array, items: { type: string } }
+        platforms: { type: array, items: { $ref: '#/components/schemas/Platform' } }
+        kinds: { type: array, items: { type: string, enum: [social, article, launch] } }
+        count: { type: integer, minimum: 1, maximum: 20 }
+        language: { type: string, const: ro }
+        templates: { type: array, items: { type: string, enum: [light, dark, mint] } }
+    CardSpec:
+      type: object
+      required: [template, headline, brand]
+      properties:
+        template: { type: string, enum: [light, dark, mint] }
+        headline: { type: string, description: '≤ 70 characters (checked in the composer, not at delivery)' }
+        keyword: { type: [string, 'null'], description: Substring of headline }
+        stat: { type: [string, 'null'], description: '≤ 8 characters; the single gold element' }
+        subline: { type: [string, 'null'], description: '≤ 110 characters' }
+        brand: { type: string, description: Brand slug }
+        alt_text: { type: [string, 'null'] }
+    Figure:
+      type: object
+      required: [value, source]
+      properties:
+        value: { type: string }
+        context: { type: [string, 'null'] }
+        source: { type: string, enum: [article, facts, unverified] }
+    Draft:
+      type: object
+      required: [client_ref, kind, canonical_text, variants]
+      properties:
+        client_ref: { type: string, minLength: 1, maxLength: 64, description: Unique within the request }
+        kind: { type: string, enum: [social, article, launch] }
+        title: { type: [string, 'null'] }
+        canonical_text: { type: string }
+        source_url: { type: [string, 'null'], description: Default canonical URL of articles }
+        variants:
+          type: array
+          items:
+            type: object
+            required: [platform, text]
+            properties:
+              platform: { $ref: '#/components/schemas/Platform' }
+              text: { type: string, description: 'For articles may be empty: the article body is used. For producthunt: the description.' }
+              settings: { type: [object, 'null'] }
+        article:
+          type: [object, 'null']
+          required: [title, body_markdown]
+          properties:
+            title: { type: string }
+            subtitle: { type: [string, 'null'] }
+            body_markdown: { type: string }
+            tags: { type: [array, 'null'], items: { type: string } }
+            canonical_url: { type: [string, 'null'] }
+        launch:
+          type: [object, 'null']
+          required: [name, tagline, description]
+          properties:
+            name: { type: string }
+            tagline: { type: string }
+            description: { type: string }
+            maker_comment: { type: [string, 'null'] }
+        card: { oneOf: [{ $ref: '#/components/schemas/CardSpec' }, { type: 'null' }] }
+        figures:
+          type: array
+          default: []
+          items: { $ref: '#/components/schemas/Figure' }
+        validation_errors:
+          type: array
+          default: []
+          items:
+            oneOf:
+              - type: string
+              - type: object
+                required: [message]
+                properties:
+                  code: { type: string }
+                  message: { type: string }
+        notes: { type: [string, 'null'] }

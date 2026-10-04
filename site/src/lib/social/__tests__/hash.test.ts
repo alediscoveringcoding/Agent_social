@@ -43,6 +43,11 @@ describe('hash vectors (shared with the worker)', () => {
     }
   })
 
+  it('is the same file as docs/contracts/hash-vectors.json (the copy Track B tests against)', () => {
+    const contract = join(import.meta.dirname, '..', '..', '..', '..', '..', 'docs', 'contracts', 'hash-vectors.json')
+    assert.deepEqual(JSON.parse(readFileSync(contract, 'utf8')), vectors)
+  })
+
   for (const v of vectors.destination) {
     it(`destination: ${v.name}`, () => {
       assert.equal(canonicalDestination(v.input), v.canonical)
