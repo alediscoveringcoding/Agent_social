@@ -6,6 +6,8 @@ This repo holds everything that runs on the VPS: self-hosted Postiz, self-hosted
 
 Status: proposal, implementation in progress. Nothing here publishes anything until an admin approves it.
 
+Product requirements and the work split: [docs/PRD.md](docs/PRD.md). Where this README and the PRD differ, the PRD wins until this README is updated.
+
 ## How it fits together
 
 ```mermaid

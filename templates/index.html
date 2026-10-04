@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ro" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Crypto Support</title>
+  <meta name="description" content="Calculul taxelor crypto in Romania, conform regulilor ANAF.">
+  <link rel="icon" href="https://thecrypto.support/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    /* Design tokens copied from thecrypto.support */
+    :root {
+      --bg: #fff;
+      --bg-soft: #f4faf8;
+      --bg-mint: #e7f5f0;
+      --bg-card: #fff;
+      --ink: #16313a;
+      --ink-soft: #5d7178;
+      --accent: #11a594;
+      --accent-dark: #0c7f72;
+      --accent-soft: #d6f0ea;
+      --line: #e6ede9;
+      --line-2: #d6e2dd;
+      --gold: #e8a805;
+      --shadow: 0 1px 2px #16313a08, 0 10px 30px #16313a0d;
+      --shadow-lg: 0 2px 6px #16313a0a, 0 22px 50px #16313a17;
+      --radius: 16px;
+      --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, monospace;
+    }
+    .dark {
+      --bg: #0e1414;
+      --bg-soft: #131b1a;
+      --bg-mint: #1a3733;
+      --bg-card: #1a2422;
+      --ink: #eef2f1;
+      --ink-soft: #94a3a0;
+      --accent: #2dd4be;
+      --accent-dark: #57e0cd;
+      --accent-soft: #1a3733;
+      --line: #283532;
+      --line-2: #384846;
+      --gold: #f0bb3a;
+      --shadow: 0 1px 2px #0000004d, 0 10px 26px #00000061;
+      --shadow-lg: 0 2px 6px #00000059, 0 22px 50px #00000080;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent-dark); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+    /* Header */
+    header { border-bottom: 1px solid var(--line); background: var(--bg); }
+    header .container { display: flex; align-items: center; justify-content: space-between; height: 72px; gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 800; }
+    .brand:hover { text-decoration: none; }
+    .brand img { width: 36px; height: 36px; border-radius: 999px; box-shadow: 0 4px 12px rgba(17,165,148,.28); }
+    nav { display: flex; align-items: center; gap: 20px; font-weight: 600; font-size: 15px; }
+    nav a { color: var(--ink-soft); }
+    nav a:hover { color: var(--ink); text-decoration: none; }
+    .theme-toggle {
+      border: 1px solid var(--line-2); background: var(--bg-card); color: var(--ink);
+      border-radius: 999px; width: 36px; height: 36px; cursor: pointer; font-size: 16px;
+    }
+
+    /* Hero */
+    .hero { background: linear-gradient(180deg, var(--bg-mint), var(--bg)); padding: 72px 0 56px; }
+    .eyebrow {
+      display: inline-block; padding: 4px 12px; border-radius: 999px;
+      background: var(--accent-soft); color: var(--accent-dark);
+      font-size: 13px; font-weight: 700;
+    }
+    h1 { font-size: clamp(32px, 5vw, 52px); line-height: 1.1; letter-spacing: -0.02em; margin: 16px 0; max-width: 18ch; }
+    .lead { color: var(--ink-soft); font-size: 18px; max-width: 60ch; margin: 0 0 28px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 22px; border-radius: 999px; font-weight: 700;
+      background: var(--accent); color: #fff; box-shadow: var(--shadow);
+    }
+    .btn:hover { background: var(--accent-dark); text-decoration: none; }
+    .btn.secondary { background: var(--bg-card); color: var(--ink); border: 1px solid var(--line-2); }
+
+    /* Content */
+    main { flex: 1; }
+    section { padding: 56px 0; }
+    h2 { font-size: 28px; letter-spacing: -0.01em; margin: 0 0 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow);
+    }
+    .card h3 { margin: 0 0 8px; font-size: 18px; }
+    .card p { margin: 0; color: var(--ink-soft); }
+
+    /* Footer */
+    footer { border-top: 1px solid var(--line); background: var(--bg-soft); padding: 40px 0; font-size: 14px; color: var(--ink-soft); }
+    footer .container { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; }
+    footer strong { color: var(--ink); }
+
+    @media (max-width: 640px) {
+      nav a { display: none; }
+      .hero { padding: 48px 0 40px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a class="brand" href="https://thecrypto.support">
+        <img src="https://thecrypto.support/logo.svg" alt="">
+        The Crypto Support
+      </a>
+      <nav>
+        <a href="https://thecrypto.support">Acasa</a>
+        <a href="https://thecrypto.support/blog">Blog</a>
+        <a href="https://thecrypto.support/contact">Contact</a>
+        <button class="theme-toggle" type="button" aria-label="Schimba tema">◐</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div class="container">
+        <span class="eyebrow">{{eyebrow}}</span>
+        <h1>{{title}}</h1>
+        <p class="lead">{{lead}}</p>
+        <a class="btn" href="{{cta_url}}">{{cta_label}}</a>
+        <a class="btn secondary" href="https://thecrypto.support">Inapoi pe site</a>
+      </div>
+    </div>
+
+    <section>
+      <div class="container">
+        <h2>{{section_title}}</h2>
+        <div class="grid">
+          <div class="card"><h3>{{card_1_title}}</h3><p>{{card_1_text}}</p></div>
+          <div class="card"><h3>{{card_2_title}}</h3><p>{{card_2_text}}</p></div>
+          <div class="card"><h3>{{card_3_title}}</h3><p>{{card_3_text}}</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <div><strong>The Crypto Support</strong><br>Calculator de taxe crypto pentru Romania. Conform regulilor ANAF.</div>
+      <div>&copy; <span id="year"></span> The Crypto Support</div>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+    // Same theme behaviour as the site: .dark class on <html>, remembered per browser
+    (function () {
+      var root = document.documentElement;
+      var saved = null;
+      try { saved = localStorage.getItem('theme'); } catch (e) {}
+      var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      root.classList.toggle('dark', dark);
+      document.querySelector('.theme-toggle').addEventListener('click', function () {
+        var isDark = root.classList.toggle('dark');
+        try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch (e) {}
+      });
+    })();
+  </script>
+</body>
+</html>
