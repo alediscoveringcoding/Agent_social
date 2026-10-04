@@ -8,6 +8,8 @@ Status: proposal, implementation in progress. Nothing here publishes anything un
 
 Product requirements and the work split: [docs/PRD.md](docs/PRD.md). Where this README and the PRD differ, the PRD wins until this README is updated.
 
+Current phase: **localhost MVP**, no VPS yet. See [docs/amendment-01-localhost-mvp.md](docs/amendment-01-localhost-mvp.md).
+
 ## How it fits together
 
 ```mermaid
