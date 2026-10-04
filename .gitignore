@@ -1,0 +1,27 @@
+# This repo is public: never commit secrets.
+.env*
+!.env.example
+
+# dependencies and build output
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# logs
+*.log
+npm-debug.log*
+
+# local data and backups
+*.dump
+*.sql.gz
+backups/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
