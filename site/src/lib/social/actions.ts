@@ -174,7 +174,7 @@ export async function saveDraft(input: SaveDraftInput): Promise<ActionResult<{ r
     if (revError || !rev) throw new Error(revError?.message ?? 'revision missing')
     const { data: dests, error: destError } = await db
       .from('social_destinations')
-      .select('account_id, media:social_destination_media(media_id, position, alt_text, file:social_media(mime, width, height))')
+      .select('account_id, scheduled_at, media:social_destination_media(media_id, position, alt_text, file:social_media(mime, width, height))')
       .eq('revision_id', input.baseRevisionId)
     if (destError) throw new Error(destError.message)
     const { data: accounts, error: accError } = await db
@@ -191,9 +191,11 @@ export async function saveDraft(input: SaveDraftInput): Promise<ActionResult<{ r
       figures: r.figures ?? [],
       destinations: ((dests ?? []) as unknown as Array<{
         account_id: string
+        scheduled_at: string | null
         media: Array<{ media_id: string; position: number; alt_text: string; file: { mime: string; width: number; height: number } | null }>
       }>).map((d) => ({
         account_id: d.account_id,
+        scheduled_at: d.scheduled_at, // W1: the time survives a text edit
         media: d.media.map((m) => ({ media_id: m.media_id, position: m.position, alt_text: m.alt_text, mime: m.file?.mime, width: m.file?.width, height: m.file?.height })),
       })),
     }

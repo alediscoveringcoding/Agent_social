@@ -59,6 +59,8 @@ export interface BaseRevision {
   generator_errors: unknown
   destinations: ReadonlyArray<{
     account_id: string
+    // W1: a time already chosen on the post page survives a text edit.
+    scheduled_at?: string | null
     media: ReadonlyArray<{ media_id: string; position: number; alt_text: string; mime?: string | null; width?: number | null; height?: number | null }>
   }>
 }
@@ -175,7 +177,8 @@ export function buildDraftRevision(
       account_id: acc.id,
       text,
       settings,
-      scheduled_at: null,
+      // W1: keep the destination's time (set on the post page); approval checks it again.
+      scheduled_at: base.destinations.find((b) => b.account_id === acc.id)?.scheduled_at ?? null,
       figures,
       contains_figures: v.containsFigures,
       validation: toStoredValidation(v, now, ['MISSING_TIME']),
