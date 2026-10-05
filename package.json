@@ -1,0 +1,14 @@
+{
+  "name": "social-infra",
+  "private": true,
+  "type": "module",
+  "workspaces": ["worker"],
+  "scripts": {
+    "dev:worker": "cd worker && npm run dev",
+    "dev:mock-site": "node worker/test/mock-site.mjs",
+    "dev:up": "node scripts/dev-up.mjs",
+    "dev:down": "node scripts/dev-down.mjs",
+    "health": "node scripts/health-check.mjs",
+    "backup": "node scripts/backup-local.mjs"
+  }
+}

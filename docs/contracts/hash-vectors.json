@@ -1,0 +1,91 @@
+[
+  {
+    "description": "Simple text, no media",
+    "input": {
+      "account_id": "550e8400-e29b-41d4-a716-446655440000",
+      "platform": "x",
+      "text": "Test post without diacritics",
+      "settings": {},
+      "scheduled_at": "2026-11-02T08:00:00Z",
+      "media": []
+    },
+    "expected_hash": "fae23aa269dc2763cbfbfe8450f4a619281d4de0748c3b079b8cbc357f06298c"
+  },
+  {
+    "description": "Romanian text with figures",
+    "input": {
+      "account_id": "550e8400-e29b-41d4-a716-446655440001",
+      "platform": "facebook",
+      "text": "Impozitul pe castigurile din criptomonede este de 10%. Depune Declaratia Unica pana pe 25 mai.",
+      "settings": {},
+      "scheduled_at": "2026-05-20T09:00:00Z",
+      "media": []
+    },
+    "expected_hash": "3c7bea1f578c48493fdd898fc6125a04221be60d56e1580afd5de4c888459c3e"
+  },
+  {
+    "description": "Post with media and emoji",
+    "input": {
+      "account_id": "550e8400-e29b-41d4-a716-446655440002",
+      "platform": "instagram",
+      "text": "Calculeaza taxele crypto simplu 🔒 #crypto #taxe #romania",
+      "settings": {
+        "post_type": "post"
+      },
+      "scheduled_at": "2026-06-15T13:00:00Z",
+      "media": [
+        {
+          "sha256": "abc123def456",
+          "alt_text": "Card cu informatii despre impozitul crypto"
+        }
+      ]
+    },
+    "expected_hash": "87cf1f3f6d5bd7022a38a02ceca6b61a25f827552afc5cfd507e847c01db3bed"
+  },
+  {
+    "description": "Multiple images, empty settings",
+    "input": {
+      "account_id": "550e8400-e29b-41d4-a716-446655440003",
+      "platform": "linkedin-page",
+      "text": "3 lucruri pe care trebuie sa le stii despre taxele pe criptomonede in Romania",
+      "settings": {},
+      "scheduled_at": "2026-07-01T18:00:00Z",
+      "media": [
+        {
+          "sha256": "hash1",
+          "alt_text": "Slide 1"
+        },
+        {
+          "sha256": "hash2",
+          "alt_text": "Slide 2"
+        },
+        {
+          "sha256": "hash3",
+          "alt_text": "Slide 3"
+        }
+      ]
+    },
+    "expected_hash": "b565b64b417118f3d8ce85eb08a225c7675487b501391067a1c74d568c0224e7"
+  },
+  {
+    "description": "dev.to article with canonical",
+    "input": {
+      "account_id": "550e8400-e29b-41d4-a716-446655440004",
+      "platform": "devto",
+      "text": "# Ghid complet: Taxe pe criptomonede in Romania\n\nTot ce trebuie sa stii...",
+      "settings": {
+        "title": "Ghid complet taxe crypto",
+        "tags": ["crypto", "romania", "taxes"],
+        "canonical_url": "https://thecrypto.support/ghid/taxe-crypto"
+      },
+      "scheduled_at": "2026-08-10T10:00:00Z",
+      "media": [
+        {
+          "sha256": "coverhash",
+          "alt_text": "Cover image"
+        }
+      ]
+    },
+    "expected_hash": "0ed8923ab776a8f99653103407875973b32de205586f3113afa96edfeb515194"
+  }
+]
