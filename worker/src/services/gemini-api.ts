@@ -1,5 +1,8 @@
 import { config } from "../config.js";
 import { logger } from "../logger.js";
+import { draftSchema, parseModelResponse, type ModelDraft } from "../generator/schema.js";
+import { AiOutputError } from "./ai-errors.js";
+import { setTimeout as delay } from "node:timers/promises";
 
 // Gemini over plain REST (models.generateContent), so the worker needs no extra
 // dependency. Same contract as claude-api.ts: returns the parsed drafts.
@@ -18,7 +21,7 @@ function suggestedDelayMs(body: any): number | undefined {
     String(d?.["@type"] ?? "").endsWith("google.rpc.RetryInfo"),
   );
   const seconds = Number.parseFloat(String(info?.retryDelay ?? ""));
-  return Number.isFinite(seconds) ? seconds * 1000 : undefined;
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : undefined;
 }
 
 function retryDelayMs(status: number, body: any, attempt: number): number | undefined {
@@ -33,7 +36,8 @@ export async function generateDrafts(
   systemPrompt: string,
   userPrompt: string,
   model: string = config.GEMINI_MODEL,
-): Promise<{ drafts: unknown[]; stopReason: string }> {
+  opts: { fetch?: typeof fetch; signal?: AbortSignal; sleep?: (ms: number, signal?: AbortSignal) => Promise<void> } = {},
+): Promise<{ drafts: ModelDraft[]; stopReason: string }> {
   if (!config.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY is not set");
   }
@@ -46,6 +50,7 @@ export async function generateDrafts(
     contents: [{ role: "user", parts: [{ text: userPrompt }] }],
     generationConfig: {
       responseMimeType: "application/json",
+      responseJsonSchema: draftSchema,
       // Thinking tokens count against this on Gemini 3, so leave headroom.
       maxOutputTokens: 32768,
     },
@@ -54,18 +59,18 @@ export async function generateDrafts(
   let res!: Response;
   let body: any;
   for (let attempt = 0; ; attempt++) {
-    res = await fetch(url, {
+    res = await (opts.fetch ?? fetch)(url, {
       method: "POST",
       // Key in a header, never in the URL, so it can't end up in a logged URL.
       headers: { "Content-Type": "application/json", "x-goog-api-key": config.GEMINI_API_KEY },
       body: request,
-      signal: AbortSignal.timeout(120_000),
+      signal: opts.signal ? AbortSignal.any([opts.signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000),
     });
     body = await res.json().catch(() => ({}));
     const delayMs = res.ok ? undefined : retryDelayMs(res.status, body, attempt);
     if (delayMs === undefined) break;
     logger.warn("Gemini busy, retrying", { status: res.status, attempt: attempt + 1, delayMs });
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    await (opts.sleep ?? ((ms, signal) => delay(ms, undefined, { signal })))(delayMs, opts.signal);
   }
   if (!res.ok) {
     throw new Error(`Gemini API ${res.status}: ${body?.error?.message || res.statusText}`);
@@ -74,13 +79,14 @@ export async function generateDrafts(
   // No candidates only happens when the prompt itself was blocked.
   const blockReason = body.promptFeedback?.blockReason;
   if (blockReason) {
-    throw new Error(`Gemini blocked the prompt: ${blockReason}`);
+    throw new AiOutputError("AI_REFUSED", `Gemini blocked the prompt: ${blockReason}`);
   }
 
   const candidate = body.candidates?.[0];
   const stopReason: string = candidate?.finishReason || "unknown";
   if (stopReason !== "STOP") {
-    logger.warn("Unexpected finishReason", { stopReason });
+    const code = stopReason === "MAX_TOKENS" ? "AI_TRUNCATED" : ["SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII"].includes(stopReason) ? "AI_REFUSED" : "AI_BAD_OUTPUT";
+    throw new AiOutputError(code, `Gemini stopped with ${stopReason}`);
   }
 
   const text = (candidate?.content?.parts || [])
@@ -88,9 +94,12 @@ export async function generateDrafts(
     .map((p: any) => p.text)
     .join("");
   if (!text) {
-    throw new Error(`No text in Gemini response (finishReason ${stopReason})`);
+    throw new AiOutputError("AI_BAD_OUTPUT", "Gemini returned no text");
   }
 
-  const parsed = JSON.parse(text);
-  return { drafts: parsed.drafts || [parsed], stopReason };
+  try {
+    return { drafts: parseModelResponse(text), stopReason };
+  } catch {
+    throw new AiOutputError("AI_BAD_OUTPUT", "Gemini returned an invalid draft batch");
+  }
 }

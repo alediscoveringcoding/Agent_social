@@ -1,109 +1,167 @@
 import { config } from "../config.js";
 import { logger } from "../logger.js";
-import { siteApi } from "../services/site-api.js";
+import { LeaseLostError, siteApi } from "../services/site-api.js";
 import { AiNotConfiguredError, generateDrafts, resolveChoice } from "../services/llm.js";
-import { validateContent, extractFigures } from "../generator/validators.js";
+import { AiOutputError } from "../services/ai-errors.js";
+import { validateContent, type ValidationError } from "../generator/validators.js";
+import { normalizeFigure, unlistedFigures, type DraftFigure } from "../generator/figures.js";
 import { buildSystemPrompt, buildUserPrompt, brandFromSlug } from "../generator/prompts.js";
-import { buildRepairPrompt } from "../generator/repair.js";
+import { buildRepairPrompt, mergeRepairs } from "../generator/repair.js";
+import { boundDraftForSite } from "../generator/wire-bounds.js";
 
 export function startGeneratorLoop() {
+  let running = false;
   async function tick() {
+    if (running) return;
+    running = true;
     try {
       const { requests } = await siteApi.claimGeneration();
-      if (!requests || requests.length === 0) return;
-
-      for (const req of requests) {
-        await processGenerationRequest(req);
-      }
+      for (const req of requests ?? []) await processGenerationRequest(req);
     } catch (err) {
       logger.error("Generator loop error", { error: String(err) });
-    }
+    } finally { running = false; }
   }
-
-  setInterval(tick, config.GENERATION_LOOP_INTERVAL_MS);
-  tick();
+  const timer = setInterval(tick, config.GENERATION_LOOP_INTERVAL_MS);
+  void tick();
+  return () => clearInterval(timer);
 }
 
-function validateDraft(draft: any, i: number) {
-  const errors: any[] = [];
-
-  const canonicalErrors = validateContent(draft.canonical_text || "", "generic");
-  errors.push(...canonicalErrors.filter((e) => e.rule !== "contains_figures"));
-
-  for (const variant of draft.variants || []) {
-    const variantErrors = validateContent(variant.text, variant.platform);
-    errors.push(...variantErrors.map((e) => ({ ...e, field: `variants.${variant.platform}` })));
+export function validateDraft(draft: any, i: number, brandSlug: string, input: any = {}): {
+  client_ref: string; figures: DraftFigure[]; validation_errors: ValidationError[]; [key: string]: any;
+} {
+  const errors: ValidationError[] = [];
+  draft = boundDraftForSite(draft, errors);
+  const variants = (draft.variants ?? []).map((v: any) => ({
+    ...v, platform: String(v.platform).toLowerCase(),
+    settings: v.platform === "instagram" ? { post_type: "post" } : v.platform === "x" ? { who_can_reply: "everyone" } : {},
+  }));
+  const article = draft.article ? {
+    ...draft.article,
+    subtitle: draft.article.subtitle || null,
+    canonical_url: draft.article.canonical_url || (input.source?.type === "article" ? input.source.url : null),
+  } : null;
+  const launch = draft.launch ? { ...draft.launch, maker_comment: draft.launch.maker_comment || null } : null;
+  const card = { ...draft.card, template: String(draft.card?.template ?? "dark").toLowerCase(), brand: brandSlug, stat: draft.card?.stat || null };
+  const texts = [draft.title, draft.canonical_text, article?.title, article?.subtitle, article?.body_markdown, ...(article?.tags ?? []), launch?.name, launch?.tagline, launch?.description, launch?.maker_comment, card.headline, card.keyword, card.stat, card.subline, card.alt_text].filter(Boolean);
+  for (const text of texts) errors.push(...validateContent(text, "generic"));
+  for (const v of variants) {
+    const actual = v.text || (v.platform === "producthunt" ? launch?.description : ["devto", "hashnode", "substack"].includes(v.platform) ? article?.body_markdown : "") || "";
+    texts.push(actual);
+    errors.push(...validateContent(actual, v.platform).map(e => ({ ...e, field: `variants.${v.platform}` })));
   }
+  const add = (rule: string, message: string, field: string) => errors.push({ rule, message, field });
+  if (draft.kind === "article" && (!article?.title?.trim() || !article?.body_markdown?.trim())) add("article_missing", "Article needs title and body_markdown", "article");
+  if (draft.kind === "launch" && (!launch?.name?.trim() || !launch?.description?.trim() || !launch?.tagline?.trim())) add("launch_missing", "Launch needs name, tagline and description", "launch");
+  if ((article?.tags?.length ?? 0) > 4) add("article_tags", "At most four article tags", "article.tags");
+  if ((launch?.tagline?.length ?? 0) > 60) add("launch_tagline", "Tagline exceeds 60 characters", "launch.tagline");
+  if ((launch?.description?.length ?? 0) > 260) add("launch_description", "Description exceeds 260 characters", "launch.description");
+  for (const [field, limit] of [["headline", 70], ["stat", 8], ["subline", 110]] as const) {
+    if (Array.from(card[field] ?? "").length > limit) add("card_length", `${field} exceeds ${limit} characters`, `card.${field}`);
+  }
+  if (!card.keyword || !card.headline?.toLowerCase().includes(card.keyword.toLowerCase())) add("card_keyword", "Keyword must occur in headline", "card.keyword");
+  if (!card.alt_text?.trim()) add("card_alt", "Card needs accessible alt text", "card.alt_text");
 
-  const allText = [draft.canonical_text, ...(draft.variants || []).map((v: any) => v.text)].join(
-    " ",
-  );
-  const figures = extractFigures(allText);
-
+  // Preserve model provenance, preferring a sourced value over unverified.
+  const listed = new Map<string, DraftFigure>();
+  for (const figure of draft.figures ?? []) {
+    const key = normalizeFigure(figure.value);
+    const existing = listed.get(key);
+    if (!existing || existing.source === "unverified" && figure.source !== "unverified") listed.set(key, figure);
+  }
+  const allText = texts.join(" ");
+  for (const figure of unlistedFigures(allText, [...listed.values()])) {
+    const key = normalizeFigure(figure.value);
+    if (!listed.has(key)) listed.set(key, { value: figure.value, source: "unverified", context: allText.slice(Math.max(0, figure.index - 20), figure.index + figure.value.length + 20).trim() });
+  }
   return {
-    ...draft,
-    client_ref: draft.client_ref || String(i + 1),
-    figures: figures.length > 0 ? figures : draft.figures || [],
-    validation_errors: errors,
+    ...draft, client_ref: draft.client_ref || String(i + 1),
+    title: draft.title || null, source_url: draft.source_url || null, notes: draft.notes || null,
+    article, launch, card, variants,
+    figures: [...listed.values()].slice(0, 500), validation_errors: errors.slice(0, 500),
   };
 }
 
-async function processGenerationRequest(req: any) {
-  // The worker API sends `brand` as a plain slug string (worker-api.openapi.yaml
-  // GenerationRequest), not an {slug, name} object.
+interface GenerationRequest { request_id: string; brand: string; input: any; lease_expires_at: string }
+type GenerationApi = Pick<typeof siteApi, "generationHeartbeat" | "postDrafts" | "generationFailed">;
+
+export async function processGenerationRequest(req: GenerationRequest, deps: {
+  api?: GenerationApi; generate?: typeof generateDrafts; heartbeatMs?: number;
+} = {}) {
   const { request_id, brand: brandSlug, input } = req;
+  const api = deps.api ?? siteApi;
+  const generate = deps.generate ?? generateDrafts;
   const brand = brandFromSlug(brandSlug);
-  logger.info("Processing generation request", { requestId: request_id, brand: brand.slug });
-
-  try {
-    // The admin can pick the AI per request (input.ai); otherwise the .env default.
-    const choice = resolveChoice(input?.ai);
-    const systemPrompt = buildSystemPrompt(brand, input);
-    const userPrompt = buildUserPrompt(input);
-
-    const { drafts, stopReason } = await generateDrafts(systemPrompt, userPrompt, choice);
-    logger.info("Generated drafts", {
-      requestId: request_id,
-      provider: choice.provider,
-      model: choice.model,
-      count: drafts.length,
-      stopReason,
-    });
-
-    const validatedDrafts = drafts.map((draft: any, i: number) => validateDraft(draft, i));
-
-    // One automatic repair attempt if anything other than "contains_figures" failed.
-    const needsRepair = validatedDrafts.some(
-      (d: any) =>
-        d.validation_errors.length > 0 &&
-        !d.validation_errors.every((e: any) => e.rule === "contains_figures"),
-    );
-
-    let finalDrafts = validatedDrafts;
-    if (needsRepair) {
-      logger.info("Attempting repair pass", { requestId: request_id });
+  const controller = new AbortController();
+  let expires = new Date(req.lease_expires_at).getTime();
+  let finished = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let expiryTimer: ReturnType<typeof setTimeout> | undefined;
+  const armExpiry = () => {
+    clearTimeout(expiryTimer);
+    expiryTimer = setTimeout(() => controller.abort(new LeaseLostError()), Math.max(1, expires - Date.now()));
+  };
+  const lost = (err: unknown) => err instanceof LeaseLostError || err instanceof Error && err.message === "LEASE_LOST";
+  const checkLease = () => {
+    controller.signal.throwIfAborted();
+    if (!Number.isFinite(expires) || expires <= Date.now()) {
+      controller.abort(new LeaseLostError());
+      controller.signal.throwIfAborted();
+    }
+  };
+  const schedule = () => {
+    if (finished || controller.signal.aborted) return;
+    const remaining = expires - Date.now();
+    if (remaining <= 0) { controller.abort(new LeaseLostError()); return; }
+    timer = setTimeout(async () => {
       try {
-        const repairPrompt = buildRepairPrompt(validatedDrafts);
-        const { drafts: repairedDrafts } = await generateDrafts(
-          buildSystemPrompt(brand, input),
-          repairPrompt,
-          choice,
-        );
-        finalDrafts = repairedDrafts.map((draft: any, i: number) => validateDraft(draft, i));
-      } catch (repairErr) {
-        logger.warn("Repair pass failed, using original", { error: String(repairErr) });
+        const result = await api.generationHeartbeat(request_id, { signal: controller.signal });
+        const next = Date.parse(result.lease_expires_at);
+        if (!Number.isFinite(next)) throw new Error("Invalid generation lease response");
+        expires = next;
+        armExpiry();
+      } catch (err) {
+        if (finished) return;
+        if (lost(err)) { controller.abort(new LeaseLostError()); return; }
+        logger.warn("Generation heartbeat failed", { requestId: request_id, error: String(err) });
+      }
+      schedule();
+    }, Math.max(1, Math.min(deps.heartbeatMs ?? config.GENERATION_HEARTBEAT_MS, remaining / 3)));
+  };
+  try {
+    checkLease();
+    armExpiry();
+    schedule();
+    const choice = resolveChoice(input?.ai);
+    const system = buildSystemPrompt(brand, input);
+    const { drafts } = await generate(system, buildUserPrompt(input), choice, { signal: controller.signal });
+    checkLease();
+    const validated = drafts.map((d, i) => validateDraft(d, i, brandSlug, input));
+    let finalDrafts = validated;
+    if (validated.some(d => d.validation_errors.length > 0)) {
+      try {
+        const repaired = await generate(system, buildRepairPrompt(validated), choice, { signal: controller.signal });
+        checkLease();
+        finalDrafts = mergeRepairs(validated, repaired.drafts.map((d, i) => validateDraft(d, i, brandSlug, input)));
+      } catch (err) {
+        checkLease();
+        logger.warn("Repair failed, keeping original drafts", { requestId: request_id, error: String(err) });
       }
     }
-
-    const result = await siteApi.postDrafts(request_id, finalDrafts);
-    logger.info("Drafts posted", {
-      requestId: request_id,
-      created: result.created,
-      skipped: result.skipped,
-    });
+    checkLease();
+    const result = await api.postDrafts(request_id, finalDrafts, { signal: controller.signal });
+    logger.info("Drafts posted", { requestId: request_id, created: result.created, skipped: result.skipped });
   } catch (err) {
-    logger.error("Generation failed", { requestId: request_id, error: String(err) });
-    const code = err instanceof AiNotConfiguredError ? err.code : "GENERATION_ERROR";
-    await siteApi.generationFailed(request_id, code, String(err));
+    if (lost(err) || controller.signal.aborted || expires <= Date.now()) {
+      logger.warn("Generation lease lost, stopping", { requestId: request_id });
+      return;
+    }
+    const code = err instanceof AiNotConfiguredError || err instanceof AiOutputError ? err.code : "GENERATION_ERROR";
+    try { await api.generationFailed(request_id, code, String(err), { signal: controller.signal }); }
+    catch (reportErr) { if (!lost(reportErr) && !controller.signal.aborted) throw reportErr; }
+  } finally {
+    finished = true;
+    clearTimeout(timer);
+    clearTimeout(expiryTimer);
+    controller.abort();
   }
 }

@@ -2,7 +2,11 @@ import { config } from "../config.js";
 
 const BASE = `${config.SITE_BASE_URL}/api/worker/social/v1`;
 
-async function request(path: string, body?: unknown) {
+export class LeaseLostError extends Error {
+  constructor() { super("LEASE_LOST"); this.name = "LeaseLostError"; }
+}
+
+async function request(path: string, body?: unknown, opts: { signal?: AbortSignal } = {}) {
   const url = `${BASE}${path}`;
   const res = await fetch(url, {
     method: "POST",
@@ -13,10 +17,11 @@ async function request(path: string, body?: unknown) {
       "X-Worker-Version": "0.1.0",
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal: opts.signal ? AbortSignal.any([opts.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
   });
 
   if (res.status === 409) {
-    throw new Error("LEASE_LOST");
+    throw new LeaseLostError();
   }
   if (!res.ok) {
     const text = await res.text();
@@ -51,9 +56,10 @@ export const siteApi = {
 
   // Generation endpoints
   claimGeneration: () => request("/generation/claim", { limit: 1 }),
-  postDrafts: (id: string, drafts: unknown[]) => request(`/generation/${id}/drafts`, { drafts }),
-  generationFailed: (id: string, errorCode: string, errorMessage: string) =>
-    request(`/generation/${id}/failed`, { error_code: errorCode, error_message: errorMessage }),
+  generationHeartbeat: (id: string, opts: { signal?: AbortSignal } = {}) => request(`/generation/${id}/heartbeat`, {}, opts),
+  postDrafts: (id: string, drafts: unknown[], opts: { signal?: AbortSignal } = {}) => request(`/generation/${id}/drafts`, { drafts }, opts),
+  generationFailed: (id: string, errorCode: string, errorMessage: string, opts: { signal?: AbortSignal } = {}) =>
+    request(`/generation/${id}/failed`, { error_code: errorCode, error_message: errorMessage.slice(0, 4000) }, opts),
 
   // Sync
   syncAccounts: (body: unknown) => request("/accounts/sync", body),

@@ -4,6 +4,10 @@ import { siteApi } from "../services/site-api.js";
 import { postizApi } from "../services/postiz-api.js";
 
 export function startSyncLoop() {
+  if (config.WORKER_DRY_RUN) {
+    logger.info("DRY RUN: account sync skipped; use the local fake worker to sync accounts");
+    return;
+  }
   async function tick() {
     try {
       const integrations = await postizApi.listIntegrations();
