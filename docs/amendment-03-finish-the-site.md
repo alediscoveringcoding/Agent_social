@@ -4,6 +4,7 @@
 | --- | --- |
 | Status | Done locally; external services remain out of scope |
 | Date | 2026-10-05 |
+| Completed | 2026-10-06 |
 | Amends | [PRD](PRD.md), [Amendment 01](amendment-01-localhost-mvp.md), [Amendment 02](amendment-02-standalone-site.md) |
 | Decision | Build everything that does not need an external service or a person's hands, so the whole flow runs on one Linux/WSL machine: generate → edit → cards and media → approve and schedule → worker (dry run) → published state, manual handoff, overview and calendar. |
 
@@ -30,7 +31,7 @@ W1–W4 are implemented: approval and scheduling, private media storage and all 
 - **Media URLs for the worker.** `/deliveries/claim` keeps returning signed URLs. In local mode these point to a site route, `/api/media/<id>?exp=…&sig=…`, signed with HMAC and valid for 1 hour. In Supabase mode they are Storage signed URLs. The worker downloads, then uploads to Postiz with multipart, as in amendment 01.
 - **Cards.** These are rendered server-side with `next/og` (`ImageResponse`), using the Plus Jakarta Sans files shipped in `node_modules/@fontsource`. There are 6 formats (PRD 10.5), 3 templates (Light, Dark, Mint) and 3 brands, and every format/template/brand combination must render. A rendered card is stored as a media object like an upload, so it has a hash and is part of the approval hash.
 
-## 3. Remaining work, as four parallel workstreams
+## 3. Completed workstreams and their acceptance criteria
 
 Shared rules for every workstream:
 - Work only in this repo, and run npm only inside Linux/WSL.

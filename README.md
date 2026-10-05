@@ -2,7 +2,7 @@
 
 Infrastructure for cross-posting and automation behind `/admin/social` on thecrypto.support.
 
-This repo holds everything that runs on the VPS: self-hosted Postiz, self-hosted n8n, and a small publishing worker. The admin UI, the database schema and the approval rules live in the site repo (Vercel + Supabase).
+This repo contains the admin site, database migrations, approval rules and publishing worker, plus the local Postiz stack and infrastructure scripts. The site currently runs with local PGlite and TOTP login; Vercel, Supabase and VPS setup are documented for later deployment.
 
 Status: local v1 implemented and tested. External platform connections and VPS deployment remain pending. Publishing requires admin approval.
 
@@ -40,6 +40,7 @@ social-infra/
   local/
     docker-compose.yml       Postiz v2.25.0 + Postgres + Redis + Temporal
     .env.example
+  site/                     Next.js admin, local database, media and worker API
   worker/
     src/
       loops/                 delivery, generator, sync
@@ -220,8 +221,8 @@ Data rules:
 - [ ] 0b. Local sandbox: run Postiz for real, create an API key, create a post through the API, check the real rate limit (task B3, `docs/postiz-notes.md`)
 - [ ] 1. VPS, DNS, compose stack, HTTPS, backups with one test restore (deferred — localhost MVP first, see the amendment)
 - [ ] 2. Developer apps and callback URLs, first real connection (dev.to/Hashnode first, then LinkedIn, Facebook, Instagram)
-- [ ] 3. Site foundation (Track A): migration, Postiz adapter, admin-only test endpoint, feature flag
-- [ ] 4. First full flow: draft, approve, schedule, publish, retrieve URL
+- [x] 3. Local site foundation: migrations, authenticated admin, worker API and publishing feature flag
+- [x] 4. Local full flow: draft, media, approve, schedule, fake/dry-run publication and URL, plus manual handoff
 - [ ] 5. n8n workflows (dropped from the localhost MVP, see the amendment)
 - [ ] 6. Analytics, then enable remaining accounts one at a time
 

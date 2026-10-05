@@ -1,20 +1,29 @@
-# Handoff: finishing amendment 03 (W1–W4)
+# Completed handoff: amendment 03 (W1–W4)
 
 | | |
 | --- | --- |
 | Date | 2026-10-05 |
-| For | The next coding agent (Codex), one task per workstream, then one integration task |
+| Completed | 2026-10-06 |
+| Status | Completed locally; W1–W4 reviewed and integrated |
 | Spec | [Amendment 03](amendment-03-finish-the-site.md) (read it first), [PRD](PRD.md), [worker API contract](contracts/worker-api.openapi.yaml) |
 | Goal | Finish the whole site locally (everything except external services: VPS, Supabase project, Postiz connections, real posts), merge W1–W4 into `main`, pass the end-to-end check in amendment 03 §5. |
 
-Four workstreams were started by Claude agents and stopped part way. Each branch is pushed and clean. Start each task with `git log --oneline main..origin/<branch>` to see what is there.
+W1–W4 were finished concurrently in native WSL worktrees, reviewed, and merged in the prescribed order: W4, W3, W1, W2. The feature branches remain available; none was deleted. The owner's staged `scripts/update.sh` mode change and private untracked reports were preserved.
 
-| WS | Branch | Last commit | State |
+| WS | Branch | Final workstream commit | Result |
 | --- | --- | --- | --- |
-| W1 | `feat/w1-approval` | `7287835` | Library done (actions, queries, slots, checks). No pages, no tests, CI not run. |
-| W2 | `feat/w2-media-cards` | `e900d72` | Card renderer done and tested (54 renders). Storage, upload, signed URLs, actions, UI, tests not started. |
-| W3 | `feat/w3-accounts-overview` | `2acf7d2` | Migration 0005 and all libraries done, one test file never run. No pages, no nav, CI not run. |
-| W4 | `feat/w4-worker` | `5a11471` | Worker config fixes only (dry-run bug fixed, 8/8 tests). Everything else not started. |
+| W1 | `feat/w1-approval` | `2599a97` | Approval, scheduling, slots, posts pages, cancel/retry/reschedule and regression tests complete. |
+| W2 | `feat/w2-media-cards` | `0d9dfd8` | Storage, uploads, signed downloads, library, card studio, immutable attachments and media tests complete. |
+| W3 | `feat/w3-accounts-overview` | `7449557` | Accounts, overview/events, calendar, manual handoff, duplicate, navigation and tests complete. |
+| W4 | `feat/w4-worker` | `55d4d0a` | Structured providers, generation validation/repair, lease heartbeats, safe dry run and tests complete. |
+
+Integration adds approval checks against each attached image's immutable card copy, including figures when cards were generated separately for different accounts. The cross-stream test in `site/src/lib/social/__tests__/local-publishing.test.ts` uses a fresh disk-backed local database and real HTTP: fake generation, draft editing, numeric cards and the figures gate, signed media download, automatic publication visible in overview/calendar, manual Substack publication, and the production worker's dry-run delivery without Postiz calls. Existing tests cover local login/TOTP and action authorization. No real AI or platform API was called.
+
+Final validation in WSL: `bash scripts/update.sh --no-pull` passed with **276 site tests and 27 worker tests**, both type checks, lint, migration application and the production build. Production HTTP smoke covered 16 authenticated page renders, anonymous login redirects, both DST weeks, handoffs, card previews and signed downloads. A final smoke against the rebuilt app confirmed the draft/post/media screens and exact-case keyword validation.
+
+Final review added migration `0007_media_metadata_immutable.sql`: card specification, format, brand and object identity cannot be changed under an existing hash. Library alt text remains a suggestion; attachment copies stay frozen. Keyword checks now agree before generation and at approval. Media selections block competing text edits until saved or reset.
+
+For the current operating instructions use [site/README.md](../site/README.md), [setup](setup.md) and the root [AGENTS.md](../AGENTS.md). Sections 1–6 below preserve the original handoff instructions and completion criteria as historical context; their **Left** lists are complete.
 
 ## 1. Rules for every task
 
@@ -33,9 +42,9 @@ Four workstreams were started by Claude agents and stopped part way. Each branch
 - **Git:** commit small, push the workstream branch often. Never push to `main` except in the integration task, never force-push. The root checkout has an uncommitted, staged change to `scripts/update.sh` by the owner: leave it alone.
 - `npm audit` reports 5 high advisories in `eslint-config-next` (lint only, no fix exists). Do not run `npm audit fix --force`; it downgrades Next's lint config and breaks lint.
 
-### Worktrees left by the Claude agents
+### Original Claude worktrees (historical)
 
-The four branches are checked out in locked worktrees under `.claude/worktrees/agent-*`, created by Windows git (WSL git cannot read their `.git` link). To work on a branch from WSL, free it first. For each, check it is clean and pushed, then from Windows git:
+The four branches were checked out in worktrees under `.claude/worktrees/agent-*`, created by Windows git (WSL git cannot read their `.git` link). To work on a branch from WSL, free it first. For each, check it is clean and pushed, then from Windows git:
 
 ```
 git worktree unlock .claude/worktrees/<dir>
@@ -139,7 +148,7 @@ Then use your own clone or a WSL `git worktree add` per branch. In a fresh workt
 
 **Done when:** worker type check and tests green including the new ones, the long generate-plus-repair test passes, site CI green.
 
-## 6. Integration (after W1–W4 are green)
+## 6. Integration (completed)
 
 1. Merge into `main` in this order: W4 (worker, 0006, migration test fix), W3 (0005, nav), W1, W2 (touches `DraftEditor.tsx`, `delivery-payload.ts`, the claim route, `admin-client.ts`). Expected conflicts: `ciorne/[id]/page.tsx` (W1 link, W3 duplicate button), `draft-edit.ts` and `actions.ts` (W1 and W2), `local-mode.test.ts`, `README.md`, `test/hooks.mjs`.
 2. Wire across workstreams: W3's `signMediaUrls` in `handoff-queries.ts` uses W2's local `/api/media` signer; nav links to `/admin/social/postari` (W1) and `/admin/social/media` (W2); overview events link to `/admin/social/postari/{id}`.

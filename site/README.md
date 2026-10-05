@@ -30,7 +30,7 @@ Node 22.6 or newer.
 
 ```bash
 cd site
-npm install
+npm ci
 npm run ci        # typecheck, lint, tests, production build
 ```
 
@@ -40,7 +40,7 @@ npm run ci        # typecheck, lint, tests, production build
 | `npm test` | node:test: pure libraries, PGlite database tests, worker API and fake worker end to end |
 | `npm run social:fake-worker` | Fake worker against the running site (see the script header for options) |
 | `npm run social:fake-generator` | Fake generator: delivers fixture drafts, some deliberately invalid |
-| `npm run admin:create` | Create an admin user in this app's Supabase Auth |
+| `npm run admin:create` | Create an admin in local mode or local Supabase Auth |
 
 ## Run locally without Docker
 
@@ -51,7 +51,7 @@ Run npm only inside Linux/WSL, never from Windows.
 3. `npm run dev`, open `http://localhost:3000/login`, sign in and enroll TOTP.
 4. `npm run social:fake-worker -- --sync`; open **Conturi** to assign brands and unpause the fake channels. Create manual Substack/Product Hunt accounts there.
 5. Request drafts in **Genereaza**, then `npm run social:fake-generator -- --once`. Edit in **Ciorne**, upload JPEG/PNG/WebP in **Media**, or generate and attach cards in the editor. Uploads strip EXIF/GPS metadata; attachment alt text is saved per revision.
-6. Open **Programare si aprobare**, choose times, confirm figure sources and tick **Am verificat cifrele** where needed. Set `SOCIAL_PUBLISHING_ENABLED=true` in the ignored site environment only when ready to exercise local delivery.
+6. Open **Programare si aprobare**, choose times, confirm figure sources and tick **Am verificat cifrele** where needed. Set `SOCIAL_PUBLISHING_ENABLED=true` in the ignored site environment when ready to exercise local delivery, then restart the site.
 7. For due jobs: `npm run social:fake-worker -- --once --scenario ok --download-media`; run again when the poll is due. Public links appear in **Postari**, **Prezentare** and **Calendar**. **Publicare manuala** offers copy/download formats, images and publication confirmation.
 8. The production worker with `WORKER_DRY_RUN=true` downloads and verifies approved media and reports a test URL without contacting Postiz. Dry run skips account sync, polling and reconciliation; use fake sync locally. Keep AI keys blank for an offline run.
 
@@ -91,7 +91,7 @@ local site, use `npm run social:fake-worker -- --once --scenario ok --download-m
 ## Layout
 
 ```
-supabase/migrations/   schema, activity, media tickets, accounts and generation heartbeat
+supabase/migrations/   schema, activity, media tickets, accounts, generation heartbeat and media immutability
 src/app/api/worker/social/v1/   worker API route handlers
 src/lib/social/        content rules, hash, validation, time, draft mapping, worker API helpers
 src/lib/social/fake/   fake worker / generator logic (used by scripts and tests)
