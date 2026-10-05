@@ -30,7 +30,7 @@ let api: WorkerApi
 const account = async (id: string) => (await rows(db, `select * from social_accounts where id = $1`, [id]))[0]
 const synced = async (integration: string) =>
   (await rows(db, `select id from social_accounts where postiz_integration_id = $1`, [integration]))[0].id as string
-const errorOf = (r: { ok: boolean }) => (r as { error: string }).error
+const errorOf = (r: { ok: boolean; error?: string }) => r.error ?? ''
 
 async function draftPost(accounts: string[], scheduledAt: string | null = null): Promise<string> {
   const [{ id }] = await rows(db, `select social_create_post($1::jsonb, $2::jsonb, $3::jsonb) as id`, [
@@ -86,7 +86,8 @@ describe('accounts screen: actions and queries (W3)', () => {
     const row = await account(x)
     assert.equal(row.brand_id, brand)
     assert.equal(row.paused, false)
-    assert.deepEqual(publishBlockers({ ...row, platform: 'x' }), [])
+    assert.deepEqual(publishBlockers({ brand_id: row.brand_id, mode: row.mode, status: row.status, paused: row.paused,
+      postiz_integration_id: row.postiz_integration_id, postiz_disabled: row.postiz_disabled, platform: 'x' }), [])
 
     const [log] = await rows(db, `select action, account_id, actor_email, details from social_activity_log`)
     assert.equal(log.action, 'social.account_updated')
@@ -249,5 +250,19 @@ describe('accounts screen: actions and queries (W3)', () => {
     assert.equal((await getWorkerHealth()).publishing_enabled, true)
     delete process.env.SOCIAL_PUBLISHING_ENABLED
     assert.equal((await getWorkerHealth()).publishing_enabled, false)
+  })
+
+  it('sync preserves manual approval status even when Postiz asks for reconnection', async () => {
+    await syncFakeAccounts(api)
+    const li = await synced('fake-linkedin')
+    assert.equal((await updateAccount(li, { mode: 'manual', status: 'approval_pending' })).ok, true)
+    await syncFakeAccounts(api, { refreshNeeded: ['fake-linkedin'] })
+    assert.equal((await account(li)).status, 'approval_pending')
+    assert.equal((await updateAccount(li, { status: 'manual' })).ok, true)
+    await syncFakeAccounts(api, { refreshNeeded: ['fake-linkedin'] })
+    assert.equal((await account(li)).status, 'manual')
+    assert.equal((await updateAccount(li, { mode: 'auto' })).ok, true)
+    await syncFakeAccounts(api, { refreshNeeded: ['fake-linkedin'] })
+    assert.equal((await account(li)).status, 'reconnect_required')
   })
 })

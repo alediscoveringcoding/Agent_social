@@ -26,7 +26,6 @@ const SAFE_HREF = /^(https?:\/\/|mailto:)/i
 // A bare URL in raw text; stops at whitespace, quotes, angle brackets, and
 // does not swallow a closing bracket or trailing punctuation.
 const BARE_URL = /\bhttps?:\/\/[^\s<>"']*[^\s<>"'.,;:!?)\]]/gi
-// eslint-disable-next-line no-control-regex
 const SLOT = /\u0000(\d+)\u0000/g
 
 function anchor(url: string, text = url): string {

@@ -10,6 +10,8 @@ export const dynamic = 'force-dynamic'
 interface ExistingAccount {
   id: string
   platform: string
+  // W3: manual channels retain their administrative status during sync.
+  mode: 'auto' | 'manual'
   status: AccountStatus
   postiz_integration_id: string
 }
@@ -41,7 +43,7 @@ export async function POST(request: Request) {
     const ids = body.data.integrations.map((i) => i.postiz_integration_id)
     const { data: rows, error } = await admin
       .from('social_accounts')
-      .select('id, platform, status, postiz_integration_id')
+      .select('id, platform, mode, status, postiz_integration_id')
       .in('postiz_integration_id', ids.length ? ids : ['-'])
     if (error) throw new Error(`accounts: ${error.message}`)
     const existing = new Map(((rows ?? []) as ExistingAccount[]).map((r) => [r.postiz_integration_id, r]))
@@ -60,7 +62,10 @@ export async function POST(request: Request) {
         ignored.push({ postiz_integration_id: integration.postiz_integration_id, reason: 'provider changed platform' })
         continue
       }
-      const status = syncedStatus(before?.status ?? null, integration.refresh_needed === true)
+      // W3: refresh_needed cannot put a manual account into an auto-only state.
+      const status = before?.mode === 'manual'
+        ? (before.status === 'approval_pending' ? 'approval_pending' : 'manual')
+        : syncedStatus(before?.status ?? null, integration.refresh_needed === true)
       const fields = {
         postiz_provider: integration.provider,
         postiz_disabled: integration.disabled === true,
