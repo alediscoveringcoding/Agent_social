@@ -1,0 +1,123 @@
+@import 'tailwindcss';
+
+/*
+ * PRD 8.3 palette as tokens. Light values are the brand's; dark values keep the
+ * same roles (dark-mode accent #2DD4BE is the PRD's own). Components use the
+ * Tailwind names (bg-card, text-ink, border-line, bg-primary, ...), never hex.
+ */
+:root {
+  --bg: #ffffff;
+  --card: #ffffff;
+  --ink: #16313a;
+  --ink-soft: #5d7178;
+  --accent: #11a594;
+  --accent-dark: #0c7f72;
+  --accent-soft: #d6f0ea;
+  --bg-soft: #f4faf8;
+  --bg-mint: #e7f5f0;
+  --gold: #e8a805;
+  --gold-soft: #fdf4dc;
+  --line: #e6ede9;
+  --line-2: #d6e2dd;
+  /* Buttons: white on #11A594 is too weak at button size; the dark teal is not. */
+  --primary: #0c7f72;
+  --on-primary: #ffffff;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --warn: #92400e;
+  --warn-soft: #fef6e4;
+  --shadow: 0 1px 2px rgba(22, 49, 58, 0.04), 0 8px 24px rgba(22, 49, 58, 0.06);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0e1414;
+    --card: #141c1b;
+    --ink: #eef2f1;
+    --ink-soft: #9aa8a2;
+    --accent: #2dd4be;
+    --accent-dark: #57e0cd;
+    --accent-soft: #123a34;
+    --bg-soft: #111918;
+    --bg-mint: #102320;
+    --gold: #f0b92b;
+    --gold-soft: #2e2510;
+    --line: #232f2c;
+    --line-2: #2f3d3a;
+    --primary: #2dd4be;
+    --on-primary: #0b1f1c;
+    --danger: #f87171;
+    --danger-soft: #3a1717;
+    --warn: #fbbf24;
+    --warn-soft: #33270c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0e1414;
+  --card: #141c1b;
+  --ink: #eef2f1;
+  --ink-soft: #9aa8a2;
+  --accent: #2dd4be;
+  --accent-dark: #57e0cd;
+  --accent-soft: #123a34;
+  --bg-soft: #111918;
+  --bg-mint: #102320;
+  --gold: #f0b92b;
+  --gold-soft: #2e2510;
+  --line: #232f2c;
+  --line-2: #2f3d3a;
+  --primary: #2dd4be;
+  --on-primary: #0b1f1c;
+  --danger: #f87171;
+  --danger-soft: #3a1717;
+  --warn: #fbbf24;
+  --warn-soft: #33270c;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-accent: var(--accent);
+  --color-accent-dark: var(--accent-dark);
+  --color-accent-soft: var(--accent-soft);
+  --color-bg-soft: var(--bg-soft);
+  --color-bg-mint: var(--bg-mint);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --radius-card: 22px;
+  --radius-card-sm: 14px;
+  --shadow-card: var(--shadow);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

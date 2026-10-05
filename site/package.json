@@ -1,0 +1,47 @@
+{
+  "name": "social-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Track A of the social publishing PRD: the /admin/social app and the worker API (localhost MVP).",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "dev": "next dev -H 127.0.0.1 -p 3000",
+    "build": "next build",
+    "start": "next start -H 127.0.0.1 -p 3000",
+    "lint": "eslint --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --no-warnings --import ./test/register.mjs --test \"src/**/__tests__/**/*.test.ts\"",
+    "ci": "npm run typecheck && npm run lint && npm test && npm run build",
+    "social:fake-worker": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings scripts/social-fake-worker.ts",
+    "social:fake-generator": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings scripts/social-fake-generator.ts",
+    "admin:create": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings scripts/create-admin.ts"
+  },
+  "dependencies": {
+    "@fontsource/plus-jakarta-sans": "^5.3.0",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.2",
+    "canonicalize": "^5.1.0",
+    "lucide-react": "^1.52.0",
+    "next": "^16.3.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "server-only": "^0.0.1",
+    "sharp": "^0.35.5",
+    "sonner": "^2.0.8",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.8",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.9.3"
+  }
+}
