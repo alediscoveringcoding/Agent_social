@@ -1,6 +1,6 @@
 import { after, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -24,7 +24,9 @@ describe('local mode database', () => {
     const dir = mkdtempSync(join(tmpdir(), 'social-local-db-'))
     scratch.push(dir)
     const first = await openLocalDb(dir)
-    assert.deepEqual(first.applied, ['0001_social_publishing.sql', '0002_social_activity_log.sql'])
+    // W3: new workstream migrations must also be applied in local mode.
+    const migrations = readdirSync(join(process.cwd(), 'supabase', 'migrations')).filter((f) => f.endsWith('.sql')).sort()
+    assert.deepEqual(first.applied, migrations)
     const brands = await first.db.query<{ slug: string }>('select slug from social_brands order by slug')
     assert.deepEqual(brands.rows.map((r) => r.slug), ['comets-of-web3', 'taxes-support', 'the-crypto-support'])
     await first.close()
