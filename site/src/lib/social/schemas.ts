@@ -10,10 +10,20 @@
 import { z } from 'zod'
 import { CARD_TEMPLATES, DELIVERY_OUTCOMES, PLATFORMS, POST_KINDS } from './constants.ts'
 
-const httpUrl = z
+export const isHttpUrl = (v: string) => /^https?:\/\/[^\s]+$/i.test(v)
+
+const httpUrl = z.string().max(2048).refine(isHttpUrl, 'must be an http(s) URL')
+
+/**
+ * For links inside generator drafts: anything that is not http(s) (javascript:,
+ * data:, a bare path) becomes null instead of rejecting the batch, so it can
+ * never reach an href and one bad link does not lose every draft.
+ */
+const draftUrl = z
   .string()
   .max(2048)
-  .refine((v) => /^https?:\/\/[^\s]+$/i.test(v), 'must be an http(s) URL')
+  .nullish()
+  .transform((v) => (v && isHttpUrl(v.trim()) ? v.trim() : null))
 
 const errorCode = z
   .string()
@@ -77,19 +87,46 @@ export const FigureSchema = z.object({
 
 const settingsSchema = z.record(z.string(), z.unknown())
 
+/**
+ * `platform` is a free string here on purpose: a variant for a name outside
+ * the contract (say "linkedin" instead of "linkedin-page") is kept on the
+ * revision and named in the reviewer notes, but gets no destination. Refusing
+ * it would 422 the whole batch and lose every other draft with it.
+ */
 export const VariantSchema = z.object({
-  platform: z.enum(PLATFORMS),
+  platform: z.string().min(1).max(64),
   text: z.string().max(100_000),
   settings: settingsSchema.nullish(),
 })
 
+/** Lenient for the same reason: a missing title shows up as TITLE_MISSING in the composer. */
 export const ArticleSchema = z.object({
-  title: z.string().max(300),
+  title: z.string().max(300).default(''),
   subtitle: z.string().max(500).nullish(),
-  body_markdown: z.string().max(200_000),
+  body_markdown: z.string().max(200_000).default(''),
   tags: z.array(z.string().max(64)).max(20).nullish(),
-  canonical_url: z.string().max(2048).nullish(),
+  canonical_url: draftUrl,
 })
+
+/**
+ * A generator-reported problem: a string, or {code, message, field}. Track B
+ * sends `rule` for the code; both are accepted and stored as `code`.
+ */
+const GeneratorError = z.union([
+  z.string().max(2000).transform((message) => ({ message })),
+  z
+    .object({
+      code: z.string().max(64).nullish(),
+      rule: z.string().max(64).nullish(),
+      message: z.string().max(2000),
+      field: z.string().max(200).nullish(),
+    })
+    .transform(({ code, rule, message, field }) => ({
+      ...(code || rule ? { code: (code || rule) as string } : {}),
+      message,
+      ...(field ? { field } : {}),
+    })),
+])
 
 export const LaunchSchema = z.object({
   name: z.string().max(200),
@@ -103,19 +140,19 @@ export const DraftSchema = z.object({
   kind: z.enum(POST_KINDS),
   title: z.string().max(300).nullish(),
   canonical_text: z.string().max(100_000),
-  source_url: z.string().max(2048).nullish(),
+  source_url: draftUrl,
   variants: z.array(VariantSchema).max(20),
   article: ArticleSchema.nullish(),
   launch: LaunchSchema.nullish(),
   card: CardSpecSchema.nullish(),
-  figures: z.array(FigureSchema).max(100).default([]),
-  validation_errors: z
-    .array(z.union([z.string().max(2000), z.object({ code: z.string().max(64).optional(), message: z.string().max(2000) })]))
-    .max(100)
-    .default([]),
+  // Track B re-extracts figures per text, so the same value repeats; 500 leaves room.
+  figures: z.array(FigureSchema).max(500).default([]),
+  validation_errors: z.array(GeneratorError).max(500).default([]),
   notes: z.string().max(4000).nullish(),
 })
 export type DraftInput = z.infer<typeof DraftSchema>
+/** A Draft as sent on the wire (before parsing), e.g. by the fake generator. */
+export type DraftWire = z.input<typeof DraftSchema>
 
 export const DraftsBody = z.object({
   drafts: z.array(DraftSchema).min(1).max(50),

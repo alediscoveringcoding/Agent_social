@@ -16,9 +16,9 @@
  * real generator reports a draft it could not repair.
  */
 
-import type { DraftInput } from '../schemas.ts'
+import type { DraftWire } from '../schemas.ts'
 
-type Fixture = Omit<DraftInput, 'client_ref'> & { name: string }
+type Fixture = Omit<DraftWire, 'client_ref'> & { name: string }
 
 const card = (headline: string, keyword: string, stat: string | null, template: 'light' | 'dark' | 'mint') => ({
   template,
@@ -193,10 +193,10 @@ export const DRAFT_FIXTURES: Fixture[] = [
 ]
 
 /** Drafts for a request: fixtures rotated, variants limited to the requested platforms. */
-export function draftsFor(platforms: readonly string[], count: number, offset = 0): DraftInput[] {
+export function draftsFor(platforms: readonly string[], count: number, offset = 0): DraftWire[] {
   const usable = DRAFT_FIXTURES.filter((f) => f.variants.some((v) => platforms.includes(v.platform)))
   const pool = usable.length ? usable : DRAFT_FIXTURES.slice(0, 1)
-  const out: DraftInput[] = []
+  const out: DraftWire[] = []
   for (let i = 0; i < count; i++) {
     const { name: _name, ...f } = pool[(i + offset) % pool.length]
     const variants = f.variants.filter((v) => platforms.includes(v.platform))

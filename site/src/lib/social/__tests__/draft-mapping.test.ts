@@ -84,6 +84,20 @@ describe('mapDraft', () => {
     assert.equal(dev.validation.ok, true, JSON.stringify(dev.validation.errors))
   })
 
+  it('drops non-http(s) links instead of storing them or rejecting the batch', () => {
+    for (const bad of ['javascript:alert(1)', 'JavaScript:alert(1)', 'data:text/html,<b>x</b>', '/ghid/a', '//evil.test/a', '']) {
+      const d = DraftSchema.parse({
+        ...prdDraft,
+        source_url: bad,
+        article: { title: 'T', body_markdown: 'B', canonical_url: bad },
+      })
+      assert.equal(d.source_url, null, bad)
+      assert.equal(d.article?.canonical_url, null, bad)
+    }
+    const ok = DraftSchema.parse({ ...prdDraft, source_url: ' https://thecrypto.support/ghid/a ' })
+    assert.equal(ok.source_url, 'https://thecrypto.support/ghid/a')
+  })
+
   it('keeps the generator validation errors for the reviewer', () => {
     const bad = DraftSchema.parse({
       ...prdDraft,

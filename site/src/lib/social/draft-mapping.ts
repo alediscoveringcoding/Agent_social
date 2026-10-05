@@ -13,7 +13,7 @@
  *  - The canonical URL of an article defaults to the draft's source article.
  */
 
-import type { Platform } from './constants.ts'
+import { isPlatform, type Platform } from './constants.ts'
 import type { DraftInput } from './schemas.ts'
 import { validateDestination, type DestinationValidation } from './validation.ts'
 
@@ -141,21 +141,27 @@ export function mapDraft(
   const now = opts.now ?? new Date()
   const destinations: MappedDestination[] = []
   const unmatched: Platform[] = []
+  const unknown: string[] = []
   const seenAccounts = new Set<string>()
 
   for (const variant of draft.variants) {
-    const matching = accounts.filter((a) => a.platform === variant.platform)
+    if (!isPlatform(variant.platform)) {
+      if (!unknown.includes(variant.platform)) unknown.push(variant.platform)
+      continue
+    }
+    const platform = variant.platform
+    const matching = accounts.filter((a) => a.platform === platform)
     if (matching.length === 0) {
-      if (!unmatched.includes(variant.platform)) unmatched.push(variant.platform)
+      if (!unmatched.includes(platform)) unmatched.push(platform)
       continue
     }
     for (const acc of matching) {
       if (seenAccounts.has(acc.id)) continue
       seenAccounts.add(acc.id)
-      const settings = settingsFor(variant.platform, draft, (variant.settings ?? {}) as Record<string, unknown>)
-      const text = textFor(variant.platform, draft, variant.text)
+      const settings = settingsFor(platform, draft, (variant.settings ?? {}) as Record<string, unknown>)
+      const text = textFor(platform, draft, variant.text)
       const v = validateDestination({
-        platform: variant.platform,
+        platform,
         kind: draft.kind,
         text,
         settings,
@@ -168,7 +174,7 @@ export function mapDraft(
       })
       destinations.push({
         account_id: acc.id,
-        platform: variant.platform,
+        platform,
         text,
         settings,
         scheduled_at: null,
@@ -183,6 +189,9 @@ export function mapDraft(
 
   const notes = [draft.notes ?? '']
   if (unmatched.length) notes.push(`Fara cont conectat pentru: ${unmatched.join(', ')}. Variantele sunt pastrate in revizie.`)
+  if (unknown.length) {
+    notes.push(`Platforme necunoscute in ciorna: ${unknown.join(', ')}. Variantele sunt pastrate in revizie, fara destinatie.`)
+  }
 
   return {
     post: { kind: draft.kind, title: titleOf(draft), source_url: draft.source_url ?? null },
