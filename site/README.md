@@ -16,7 +16,8 @@ Specs: [PRD](../docs/PRD.md), [amendment 01: localhost MVP](../docs/amendment-01
 | Admin auth | Login (Supabase Auth, `ADMIN_EMAILS`), TOTP enrol/verify, aal2 on every page and action, nonce CSP in `src/proxy.ts`, `npm run admin:create` | Done; decision logic unit-tested, flow not yet run against Supabase |
 | A5 | Generate form (`/admin/social/genereaza`) and drafts inbox (`/admin/social/ciorne`) | Done, actions tested on PGlite |
 | A4 / A7 (editing part) | Draft editor (`/admin/social/ciorne/[id]`): destinations per account, text and settings per platform, live content rules, figure confirmation, revisions | Done |
-| A7 (rest), A8, A9, A10 | Media upload, approval, cancel/retry/reschedule, posts list, manual handoff, overview and calendar | Done locally, including fake-worker flows |
+| Media (F3/F4) | Private local disk storage and Supabase uploads, media library, destination attachment and alternative text | Done, local upload and download flow tested |
+| A7 (rest), A8, A9, A10 | Approval, cancel/retry/reschedule, posts list, manual handoff, overview and calendar | Done locally, including fake-worker flows |
 | A6 | Card renderer, card studio and destination preview | Done; all 54 format/template/brand combinations tested |
 | Accounts | Synced and manual accounts, brand assignment, pause, modes, caps and worker health | Done; managed from Conturi |
 | Automation API (PRD 10.4) | | Deferred (amendment 01) |
@@ -66,6 +67,26 @@ Private database and storage data are under `site/.local-db/`. Stop the site bef
 6. Without Track B running: `npm run social:fake-worker -- --sync` registers six fake channels. Open **Conturi** (`/admin/social/conturi`), assign each channel to a brand and unpause it. Create a request in **Genereaza**, run `npm run social:fake-generator -- --once`, and the drafts appear in **Ciorne**. Create Substack and Product Hunt accounts in **Conturi** for the **Publicare manuala** flow.
 7. With Track B: point the worker's `SITE_BASE_URL` at `http://localhost:3000` with the same `WORKER_TOKEN`.
 8. Concurrency check on real Postgres: `npm run social:fake-worker -- --race 8` (needs approved, due jobs).
+
+## Media and cards
+
+In local mode, private images live under `LOCAL_DB_DIR/storage/social-media/`
+(default `site/.local-db/storage/social-media/`). Keep this directory with the
+database when backing up. Download links are signed for at most one hour;
+`MEDIA_SIGNING_SECRET` can supply a separate key, otherwise the site uses
+`LOCAL_AUTH_SECRET` or `SUPABASE_SERVICE_ROLE_KEY` (at least 32 characters).
+
+Open **Media** to upload JPEG, PNG or WebP files up to 8 MB with alternative
+text. Uploads apply orientation and remove EXIF/GPS and other metadata. In a
+draft, save any text changes before attaching images or generating cards.
+Both operations save a new revision. Changing a library image's suggested
+alternative text leaves existing revisions' copies unchanged; edit the attached
+text in the draft to change what will be published. Images used by any revision
+cannot be deleted. Card numbers newly introduced by an edit are listed as
+unverified figures until a person checks them.
+
+To exercise signed media downloads and checksum validation against a running
+local site, use `npm run social:fake-worker -- --once --scenario ok --download-media`.
 
 ## Layout
 

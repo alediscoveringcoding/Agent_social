@@ -10,6 +10,11 @@ import type { DraftDetail } from '@/lib/social/queries'
 import { formatBucharest } from '@/lib/social/time'
 import { maxLengthFor, measureLength, validateDestination, type DestinationValidation } from '@/lib/social/validation'
 import { Badge, Button, Card, Field, cn, inputClass } from '@/components/ui'
+// W2: revision-bound media controls and destination preview.
+import type { MediaItem } from '@/lib/social/media-queries'
+import { MediaPanel } from './MediaPanel'
+import { CardStudio } from './CardStudio'
+import { DestinationPreview } from './DestinationPreview'
 
 interface DestState {
   accountId: string
@@ -151,9 +156,13 @@ function Issues({ v }: { v: DestinationValidation }) {
   )
 }
 
-export function DraftEditor({ draft, editable }: { draft: DraftDetail; editable: boolean }) {
+export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: DraftDetail; editable: boolean; mediaLibrary?: MediaItem[] }) {
   const router = useRouter()
   const [pending, start] = useTransition()
+  // W2: a revision refresh must never discard edits typed during a mutation.
+  const [mediaBusy, setMediaBusy] = useState(false)
+  const [mediaSelectionDirty, setMediaSelectionDirty] = useState(false)
+  const busy = pending || mediaBusy
   const [title, setTitle] = useState(draft.title ?? '')
   const [canonical, setCanonical] = useState(draft.revision.canonical_text)
   const [figures, setFigures] = useState<EditFigure[]>(draft.revision.figures)
@@ -197,6 +206,7 @@ export function DraftEditor({ draft, editable }: { draft: DraftDetail; editable:
   }
 
   function toggleAccount(accountId: string) {
+    if (mediaSelectionDirty) { toast.error('Salveaza sau restabileste selectia imaginilor inainte de a schimba destinatiile.'); return }
     const acc = accounts.get(accountId)
     if (!acc) return
     if (dests.some((d) => d.accountId === accountId)) {
@@ -217,6 +227,7 @@ export function DraftEditor({ draft, editable }: { draft: DraftDetail; editable:
   }
 
   function save() {
+    if (mediaSelectionDirty) { toast.error('Salveaza sau restabileste selectia imaginilor inainte de a salva textul.'); return }
     start(async () => {
       const r = await saveDraft({
         postId: draft.id,
@@ -237,10 +248,9 @@ export function DraftEditor({ draft, editable }: { draft: DraftDetail; editable:
   const activeAcc = activeDest ? accounts.get(activeDest.accountId) : undefined
   const activeV = activeDest ? validations.get(activeDest.accountId) : undefined
   const variant = activeAcc ? draft.revision.variants.find((v) => v.platform === activeAcc.platform) : undefined
-  const card = draft.revision.card_spec as Record<string, string | null> | null
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+    <fieldset disabled={busy} className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <div className="space-y-6">
         {draft.revision.notes || draft.revision.generator_errors.length ? (
           <Card className="bg-bg-mint">
@@ -311,7 +321,10 @@ export function DraftEditor({ draft, editable }: { draft: DraftDetail; editable:
                     <button
                       key={d.accountId}
                       type="button"
-                      onClick={() => setActive(d.accountId)}
+                      onClick={() => {
+                        if (mediaSelectionDirty) { toast.error('Salveaza sau restabileste selectia imaginilor inainte de a schimba destinatia.'); return }
+                        setActive(d.accountId)
+                      }}
                       className={cn(
                         '-mb-px rounded-t-lg border border-b-0 px-3 py-2 text-sm font-semibold',
                         active === d.accountId ? 'border-line bg-card text-ink' : 'border-transparent text-ink-soft hover:text-ink'
@@ -448,41 +461,13 @@ export function DraftEditor({ draft, editable }: { draft: DraftDetail; editable:
           </Button>
         </Card>
 
+        {/* W2: disable revision changes until unsaved copy is saved. */}
         {activeDest && activeAcc ? (
-          <Card>
-            <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Previzualizare · {PLATFORM_LABELS[activeAcc.platform]}</p>
-            <div className="mt-3 rounded-lg border border-line bg-bg p-3">
-              <p className="text-sm font-bold text-ink">{activeAcc.display_name}</p>
-              {typeof activeDest.settings.title === 'string' && activeDest.settings.title ? (
-                <p className="mt-1 text-base font-extrabold text-ink">{activeDest.settings.title as string}</p>
-              ) : null}
-              {typeof activeDest.settings.name === 'string' && activeDest.settings.name ? (
-                <p className="mt-1 text-base font-extrabold text-ink">
-                  {activeDest.settings.name as string}
-                  {activeDest.settings.tagline ? <span className="block text-sm font-semibold text-ink-soft">{activeDest.settings.tagline as string}</span> : null}
-                </p>
-              ) : null}
-              <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink">{activeDest.text || '…'}</p>
-              {(mediaByAccount.get(activeDest.accountId) ?? []).map((m) =>
-                m.url ? (
-                  // Signed Storage URL; next/image would need the host configured per environment.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={m.media_id} src={m.url} alt={m.alt_text} className="mt-2 w-full rounded-lg border border-line" />
-                ) : null
-              )}
-            </div>
-            {card ? (
-              <div className="mt-3 rounded-lg border border-dashed border-line-2 p-3 text-xs text-ink-soft">
-                <p className="font-semibold text-ink">Card ({card.template})</p>
-                <p className="mt-1">
-                  {card.headline}
-                  {card.stat ? <span className="ml-1 rounded bg-gold-soft px-1 font-bold text-ink">{card.stat}</span> : null}
-                </p>
-                {card.subline ? <p className="mt-0.5">{card.subline}</p> : null}
-                <p className="mt-1">Imaginile din card se genereaza in pasul de imagini (A6).</p>
-              </div>
-            ) : null}
-          </Card>
+          <>
+            <DestinationPreview accountName={activeAcc.display_name} platform={activeAcc.platform} text={activeDest.text} settings={activeDest.settings} media={mediaByAccount.get(activeDest.accountId) ?? []} />
+            <MediaPanel key={`${draft.revision.id}:${activeDest.accountId}`} draft={draft} accountId={activeDest.accountId} items={mediaLibrary} disabled={!editable || busy} dirty={dirty} onBusyChange={setMediaBusy} onSelectionDirtyChange={setMediaSelectionDirty} />
+            <CardStudio key={`${draft.revision.id}:${activeDest.accountId}`} draft={draft} accountId={activeDest.accountId} platform={activeAcc.platform} disabled={!editable || busy || mediaSelectionDirty} dirty={dirty} onBusyChange={setMediaBusy} />
+          </>
         ) : null}
 
         <Card>
@@ -496,6 +481,6 @@ export function DraftEditor({ draft, editable }: { draft: DraftDetail; editable:
           </ul>
         </Card>
       </aside>
-    </div>
+    </fieldset>
   )
 }

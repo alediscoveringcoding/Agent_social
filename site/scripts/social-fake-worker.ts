@@ -28,6 +28,8 @@ const { values } = parseArgs({
     refresh: { type: 'string', multiple: true, default: [] },
     race: { type: 'string' },
     worker: { type: 'string', default: 'fake-worker-1' },
+    // W2: exercise signed URLs and checksum verification over HTTP.
+    'download-media': { type: 'boolean', default: false },
   },
 })
 
@@ -68,6 +70,7 @@ async function main() {
     reconcile: values.reconcile as 'found' | 'not_found' | 'random',
     poll: values.poll as 'publish' | 'fail',
     log,
+    downloadMedia: values['download-media'],
   }
   do {
     const steps = await runFakeWorkerOnce(api, opts)

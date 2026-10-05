@@ -73,7 +73,8 @@ function must<T>(res: { data: unknown; error: { message: string } | null }, what
   return (res.data ?? ([] as unknown)) as T
 }
 
-export async function buildDeliveryJobs(admin: SupabaseClient, claimed: ReadonlyArray<ClaimedJob>): Promise<DeliveryJob[]> {
+// W2: the browser uses relative local URLs; workers require absolute URLs.
+export async function buildDeliveryJobs(admin: SupabaseClient, claimed: ReadonlyArray<ClaimedJob>, opts: { origin?: string } = {}): Promise<DeliveryJob[]> {
   if (claimed.length === 0) return []
   const jobIds = claimed.map((c) => c.job_id)
 
@@ -121,7 +122,10 @@ export async function buildDeliveryJobs(admin: SupabaseClient, claimed: Readonly
       console.error('[social/worker] could not sign media URLs:', error.message)
     }
     for (const s of data ?? []) {
-      if (s.path && s.signedUrl && !s.error) signed.set(s.path, s.signedUrl)
+      if (s.path && s.signedUrl && !s.error) {
+        const origin = opts.origin || process.env.SITE_BASE_URL
+        signed.set(s.path, s.signedUrl.startsWith('/') && origin ? new URL(s.signedUrl, origin).href : s.signedUrl)
+      }
     }
   }
 

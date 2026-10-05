@@ -63,5 +63,7 @@ export async function resolve(specifier, context, nextResolve) {
       if (isFile(candidate)) return { url: pathToFileURL(candidate).href, shortCircuit: true }
     }
   }
+  // W2: next has no "exports" map, so plain Node needs the file name (the card renderer uses next/og).
+  if (specifier === 'next/og') return nextResolve('next/og.js', context)
   return nextResolve(specifier, context)
 }
