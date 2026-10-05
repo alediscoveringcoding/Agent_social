@@ -48,6 +48,9 @@ export interface BaseRevision {
   kind: PostKind
   title: string | null
   figures: ReadonlyArray<EditFigure>
+  // Carried over unchanged: every revision column the edit does not touch must
+  // be copied, or saving drops it (the new row only has what is passed here).
+  body_markdown: string | null
   article: unknown
   launch: unknown
   card_spec: unknown
@@ -184,6 +187,7 @@ export function buildDraftRevision(
     revision: {
       title: (edit.title ?? base.title ?? '').slice(0, 300) || null,
       canonical_text: String(edit.canonicalText ?? '').slice(0, 100_000),
+      body_markdown: base.body_markdown ?? null,
       article: base.article ?? null,
       launch: base.launch ?? null,
       card_spec: base.card_spec ?? null,

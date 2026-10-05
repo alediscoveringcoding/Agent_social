@@ -156,7 +156,7 @@ export async function saveDraft(input: SaveDraftInput): Promise<ActionResult<{ r
 
     const { data: rev, error: revError } = await db
       .from('social_post_revisions')
-      .select('id, figures, article, launch, card_spec, variants, notes, generator_errors')
+      .select('id, figures, body_markdown, article, launch, card_spec, variants, notes, generator_errors')
       .eq('id', input.baseRevisionId)
       .single()
     if (revError || !rev) throw new Error(revError?.message ?? 'revision missing')

@@ -10,10 +10,20 @@
 import { z } from 'zod'
 import { CARD_TEMPLATES, DELIVERY_OUTCOMES, PLATFORMS, POST_KINDS } from './constants.ts'
 
-const httpUrl = z
+export const isHttpUrl = (v: string) => /^https?:\/\/[^\s]+$/i.test(v)
+
+const httpUrl = z.string().max(2048).refine(isHttpUrl, 'must be an http(s) URL')
+
+/**
+ * For links inside generator drafts: anything that is not http(s) (javascript:,
+ * data:, a bare path) becomes null instead of rejecting the batch, so it can
+ * never reach an href and one bad link does not lose every draft.
+ */
+const draftUrl = z
   .string()
   .max(2048)
-  .refine((v) => /^https?:\/\/[^\s]+$/i.test(v), 'must be an http(s) URL')
+  .nullish()
+  .transform((v) => (v && isHttpUrl(v.trim()) ? v.trim() : null))
 
 const errorCode = z
   .string()
@@ -95,7 +105,7 @@ export const ArticleSchema = z.object({
   subtitle: z.string().max(500).nullish(),
   body_markdown: z.string().max(200_000).default(''),
   tags: z.array(z.string().max(64)).max(20).nullish(),
-  canonical_url: z.string().max(2048).nullish(),
+  canonical_url: draftUrl,
 })
 
 /**
@@ -130,7 +140,7 @@ export const DraftSchema = z.object({
   kind: z.enum(POST_KINDS),
   title: z.string().max(300).nullish(),
   canonical_text: z.string().max(100_000),
-  source_url: z.string().max(2048).nullish(),
+  source_url: draftUrl,
   variants: z.array(VariantSchema).max(20),
   article: ArticleSchema.nullish(),
   launch: LaunchSchema.nullish(),

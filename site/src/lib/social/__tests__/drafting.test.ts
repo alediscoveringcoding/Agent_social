@@ -145,6 +145,19 @@ describe('drafting flow: actions and queries', () => {
     assert.equal(log.post_id, tooLong.id)
   })
 
+  it('saving keeps the columns the edit does not touch (body_markdown, article)', async () => {
+    await createAccount(db, brand, 'devto')
+    await generate(['devto'], 10)
+    const [base] = await rows(db, `select post_id, body_markdown, article from social_post_revisions where body_markdown is not null limit 1`)
+    assert.ok(base, 'the article fixture should give a revision with body_markdown')
+    const detail = (await getDraft(base.post_id as string))!
+    const r = await saveDraft({ postId: detail.id, baseRevisionId: detail.revision.id, edit: editFrom(detail) })
+    assert.equal(r.ok, true, JSON.stringify(r))
+    const [saved] = await rows(db, `select body_markdown, article from social_post_revisions where id = $1`, [(r as { revisionId: string }).revisionId])
+    assert.equal(saved.body_markdown, base.body_markdown)
+    assert.deepEqual(saved.article, base.article)
+  })
+
   it('confirming an unverified figure clears UNVERIFIED_FIGURE and records who', async () => {
     await createAccount(db, brand, 'linkedin-page')
     await createAccount(db, brand, 'x')

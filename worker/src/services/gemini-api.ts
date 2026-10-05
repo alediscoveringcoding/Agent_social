@@ -21,7 +21,8 @@ export async function generateDrafts(
       // Key in a header, never in the URL, so it can't end up in a logged URL.
       headers: { "Content-Type": "application/json", "x-goog-api-key": config.GEMINI_API_KEY },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
+        // camelCase like every other field here (the API reference name).
+        systemInstruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: "user", parts: [{ text: userPrompt }] }],
         generationConfig: {
           responseMimeType: "application/json",

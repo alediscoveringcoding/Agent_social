@@ -34,6 +34,9 @@ export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
   requestHeaders.set('Content-Security-Policy', csp)
+  // Always overwritten here, so a client-sent value never gets through. The
+  // admin layout reads it to send people back to the page they asked for.
+  requestHeaders.set('x-pathname', request.nextUrl.pathname + request.nextUrl.search)
 
   let response = NextResponse.next({ request: { headers: requestHeaders } })
 
@@ -48,6 +51,10 @@ export async function proxy(request: NextRequest) {
         },
         setAll(toSet) {
           for (const { name, value } of toSet) request.cookies.set(name, value)
+          // requestHeaders was copied before the refresh: give the render the new
+          // cookies too, or it sees the old token and refreshes a second time with
+          // an already used refresh token.
+          requestHeaders.set('cookie', request.headers.get('cookie') ?? '')
           response = NextResponse.next({ request: { headers: requestHeaders } })
           for (const { name, value, options } of toSet) response.cookies.set(name, value, options)
         },

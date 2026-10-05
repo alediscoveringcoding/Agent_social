@@ -1,7 +1,8 @@
 import 'server-only'
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createSessionClient } from '@/lib/supabase/server'
-import { AdminAuthError, adminDecision, hasVerifiedTotp, parseAdminEmails, type AdminDecision } from './decision.ts'
+import { AdminAuthError, adminDecision, hasVerifiedTotp, parseAdminEmails, safeNext, type AdminDecision } from './decision.ts'
 
 export interface AdminIdentity {
   userId: string
@@ -45,11 +46,16 @@ export async function requireAdmin(): Promise<AdminIdentity> {
   return state.identity
 }
 
-/** For pages and layouts: redirect to login / MFA instead of throwing. */
-export async function requireAdminPage(next = '/admin/social'): Promise<AdminIdentity> {
+/**
+ * For pages and layouts: redirect to login / MFA instead of throwing. Without
+ * `next`, the way back is the requested path (x-pathname, set by src/proxy.ts),
+ * so a layout keeps a nested route like /admin/social/ciorne/<id>.
+ */
+export async function requireAdminPage(next?: string): Promise<AdminIdentity> {
   const state = await getAdminState()
   if (state.decision === 'ok' && state.identity) return state.identity
-  const q = `?next=${encodeURIComponent(next)}`
+  const back = safeNext(next ?? (await headers()).get('x-pathname'))
+  const q = `?next=${encodeURIComponent(back)}`
   if (state.decision === 'login') redirect(`/login${q}`)
   if (state.decision === 'forbidden') redirect('/login?error=forbidden')
   redirect(`/mfa${q}`)

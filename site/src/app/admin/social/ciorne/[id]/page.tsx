@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireAdminPage } from '@/lib/auth/admin'
 import { getDraft } from '@/lib/social/queries'
+import { isHttpUrl } from '@/lib/social/schemas'
 import { formatBucharest } from '@/lib/social/time'
 import { Badge, PageTitle } from '@/components/ui'
 import { DraftEditor } from './DraftEditor'
@@ -32,7 +33,8 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
         subtitle={
           <>
             {draft.brand.name} · revizia {draft.revision.number} din {formatBucharest(draft.revision.created_at)}
-            {draft.source_url ? (
+            {/* Re-checked here too: rows saved before the schema check could hold javascript: or data: links. */}
+            {draft.source_url && isHttpUrl(draft.source_url) ? (
               <>
                 {' '}
                 · sursa{' '}

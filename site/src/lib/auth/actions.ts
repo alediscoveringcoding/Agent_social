@@ -22,10 +22,13 @@ export interface EnrollResult extends AuthResult {
 }
 
 async function logAuth(email: string | null, action: string, status: 'success' | 'error', details: Record<string, unknown> = {}) {
+  // Logging must never block a sign-in, but a failed write is reported. The
+  // client returns {error} instead of throwing, so the catch alone saw nothing.
   try {
-    await createAdminClient().from('social_activity_log').insert({ actor_email: email, action, status, details })
-  } catch {
-    // Logging must never block a sign-in; the server log has the error.
+    const { error } = await createAdminClient().from('social_activity_log').insert({ actor_email: email, action, status, details })
+    if (error) console.error('[auth/activity] could not log %s: %s', action, error.message)
+  } catch (e) {
+    console.error('[auth/activity] could not log %s:', action, e)
   }
 }
 
