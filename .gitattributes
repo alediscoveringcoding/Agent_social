@@ -1,4 +1,6 @@
-# Git hooks and shell scripts run under sh (WSL, Linux, macOS, CI): keep LF
-# even on a Windows checkout with core.autocrlf=true, or "#!/bin/sh\r" breaks.
+# LF everywhere, whatever core.autocrlf says. The same working tree is used by
+# Windows git and by git inside WSL; with CRLF on disk, WSL git would see every
+# file as modified, and hooks/shell scripts ("#!/bin/sh\r") would break.
+* text=auto eol=lf
 .githooks/* text eol=lf
 *.sh text eol=lf
