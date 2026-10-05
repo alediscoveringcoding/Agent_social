@@ -16,7 +16,7 @@ info:
     - Errors are `{"error": {"code", "message", "details"?}}`.
     - **409 = lease lost**: stop work on that job at once (do not call Postiz, do not retry the call).
     - Unknown body fields are ignored, so the worker can send a field before the site reads it.
-    - Leases last 10 minutes. `/heartbeat` extends a delivery lease; generation leases have no heartbeat.
+    - Leases last 10 minutes. The delivery and generation `/heartbeat` routes extend the caller's live lease.
     - Kill switch: unless the site's `SOCIAL_PUBLISHING_ENABLED` is exactly `true`, `/deliveries/claim`
       returns `{"jobs": []}` (no publish, poll or reconcile jobs) and `/submitting` answers 409 and puts
       the job back in the queue.
@@ -216,6 +216,30 @@ paths:
                         brand: { type: string, description: 'Brand slug: taxes-support, the-crypto-support, comets-of-web3' }
                         input: { $ref: '#/components/schemas/GenerationInput' }
                         lease_expires_at: { type: string, format: date-time }
+  /generation/{id}/heartbeat:
+    post:
+      summary: Extend a running generation lease by 10 minutes
+      description: Only the current owner of an unexpired running request may extend it. A 409 means stop generation, repair and reporting.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/WorkerId'
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: Lease extended
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lease_expires_at]
+                properties:
+                  lease_expires_at: { type: string, format: date-time }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/LeaseLost' }
+        '422': { $ref: '#/components/responses/Invalid' }
   /generation/{id}/drafts:
     post:
       summary: Deliver drafts; idempotent on request id + client_ref

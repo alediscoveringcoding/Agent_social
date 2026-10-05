@@ -20,6 +20,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadEnv({ path: path.resolve(__dirname, "../.env") });
 
 const PORT = Number(process.env.MOCK_SITE_PORT || 3000);
+const GENERATION_LEASE_MS = Number(process.env.MOCK_SITE_LEASE_MS || 10 * 60_000);
 const WORKER_TOKEN = process.env.WORKER_TOKEN;
 if (!WORKER_TOKEN) {
   console.error("WORKER_TOKEN is not set (expected in worker/.env). Refusing to start.");
@@ -145,7 +146,7 @@ function seed() {
   );
 }
 
-seed();
+if (process.env.MOCK_SITE_NO_SEED !== "true") seed();
 
 // --- HTTP plumbing -------------------------------------------------------
 
@@ -448,10 +449,17 @@ const server = createServer(async (req, res) => {
 
   // --- Generation ---
   if (route === "/generation/claim" && req.method === "POST") {
+    for (const request of state.generationRequests.values()) {
+      if (request.status === "running" && Date.parse(request.lease_expires_at) <= Date.now()) {
+        request.status = "queued";
+        request.lease_owner = null;
+      }
+    }
     const next = [...state.generationRequests.values()].find((r) => r.status === "queued");
     if (!next) return send(res, 200, { requests: [] });
     next.status = "running";
-    next.lease_expires_at = new Date(Date.now() + 10 * 60_000).toISOString();
+    next.lease_owner = req.headers["x-worker-id"];
+    next.lease_expires_at = new Date(Date.now() + GENERATION_LEASE_MS).toISOString();
     return send(res, 200, {
       requests: [
         {
@@ -464,10 +472,26 @@ const server = createServer(async (req, res) => {
     });
   }
 
+  const heartbeatMatch = route.match(/^\/generation\/([^/]+)\/heartbeat$/);
+  if (heartbeatMatch && req.method === "POST") {
+    const request = state.generationRequests.get(heartbeatMatch[1]);
+    if (!request) return send(res, 404, { error: { code: "NOT_FOUND", message: "Request not found" } });
+    if (request.status !== "running" || request.lease_owner !== req.headers["x-worker-id"] || Date.parse(request.lease_expires_at) <= Date.now()) {
+      return send(res, 409, { error: { code: "LEASE_LOST", message: "Lease lost" } });
+    }
+    request.lease_expires_at = new Date(Date.now() + GENERATION_LEASE_MS).toISOString();
+    request.heartbeats = (request.heartbeats ?? 0) + 1;
+    return send(res, 200, { lease_expires_at: request.lease_expires_at });
+  }
+
   const draftsMatch = route.match(/^\/generation\/([^/]+)\/drafts$/);
   if (draftsMatch && req.method === "POST") {
     const req_ = state.generationRequests.get(draftsMatch[1]);
     if (!req_) return send(res, 404, { error: "request not found" });
+    if (req_.status === "done") return send(res, 200, { created: 0, skipped: (body.drafts ?? []).length });
+    if (req_.status !== "running" || req_.lease_owner !== req.headers["x-worker-id"] || Date.parse(req_.lease_expires_at) <= Date.now()) {
+      return send(res, 409, { error: { code: "LEASE_LOST", message: "Lease lost" } });
+    }
     req_.status = "done";
     req_.drafts = body.drafts || [];
     console.log(
@@ -484,6 +508,9 @@ const server = createServer(async (req, res) => {
   if (failedMatch && req.method === "POST") {
     const req_ = state.generationRequests.get(failedMatch[1]);
     if (!req_) return send(res, 404, { error: "request not found" });
+    if (req_.status !== "running" || req_.lease_owner !== req.headers["x-worker-id"] || Date.parse(req_.lease_expires_at) <= Date.now()) {
+      return send(res, 409, { error: { code: "LEASE_LOST", message: "Lease lost" } });
+    }
     req_.status = "failed";
     req_.error_code = body.error_code;
     req_.error_message = body.error_message;
@@ -502,5 +529,5 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(JSON.stringify({ msg: "mock-site listening", port: PORT }));
+  console.log(JSON.stringify({ msg: "mock-site listening", port: server.address().port }));
 });
