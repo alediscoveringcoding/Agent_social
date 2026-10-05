@@ -13,7 +13,10 @@ Specs: [PRD](../docs/PRD.md), [amendment 01: localhost MVP](../docs/amendment-01
 | A1 | Schema, RLS, guard triggers, state machine as SQL functions, seed brands (`supabase/migrations/0001_…`, `0002_…`) | Done, tested on PGlite |
 | A2 | Worker API v1 (PRD 10.3), token auth, kill switch, event outbox | Done, tested in process |
 | A3 | Fake worker and fake generator (`scripts/`) | Done, tested in process |
-| A4, A5, A7, A8, A9, A10 | `/admin/social` screens | In progress |
+| Admin auth | Login (Supabase Auth, `ADMIN_EMAILS`), TOTP enrol/verify, aal2 on every page and action, nonce CSP in `src/proxy.ts`, `npm run admin:create` | Done; decision logic unit-tested, flow not yet run against Supabase |
+| A5 | Generate form (`/admin/social/genereaza`) and drafts inbox (`/admin/social/ciorne`) | Done, actions tested on PGlite |
+| A4 / A7 (editing part) | Draft editor (`/admin/social/ciorne/[id]`): destinations per account, text and settings per platform, live content rules, figure confirmation, revisions | Done |
+| A7 (rest), A8, A9, A10 | Media upload, approval, cancel/retry/reschedule, scheduled list, manual handoff, overview | Not started (SQL functions exist) |
 | A6 | Card renderer | Not started |
 | Automation API (PRD 10.4) | | Deferred (amendment 01) |
 
@@ -39,7 +42,14 @@ npm run ci        # typecheck, lint, tests, production build
 
 ## Run it locally (once Docker and the Supabase CLI are installed)
 
-See "Run it locally" at the end of this file (written with the admin screens).
+1. In `site/`: `npm install`, then `supabase init` (keeps `supabase/migrations/`). In the generated `supabase/config.toml` turn TOTP on (`[auth.mfa.totp]` `enroll_enabled = true`, `verify_enabled = true`) and public signup off (`[auth]` `enable_signup = false`).
+2. `supabase start`. Migrations 0001 and 0002 apply; the three brands and the `social-media` bucket are seeded. `supabase db reset` rebuilds the same (and wipes data).
+3. Copy `.env.example` to `.env.local` and fill it from `supabase status` (URL, anon key, service role key). Set `ADMIN_EMAILS`, `WORKER_TOKEN` (`openssl rand -hex 32`, same value in the worker's env) and, when testing delivery, `SOCIAL_PUBLISHING_ENABLED=true`.
+4. `npm run admin:create -- --email you@example.com` (refuses a non-local Supabase).
+5. `npm run dev`, open `http://localhost:3000/login`, sign in, enrol the authenticator.
+6. Without Track B running: `npm run social:fake-worker -- --sync` registers six fake channels (they arrive paused and without a brand: assign them in Supabase Studio, `http://127.0.0.1:54323`, until the accounts screen exists). Create a request in **Genereaza**, run `npm run social:fake-generator -- --once`, and the drafts appear in **Ciorne**.
+7. With Track B: point the worker's `SITE_BASE_URL` at `http://localhost:3000` with the same `WORKER_TOKEN`.
+8. Concurrency check on real Postgres: `npm run social:fake-worker -- --race 8` (needs approved, due jobs).
 
 ## Layout
 
