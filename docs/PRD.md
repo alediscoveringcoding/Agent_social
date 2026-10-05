@@ -6,7 +6,7 @@
 | Last updated | 2026-10-04 |
 | Tracks | **A: Site** (proposed owner: Raul) · **B: Infra, worker, generator** (proposed owner: Ale) |
 | Related | [README](../README.md) (infra overview; this PRD wins where they differ) |
-| Amendments | [01: Localhost MVP](amendment-01-localhost-mvp.md) (current phase: no VPS, everything on localhost) |
+| Amendments | [01: Localhost MVP](amendment-01-localhost-mvp.md) (no VPS, everything on localhost) · [02: Standalone site](amendment-02-standalone-site.md) · [03: Finishing the site locally](amendment-03-finish-the-site.md) (current: local mode, remaining work W1–W4) |
 
 > This repository is **public**. Never commit secrets, real `.env` files, account handles that are not public, or internal notes from the site repository.
 

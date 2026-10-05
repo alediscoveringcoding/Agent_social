@@ -31,3 +31,5 @@ backups/
 Thumbs.db
 desktop.ini
 .idea/
+# Claude Code worktrees for parallel workstreams
+.claude/worktrees/
