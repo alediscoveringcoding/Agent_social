@@ -12,6 +12,8 @@ process.env.GENERATOR_PROVIDER = "claude";
 process.env.GENERATOR_MODEL = "claude-opus-5-5";
 process.env.GEMINI_MODEL = "gemini-3.8-flash";
 process.env.WORKER_DRY_RUN = "true";
-process.env.SITE_BASE_URL ??= "http://127.0.0.1:9";
+process.env.SITE_BASE_URL = "http://127.0.0.1:9";
+process.env.GENERATOR_EFFORT = "medium";
+process.env.GENERATION_HEARTBEAT_MS = "120000";
 
 export {};

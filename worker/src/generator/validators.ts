@@ -1,6 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { findBareDomains } from "./content-rules.js";
+import { xWeightedLength } from "./x-length.js";
+import { detectFigures } from "./figures.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROMPTS_DIR = path.resolve(__dirname, "../../../prompts");
@@ -50,8 +53,7 @@ export function validateContent(text: string, platform: string): ValidationError
   }
 
   // Bare domain check (domain outside of a URL)
-  const bareDomainRe = /(?<!\/)(?:taxes\.support|thecrypto\.support)(?!\/)/g;
-  if (bareDomainRe.test(text)) {
+  if (findBareDomains(text).length > 0) {
     errors.push({
       rule: "bare_domain",
       message: "Domain appears outside of a URL",
@@ -65,10 +67,11 @@ export function validateContent(text: string, platform: string): ValidationError
     "linkedin-page": 3000,
     instagram: 2200,
   };
-  if (limits[platform] && text.length > limits[platform]) {
+  const length = platform === "x" ? xWeightedLength(text) : Array.from(text).length;
+  if (limits[platform] && length > limits[platform]) {
     errors.push({
       rule: "length",
-      message: `Text exceeds ${platform} limit of ${limits[platform]} chars (got ${text.length})`,
+      message: `Text exceeds ${platform} limit of ${limits[platform]} chars (got ${length})`,
     });
   }
 
@@ -80,14 +83,8 @@ export function validateContent(text: string, platform: string): ValidationError
     });
   }
 
-  // Figures detection
-  const figuresRe = /\d+|%|lei|RON|EUR/i;
-  if (figuresRe.test(text)) {
-    // Flag: this post contains figures and needs manual verification
-    errors.push({
-      rule: "contains_figures",
-      message: "Post contains figures that need manual verification",
-    });
+  if (platform === "instagram" && (text.match(/(?:^|\s)#[\p{L}\p{N}_]+/gu) ?? []).length > 30) {
+    errors.push({ rule: "instagram_hashtags", message: "Instagram allows at most 30 hashtags" });
   }
 
   return errors;
@@ -98,23 +95,9 @@ export function extractFigures(
   text: string,
 ): Array<{ value: string; context: string; source: string }> {
   const figures: Array<{ value: string; context: string; source: string }> = [];
-  // Match percentages, amounts with lei/RON/EUR, dates
-  const patterns = [
-    /(\d+(?:\.\d+)?%)/g,
-    /(\d+(?:\.\d+)?\s*(?:lei|RON|EUR))/gi,
-    /(\d{1,2}\s+(?:ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie)(?:\s+\d{4})?)/gi,
-  ];
-
-  for (const pattern of patterns) {
-    let match;
-    while ((match = pattern.exec(text)) !== null) {
-      const value = match[1];
-      // Get surrounding context (20 chars each side)
-      const start = Math.max(0, match.index - 20);
-      const end = Math.min(text.length, match.index + match[0].length + 20);
-      const context = text.slice(start, end).trim();
-      figures.push({ value, context, source: "unverified" });
-    }
+  for (const match of detectFigures(text)) {
+    if (match.kind === "number" && match.value.length <= 1) continue;
+    figures.push({ value: match.value, context: text.slice(Math.max(0, match.index - 20), match.index + match.value.length + 20).trim(), source: "unverified" });
   }
   return figures;
 }

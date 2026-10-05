@@ -58,12 +58,13 @@ export async function generateDrafts(
   systemPrompt: string,
   userPrompt: string,
   choice: AiChoice,
+  opts: { signal?: AbortSignal } = {},
 ): Promise<{ drafts: unknown[]; stopReason: string }> {
   if (!hasKey(choice.provider)) {
     const key = choice.provider === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
     throw new AiNotConfiguredError(`${key} is not set on the worker, so ${choice.model} can't be used`);
   }
   return choice.provider === "gemini"
-    ? gemini.generateDrafts(systemPrompt, userPrompt, choice.model)
-    : claude.generateDrafts(systemPrompt, userPrompt, choice.model);
+    ? gemini.generateDrafts(systemPrompt, userPrompt, choice.model, opts)
+    : claude.generateDrafts(systemPrompt, userPrompt, choice.model, opts);
 }

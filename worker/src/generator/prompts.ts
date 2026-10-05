@@ -2,129 +2,42 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "yaml";
+import { draftSchema } from "./schema.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROMPTS_DIR = path.resolve(__dirname, "../../../prompts");
+const PROMPTS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../prompts");
+// Ship these with the worker; missing policy files must fail visibly.
+const facts = yaml.parse(fs.readFileSync(path.join(PROMPTS_DIR, "facts.yaml"), "utf8"));
+const banned = fs.readFileSync(path.join(PROMPTS_DIR, "banned.txt"), "utf8").split("\n").map(s => s.trim()).filter(Boolean);
 
-// Load facts.yaml
-let facts: Record<string, unknown> = {};
-try {
-  facts = yaml.parse(fs.readFileSync(path.join(PROMPTS_DIR, "facts.yaml"), "utf-8"));
-} catch {
-  console.warn("facts.yaml not found");
-}
-
-// Load banned.txt
-let banned: string[] = [];
-try {
-  banned = fs
-    .readFileSync(path.join(PROMPTS_DIR, "banned.txt"), "utf-8")
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-} catch {
-  console.warn("banned.txt not found");
-}
-
-// PRD section 5: the three seeded brands. The worker API sends only the slug
-// (worker-api.openapi.yaml GenerationRequest.brand); the generator needs a
-// display name too.
 const BRAND_NAMES: Record<string, string> = {
-  "taxes-support": "Taxes Support",
-  "the-crypto-support": "The Crypto Support",
-  "comets-of-web3": "Comets of Web3",
+  "taxes-support": "Taxes Support", "the-crypto-support": "The Crypto Support", "comets-of-web3": "Comets of Web3",
 };
-
 export function brandFromSlug(slug: string): { slug: string; name: string } {
   return { slug, name: BRAND_NAMES[slug] ?? slug };
 }
 
-export function buildSystemPrompt(brand: { slug: string; name: string }, input: any): string {
-  return `You are a social media content creator for "${brand.name}", a Romanian crypto tax calculator.
-
-VOICE:
-- Romanian, using "tu" (informal, direct, calm)
-- NO diacritics: never use a, i, s, t with cedilla or breve. Write "a" not "ă", "i" not "î", "s" not "ș", "t" not "ț"
-- Reassuring, not alarmist. Explain, don't scare.
-- No hype, no price predictions, no investment advice. This is a tax tool.
-- Brand name exactly: "${brand.name}". Domains only inside URLs, never in running text.
-
-BANNED PHRASES (never use):
-${banned.map((b) => `- "${b}"`).join("\n")}
-
-VERIFIED FACTS (use these, cite source "facts"):
-${yaml.stringify(facts)}
-
-FIGURES RULE:
-- Every number, percentage, amount, date you include MUST be listed in the "figures" array.
-- If it comes from the source article, mark source: "article".
-- If it comes from the facts above, mark source: "facts".
-- Anything else: source: "unverified" (this blocks approval until a human confirms).
-
-OUTPUT FORMAT:
-Respond with a JSON object containing a "drafts" array. Each draft follows this exact structure:
-{
-  "client_ref": "1",
-  "kind": "social",
-  "canonical_text": "the main text",
-  "source_url": "url or null",
-  "variants": [
-    { "platform": "x", "text": "text for X (max 280 chars)", "settings": {} },
-    { "platform": "facebook", "text": "text for Facebook", "settings": {} },
-    { "platform": "instagram", "text": "text for Instagram (no URLs, needs image)", "settings": { "post_type": "post" } },
-    { "platform": "linkedin-page", "text": "text for LinkedIn (max 3000 chars)", "settings": {} }
-  ],
-  "card": {
-    "template": "dark|light|mint",
-    "headline": "max 70 chars, no diacritics",
-    "keyword": "one word from the headline to highlight",
-    "stat": "optional, max 8 chars, e.g. '16%'",
-    "subline": "max 110 chars, no diacritics",
-    "brand": "${brand.slug}",
-    "alt_text": "describe the card for screen readers"
-  },
-  "figures": [
-    { "value": "16%", "context": "impozit pe castig", "source": "facts" }
-  ],
-  "validation_errors": [],
-  "notes": "optional note for the reviewer"
-}
-
-PLATFORM RULES:
-- X: max 280 chars (URLs count as 23 chars)
-- Instagram: max 2200 chars, max 30 hashtags, NO URLs in caption, must have an image
-- LinkedIn: max 3000 chars
-- Facebook: image optional, link allowed
-- dev.to: title + markdown body + max 4 tags + canonical URL + cover 1000x420
-- Hashnode: title + subtitle + markdown + tags + canonical URL + cover 1600x840
-
-CARD RULES:
-- headline: max 70 chars
-- keyword: must be a substring of headline
-- stat: max 8 chars, optional (the single gold element on the card)
-- subline: max 110 chars
-- template: "dark", "light", or "mint" (vary across drafts)
-
-RESPOND ONLY WITH VALID JSON. No markdown, no explanation, no preamble.`;
+export function buildSystemPrompt(brand: { slug: string; name: string }, _input: unknown): string {
+  return `Write for "${brand.name}", a Romanian crypto tax brand.
+VOICE: Romanian without diacritics, informal "tu", direct, calm and reassuring. Never hype, price predictions or investment advice.
+Use the exact brand name. Domains only inside http(s) URLs, never in running text.
+BANNED PHRASES:\n${banned.map(b => `- ${b}`).join("\n")}
+VERIFIED FACTS (cite source "facts"):\n${yaml.stringify(facts)}
+FIGURES: List every number, percentage, amount or date you use, including article, launch and card fields.
+Keep verified facts as source "facts", numbers actually present in the source as "article", anything else as "unverified".
+Do not invent facts from an article URL when no source contents are available. Mark unverifiable claims "unverified" or omit them.
+KINDS:
+- social: fill canonical_text and platform variant text.
+- article (devto, hashnode, substack): fill article.title, subtitle, body_markdown, tags (at most four), canonical_url. For these destinations variant text is ""; the worker uses body_markdown. canonical_url is the source article URL on our blog.
+- launch (producthunt): fill launch.name, tagline (at most 60 characters), description (at most 260), maker_comment. Product Hunt variant text is ""; the worker uses description. This is a manual launch kit.
+Use null only for article or launch when absent. All other optional strings use "".
+PLATFORMS: X at most 280 weighted characters (URL=23, emoji/CJK=2), Instagram at most 2200 characters and 30 hashtags, no caption URLs; LinkedIn at most 3000 characters.
+CARDS: headline at most 70, keyword must occur in headline, stat at most 8, subline at most 110, accessible nonempty alt_text. Vary light/dark/mint templates.
+Do not return settings, card.brand or validation_errors: the worker adds them.
+Respond only with one JSON object matching this schema, no Markdown fences:\n${JSON.stringify(draftSchema)}`;
 }
 
 export function buildUserPrompt(input: any): string {
-  const { source, platforms, count, templates } = input;
-
-  if (source.type === "article") {
-    return `Create ${count} social media post drafts for this article: ${source.url}
-
-Target platforms: ${platforms.join(", ")}
-Preferred card templates: ${(templates || ["dark", "light", "mint"]).join(", ")}
-
-Each draft should present the article from a different angle or highlight a different key point. Vary the tone slightly across drafts while staying within the voice guidelines.`;
-  }
-
-  return `Create ${count} social media post drafts about: ${source.topic}
-
-Hooks/angles to use: ${(source.hooks || []).join(", ")}
-Target platforms: ${platforms.join(", ")}
-Preferred card templates: ${(templates || ["dark", "light", "mint"]).join(", ")}
-
-Each draft should present the topic from a different angle. Vary the tone slightly.`;
+  const { source, platforms, count, templates, kinds } = input;
+  const subject = source.type === "article" ? `Source article: ${source.url}` : `Topic: ${source.topic}\nHooks: ${(source.hooks ?? []).join(", ")}`;
+  return `Create exactly ${count} drafts with distinct angles.\n${subject}\nTarget platforms: ${platforms.join(", ")}\nKinds: ${(kinds ?? ["social"]).join(", ")}\nPreferred templates: ${(templates ?? ["dark", "light", "mint"]).join(", ")}\nUse unique client_ref values. Fill the article or launch object for those kinds.`;
 }

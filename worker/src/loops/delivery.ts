@@ -1,6 +1,7 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { writeFile, unlink } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { siteApi } from "../services/site-api.js";
@@ -35,7 +36,7 @@ export function startDeliveryLoop() {
   tick();
 }
 
-async function processJob(job: any) {
+export async function processJob(job: any) {
   const { job_id, kind, account } = job;
   logger.info("Processing job", { jobId: job_id, kind, platform: account.platform });
 
@@ -85,10 +86,16 @@ async function handlePublish(job: any) {
         const res = await fetch(m.url);
         if (!res.ok) throw new Error(`Media download failed: ${res.status}`);
         const buffer = Buffer.from(await res.arrayBuffer());
+        if (createHash("sha256").update(buffer).digest("hex") !== m.sha256) {
+          throw new Error("Media checksum does not match approved media");
+        }
 
-        await writeFile(tmpPath, buffer);
-        const uploaded = await postizApi.uploadMedia(tmpPath, m.mime);
-        postizMedia.push({ id: uploaded.id, path: uploaded.path });
+        // Dry run still proves signed media is readable, but never calls Postiz.
+        if (!config.WORKER_DRY_RUN) {
+          await writeFile(tmpPath, buffer);
+          const uploaded = await postizApi.uploadMedia(tmpPath, m.mime);
+          postizMedia.push({ id: uploaded.id, path: uploaded.path });
+        }
       } catch (err) {
         logger.error("Media transfer failed", { jobId: job_id, mediaId: m.media_id });
         // PRD 10.7: MEDIA_FETCH_FAILED retries once with a fresh claim, so this
@@ -123,7 +130,7 @@ async function handlePublish(job: any) {
       jobId: job_id,
       platform: account.platform,
       textLength: destination.text.length,
-      mediaCount: postizMedia.length,
+      mediaCount: media?.length ?? 0,
     });
     await siteApi.result(job_id, {
       attempt_no,
@@ -175,6 +182,10 @@ async function handlePublish(job: any) {
 
 async function handlePoll(job: any) {
   const { job_id, attempt_no, postiz } = job;
+  if (config.WORKER_DRY_RUN) {
+    logger.info("DRY RUN: skipping Postiz poll", { jobId: job_id });
+    return;
+  }
   if (!postiz?.post_id) return;
 
   try {
@@ -203,6 +214,10 @@ async function handlePoll(job: any) {
 
 async function handleReconcile(job: any) {
   const { job_id, attempt_no, account } = job;
+  if (config.WORKER_DRY_RUN) {
+    logger.info("DRY RUN: skipping Postiz reconciliation", { jobId: job_id });
+    return;
+  }
   logger.info("Reconciling job", { jobId: job_id });
 
   try {
