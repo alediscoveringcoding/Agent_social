@@ -159,6 +159,10 @@ function Issues({ v }: { v: DestinationValidation }) {
 export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: DraftDetail; editable: boolean; mediaLibrary?: MediaItem[] }) {
   const router = useRouter()
   const [pending, start] = useTransition()
+  // W2: a revision refresh must never discard edits typed during a mutation.
+  const [mediaBusy, setMediaBusy] = useState(false)
+  const [mediaSelectionDirty, setMediaSelectionDirty] = useState(false)
+  const busy = pending || mediaBusy
   const [title, setTitle] = useState(draft.title ?? '')
   const [canonical, setCanonical] = useState(draft.revision.canonical_text)
   const [figures, setFigures] = useState<EditFigure[]>(draft.revision.figures)
@@ -202,6 +206,7 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
   }
 
   function toggleAccount(accountId: string) {
+    if (mediaSelectionDirty) { toast.error('Salveaza sau restabileste selectia imaginilor inainte de a schimba destinatiile.'); return }
     const acc = accounts.get(accountId)
     if (!acc) return
     if (dests.some((d) => d.accountId === accountId)) {
@@ -222,6 +227,7 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
   }
 
   function save() {
+    if (mediaSelectionDirty) { toast.error('Salveaza sau restabileste selectia imaginilor inainte de a salva textul.'); return }
     start(async () => {
       const r = await saveDraft({
         postId: draft.id,
@@ -244,7 +250,7 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
   const variant = activeAcc ? draft.revision.variants.find((v) => v.platform === activeAcc.platform) : undefined
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+    <fieldset disabled={busy} className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <div className="space-y-6">
         {draft.revision.notes || draft.revision.generator_errors.length ? (
           <Card className="bg-bg-mint">
@@ -315,7 +321,10 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
                     <button
                       key={d.accountId}
                       type="button"
-                      onClick={() => setActive(d.accountId)}
+                      onClick={() => {
+                        if (mediaSelectionDirty) { toast.error('Salveaza sau restabileste selectia imaginilor inainte de a schimba destinatia.'); return }
+                        setActive(d.accountId)
+                      }}
                       className={cn(
                         '-mb-px rounded-t-lg border border-b-0 px-3 py-2 text-sm font-semibold',
                         active === d.accountId ? 'border-line bg-card text-ink' : 'border-transparent text-ink-soft hover:text-ink'
@@ -456,8 +465,8 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
         {activeDest && activeAcc ? (
           <>
             <DestinationPreview accountName={activeAcc.display_name} platform={activeAcc.platform} text={activeDest.text} settings={activeDest.settings} media={mediaByAccount.get(activeDest.accountId) ?? []} />
-            <MediaPanel key={`${draft.revision.id}:${activeDest.accountId}`} draft={draft} accountId={activeDest.accountId} items={mediaLibrary} disabled={!editable || pending} dirty={dirty} />
-            <CardStudio key={draft.revision.id} draft={draft} accountId={activeDest.accountId} platform={activeAcc.platform} disabled={!editable || pending} dirty={dirty} />
+            <MediaPanel key={`${draft.revision.id}:${activeDest.accountId}`} draft={draft} accountId={activeDest.accountId} items={mediaLibrary} disabled={!editable || busy} dirty={dirty} onBusyChange={setMediaBusy} onSelectionDirtyChange={setMediaSelectionDirty} />
+            <CardStudio key={`${draft.revision.id}:${activeDest.accountId}`} draft={draft} accountId={activeDest.accountId} platform={activeAcc.platform} disabled={!editable || busy || mediaSelectionDirty} dirty={dirty} onBusyChange={setMediaBusy} />
           </>
         ) : null}
 
@@ -472,6 +481,6 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
           </ul>
         </Card>
       </aside>
-    </div>
+    </fieldset>
   )
 }

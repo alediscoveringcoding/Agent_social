@@ -17,9 +17,11 @@ import { routeFetch } from '../../testing/route-fetch.ts'
 import { SOCIAL_BUCKET } from '../constants.ts'
 import { createUploadTicket, finalizeUpload, generateCards, setDestinationMedia, updateMediaAlt, deleteMedia } from '../media-actions.ts'
 import { listMedia } from '../media-queries.ts'
+import { getDraft } from '../queries.ts'
 import { ingestImage, MAX_UPLOAD_BYTES } from '../media/ingest.ts'
 import { signedMediaUrl, verifyMediaSignature, verifyUploadTicket, signUploadTicket } from '../media/signing.ts'
-import { destinationHash } from '../hash.ts'
+import { destinationHash, approvalHash } from '../hash.ts'
+import { loadMediaRevision, saveMediaRevision } from '../media/revision.ts'
 import { WorkerApi } from '../fake/worker-api-client.ts'
 import { runFakeWorkerOnce } from '../fake/fake-worker.ts'
 import { POST as upload } from '@/app/api/media/upload/route'
@@ -189,6 +191,8 @@ describe('media in local mode', () => {
     const [card] = await rows(db, 'select * from social_media where id=$1', [result.mediaIds[0]])
     assert.equal(card.source, 'generated'); assert.equal(card.format, 'x'); assert.equal(card.card_spec.brand, 'taxes-support')
     assert.equal(card.brand_id, brand); assert.equal(card.width, 1600); assert.equal(card.height, 900)
+    const detail = await getDraft(d.postId)
+    assert.equal(detail?.destinations[0]?.media[0]?.card_spec?.headline, 'Titlu de test')
     const [revision] = await rows(db, 'select figures from social_post_revisions where id=$1', [result.revisionId])
     assert.ok(revision.figures.some((f: { value: string; source: string }) => f.value === '16%' && f.source === 'unverified'))
     assert.notEqual(await hashOf(result.revisionId), await hashOf(d.revisionId))
@@ -202,6 +206,19 @@ describe('media in local mode', () => {
     assert.ok(reused.ok); if (!reused.ok) return
     const [copyRevision] = await rows(db, 'select figures from social_post_revisions where id=$1', [reused.revisionId])
     assert.ok(copyRevision.figures.some((f: { value: string; source: string }) => f.value === '16%' && f.source === 'unverified'))
+  })
+  it('refuses a media save whose draft was approved after loading; preserves approval and queued jobs', async () => {
+    const d = await draft(new Date(Date.now() - 5000).toISOString())
+    const context = await loadMediaRevision(d.postId, d.revisionId)
+    const [dest] = await rows(db, 'select id from social_destinations where revision_id=$1', [d.revisionId])
+    const hashes = [{ id: dest.id, destination_hash: await hashOf(d.revisionId), contains_figures: false }]
+    await rows(db, `select social_approve_revision($1,$2,$3,$4,$5,false,$6::jsonb,now() - interval '1 minute')`, [d.postId, d.revisionId, actor.userId, actor.email, approvalHash({ post_id: d.postId, revision_id: d.revisionId, destinations: hashes }), JSON.stringify(hashes)])
+    await assert.rejects(saveMediaRevision(context, d.revisionId, actor, new Map()), /aprobata intre timp/)
+    const [approval] = await rows(db, 'select revoked_at from social_approvals where revision_id=$1', [d.revisionId])
+    assert.equal(approval.revoked_at, null)
+    const [job] = await rows(db, 'select status from social_delivery_jobs where destination_id=$1', [dest.id])
+    assert.equal(job.status, 'queued')
+    assert.equal((await rows(db, 'select current_revision_id from social_posts where id=$1', [d.postId]))[0].current_revision_id, d.revisionId)
   })
   it('downloads local claim payload URLs and verifies checksums before the fake worker publishes', async () => {
     const { id } = await uploaded(); const d = await draft()

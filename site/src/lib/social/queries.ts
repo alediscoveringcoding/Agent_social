@@ -69,7 +69,8 @@ export interface DraftDestination {
   settings: Record<string, unknown>
   contains_figures: boolean
   validation: Partial<StoredValidation>
-  media: Array<{ media_id: string; position: number; alt_text: string; mime: string; width: number; height: number; url: string | null }>
+  // W2: each rendered attachment retains its own spec after partial generation.
+  media: Array<{ media_id: string; position: number; alt_text: string; mime: string; width: number; height: number; url: string | null; card_spec?: Record<string, unknown> | null }>
 }
 
 export interface DraftDetail {
@@ -238,7 +239,8 @@ export async function getDraft(postId: string): Promise<DraftDetail | null> {
     admin
       .from('social_destinations')
       .select(
-        'id, account_id, platform, text, settings, contains_figures, validation, account:social_accounts(display_name), media:social_destination_media(media_id, position, alt_text, file:social_media(mime, width, height, storage_path))'
+        // W2: preview/studio reads the immutable spec of the attached card.
+        'id, account_id, platform, text, settings, contains_figures, validation, account:social_accounts(display_name), media:social_destination_media(media_id, position, alt_text, file:social_media(mime, width, height, storage_path, card_spec))'
       )
       .eq('revision_id', post.current_revision_id)
       .order('platform')
@@ -247,7 +249,7 @@ export async function getDraft(postId: string): Promise<DraftDetail | null> {
           Array<
             Omit<DraftDestination, 'account_name' | 'media'> & {
               account: { display_name: string } | null
-              media: Array<{ media_id: string; position: number; alt_text: string; file: { mime: string; width: number; height: number; storage_path: string } | null }>
+              media: Array<{ media_id: string; position: number; alt_text: string; file: { mime: string; width: number; height: number; storage_path: string; card_spec: Record<string, unknown> | null } | null }>
             }
           >
         >(r, 'destinations')
@@ -301,6 +303,8 @@ export async function getDraft(postId: string): Promise<DraftDetail | null> {
           width: m.file!.width,
           height: m.file!.height,
           url: signed.get(m.file!.storage_path) ?? null,
+          // W2: this may differ from revision.card_spec on another destination.
+          card_spec: m.file!.card_spec ?? null,
         })),
     })),
     accounts: accounts.filter((a) => a.brand_id === post.brand.id),

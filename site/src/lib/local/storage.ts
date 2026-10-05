@@ -39,7 +39,7 @@ export class LocalBucket {
       const file = storagePath(this.bucket, path)
       await safeDirectory(dirname(file), true)
       temp = join(dirname(file), `.upload-${randomUUID()}`)
-      const handle = await open(temp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
+      const handle = await open(/* turbopackIgnore: true */ temp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
       try {
         const bytes = body instanceof Blob ? Buffer.from(await body.arrayBuffer()) : body instanceof ArrayBuffer ? Buffer.from(body) : body
         await handle.writeFile(bytes); await handle.sync()
@@ -58,7 +58,7 @@ export class LocalBucket {
     try {
       const file = storagePath(this.bucket, path)
       await safeDirectory(dirname(file), false)
-      const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW)
+      const handle = await open(/* turbopackIgnore: true */ file, constants.O_RDONLY | constants.O_NOFOLLOW)
       try {
         if (!(await handle.stat()).isFile()) throw new Error('Unsafe storage file')
         const bytes = await handle.readFile()

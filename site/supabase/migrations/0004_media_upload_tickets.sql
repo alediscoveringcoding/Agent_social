@@ -24,3 +24,19 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.social_take_upload_ticket(text,uuid,text,text,text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.social_take_upload_ticket(text,uuid,text,text,text) TO service_role;
+
+-- A render can be slow. Re-check draft state under the same lock used by
+-- approval, so a successful approval cannot be silently revoked by that render.
+CREATE FUNCTION public.social_save_media_revision(p_post uuid, p_base_revision uuid, p_actor uuid, p_revision jsonb, p_destinations jsonb, p_reason text)
+RETURNS uuid LANGUAGE plpgsql SET search_path = public AS $$
+DECLARE v_post public.social_posts%ROWTYPE;
+BEGIN
+  SELECT * INTO v_post FROM public.social_posts WHERE id = p_post FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'SOCIAL_POST_NOT_FOUND'; END IF;
+  IF v_post.status <> 'draft' OR v_post.cancelled_at IS NOT NULL THEN RAISE EXCEPTION 'SOCIAL_MEDIA_NOT_DRAFT'; END IF;
+  IF v_post.current_revision_id IS DISTINCT FROM p_base_revision THEN RAISE EXCEPTION 'SOCIAL_STALE_REVISION'; END IF;
+  RETURN public.social_save_revision(p_post, p_base_revision, p_actor, p_revision, p_destinations, p_reason);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.social_save_media_revision(uuid,uuid,uuid,jsonb,jsonb,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.social_save_media_revision(uuid,uuid,uuid,jsonb,jsonb,text) TO service_role;

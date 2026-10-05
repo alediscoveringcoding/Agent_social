@@ -45,7 +45,11 @@ export async function saveMediaRevision(context: Awaited<ReturnType<typeof loadM
   // Media-only edits carry the original schedule, including when W1 is absent.
   for (const d of rows.destinations) d.scheduled_at = context.destinations.find((before) => before.account_id === d.account_id)?.scheduled_at ?? null
   if (cardSpec) rows.revision.card_spec = cardSpec
-  const { data, error } = await context.db.rpc('social_save_revision', { p_post: context.post.id, p_base_revision: baseRevisionId, p_actor: actor.userId, p_revision: rows.revision, p_destinations: rows.destinations, p_reason: 'media edit' })
-  if (error) throw new Error(error.message.includes('SOCIAL_STALE_REVISION') ? 'Ciorna s-a schimbat. Reincarca pagina.' : error.message)
+  const { data, error } = await context.db.rpc('social_save_media_revision', { p_post: context.post.id, p_base_revision: baseRevisionId, p_actor: actor.userId, p_revision: rows.revision, p_destinations: rows.destinations, p_reason: 'media edit' })
+  if (error) {
+    if (error.message.includes('SOCIAL_STALE_REVISION')) throw new Error('Ciorna s-a schimbat. Reincarca pagina.')
+    if (error.message.includes('SOCIAL_MEDIA_NOT_DRAFT')) throw new Error('Postarea a fost aprobata intre timp. Redeschide-o ca ciorna pentru editare.')
+    throw new Error(error.message)
+  }
   return data as string
 }
