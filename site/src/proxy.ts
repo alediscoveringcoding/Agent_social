@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { SESSION_COOKIE, authSecret, verifySession } from '@/lib/local/crypto'
+import { isLocalMode } from '@/lib/local/mode'
 
 /**
  * Runs before every page (not the worker API, not static files):
@@ -43,7 +45,10 @@ export async function proxy(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   let signedIn = false
-  if (url && anon) {
+  if (isLocalMode()) {
+    // TEMPORARY local mode (src/lib/local/): a signed local session cookie.
+    signedIn = !!verifySession(request.cookies.get(SESSION_COOKIE)?.value, authSecret())
+  } else if (url && anon) {
     const supabase = createServerClient(url, anon, {
       cookies: {
         getAll() {

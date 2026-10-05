@@ -4,6 +4,7 @@
  *  - `@/x` resolves to `src/x(.ts|.tsx|/index.ts)`, as tsconfig's `paths` does;
  *  - `server-only` is an empty module (outside Next it would throw);
  *  - `next/cache` becomes no-ops (revalidatePath needs a Next request);
+ *  - `next/headers` gets an in-memory cookie jar (cookies() needs a Next request);
  *  - `@/lib/supabase/admin` becomes a client backed by the test's PGlite, and
  *    `@/lib/auth/admin` a guard the test controls (src/lib/testing/).
  *
@@ -26,6 +27,22 @@ const STUBS = {
   'server-only': dataModule('export {}'),
   'next/cache': dataModule(
     'export function revalidatePath() {} export function revalidateTag() {} export function updateTag() {} export function refresh() {}'
+  ),
+  // One cookie jar per test process (globalThis[Symbol.for('social.test.cookies')]), for the local session client.
+  'next/headers': dataModule(
+    [
+      "const jar = () => (globalThis[Symbol.for('social.test.cookies')] ??= new Map())",
+      'export async function cookies() {',
+      '  const m = jar()',
+      '  return {',
+      '    get: (name) => (m.has(name) ? { name, value: m.get(name) } : undefined),',
+      '    getAll: () => [...m].map(([name, value]) => ({ name, value })),',
+      '    set: (name, value) => { m.set(name, value) },',
+      '    delete: (name) => { m.delete(name) },',
+      '  }',
+      '}',
+      'export async function headers() { return new Headers() }',
+    ].join('\n')
   ),
 }
 

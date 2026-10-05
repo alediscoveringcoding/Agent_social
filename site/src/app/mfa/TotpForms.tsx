@@ -54,14 +54,24 @@ export function EnrollTotp({ next }: { next: string }) {
   if (enroll.error || !enroll.factorId) return <p className="mt-5 text-sm font-semibold text-danger">{enroll.error}</p>
   return (
     <div className="mt-5">
-      <div className="flex justify-center rounded-lg border border-line bg-white p-3">
-        {/* A data: SVG from Supabase; next/image adds nothing here. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={enroll.qrCode} alt="Cod QR pentru aplicatia de autentificare" width={180} height={180} />
-      </div>
-      <p className="mt-3 text-xs text-ink-soft">
-        Nu poti scana? Introdu manual cheia: <span className="font-mono text-ink">{enroll.secret}</span>
-      </p>
+      {enroll.qrCode ? (
+        <>
+          <div className="flex justify-center rounded-lg border border-line bg-white p-3">
+            {/* A data: SVG from Supabase; next/image adds nothing here. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={enroll.qrCode} alt="Cod QR pentru aplicatia de autentificare" width={180} height={180} />
+          </div>
+          <p className="mt-3 text-xs text-ink-soft">
+            Nu poti scana? Introdu manual cheia: <span className="font-mono text-ink">{enroll.secret}</span>
+          </p>
+        </>
+      ) : (
+        // Local mode (DB_MODE=local) has no QR image: the key is typed in.
+        <div className="rounded-lg border border-line bg-white p-4 text-sm text-ink">
+          <p>In aplicatia de autentificare alege &quot;Adauga cont&quot;, apoi &quot;Introdu cheia manual&quot;, de tip bazat pe timp:</p>
+          <p className="mt-2 break-all text-center font-mono text-base font-bold tracking-wider">{enroll.secret}</p>
+        </div>
+      )}
       <CodeForm next={next} factorId={enroll.factorId} />
     </div>
   )

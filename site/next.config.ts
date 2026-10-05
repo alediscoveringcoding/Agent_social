@@ -2,6 +2,9 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // TEMPORARY local mode (src/lib/local/db.ts): PGlite loads its WASM and data
+  // files at runtime, so it is required from node_modules, not bundled.
+  serverExternalPackages: ['@electric-sql/pglite'],
   // The card renderer reads these at runtime (see src/lib/social/cards/fonts.ts).
   outputFileTracingIncludes: {
     '/**': ['./node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-*-normal.woff'],

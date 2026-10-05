@@ -22,6 +22,9 @@ npm-debug.log*
 *.dump
 *.sql.gz
 backups/
+# TEMPORARY local mode database (PGlite files, site/.local-db/): personal data,
+# rebuilt from supabase/migrations by scripts/update.sh
+.local-db/
 
 # OS and editor files
 .DS_Store

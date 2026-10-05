@@ -1,6 +1,7 @@
 -- What a Supabase project provides before the first migration, reduced to what
 -- supabase/migrations references, so PGlite can apply the migrations in order
--- (see pglite-db.ts). Tests only; never run against a real database.
+-- (see pglite-db.ts). Used by the tests and by the TEMPORARY local mode
+-- (src/lib/local/db.ts); never run against a real Supabase database.
 --
 -- Supabase grants anon and authenticated everything on every new table,
 -- function and sequence in `public`. The stub reproduces that, so a test that
