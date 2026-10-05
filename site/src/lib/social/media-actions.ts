@@ -43,6 +43,14 @@ export async function createUploadTicket(input: { mime: string; bytes: number })
     const path = `staging/${randomUUID()}`
     const exp = Math.floor(Date.now() / 1000) + UPLOAD_TTL
     const db = createAdminClient()
+    // Bound abandoned staging objects and consumed ticket retention. A token
+    // cannot be replayed once expired, even after its ticket row is removed.
+    const expired = await db.from('social_upload_tickets').select('path').lt('expires_at', new Date().toISOString()).limit(100)
+    const expiredPaths = ((expired.data ?? []) as Array<{ path: string }>).map((t) => t.path)
+    if (expiredPaths.length) {
+      const removed = await db.storage.from(SOCIAL_BUCKET).remove(expiredPaths)
+      if (!removed.error) await db.from('social_upload_tickets').delete().in('path', expiredPaths)
+    }
     const { error } = await db.from('social_upload_tickets').insert({ path, user_id: actor.userId, mime: parsed.mime, expires_at: new Date(exp * 1000).toISOString() })
     if (error) throw new Error('Nu am putut pregati incarcarea.')
     const ticket = signUploadTicket({ path, mime: parsed.mime, exp, userId: actor.userId })

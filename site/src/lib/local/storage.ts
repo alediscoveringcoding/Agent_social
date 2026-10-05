@@ -71,7 +71,8 @@ export class LocalBucket {
     try {
       for (const path of paths) {
         const file = storagePath(this.bucket, path)
-        await safeDirectory(dirname(file), false)
+        try { await safeDirectory(dirname(file), false) }
+        catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') continue; throw e }
         const stat = await lstat(file).catch((e: NodeJS.ErrnoException) => { if (e.code !== 'ENOENT') throw e; return null })
         if (stat && !stat.isFile()) throw new Error('Unsafe storage file')
         if (stat) await unlink(file)

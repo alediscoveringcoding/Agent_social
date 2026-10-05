@@ -7,6 +7,7 @@ CREATE TABLE public.social_upload_tickets (
   phase text NOT NULL DEFAULT 'issued' CHECK (phase IN ('issued', 'uploaded', 'consumed'))
 );
 ALTER TABLE public.social_upload_tickets ENABLE ROW LEVEL SECURITY;
+CREATE INDEX social_upload_tickets_expiry ON public.social_upload_tickets(expires_at);
 REVOKE ALL ON public.social_upload_tickets FROM PUBLIC, anon, authenticated;
 GRANT ALL ON public.social_upload_tickets TO service_role;
 

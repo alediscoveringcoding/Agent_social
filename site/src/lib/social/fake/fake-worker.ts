@@ -18,6 +18,8 @@
  */
 
 import { destinationHash } from '../hash.ts'
+// W2: optional real media downloads make the local integration exercise checksums.
+import { createHash } from 'node:crypto'
 import type { WorkerApi } from './worker-api-client.ts'
 
 export const PUBLISH_SCENARIOS = ['ok', 'fail', 'retry', 'unknown', 'auth', 'lose-lease', 'random'] as const
@@ -30,6 +32,8 @@ export interface FakeWorkerOptions {
   limit?: number
   random?: () => number
   log?: (line: string) => void
+  downloadMedia?: boolean
+  mediaFetch?: typeof fetch
 }
 
 interface ClaimedJob {
@@ -86,6 +90,22 @@ export async function runFakeWorkerOnce(api: WorkerApi, opts: FakeWorkerOptions 
         const r = await result(job, { outcome: 'failed', error_code: 'HASH_MISMATCH', error_message: 'payload differs from approval' })
         record(job, 'failed HASH_MISMATCH', r.status)
         continue
+      }
+      if (opts.downloadMedia) {
+        try {
+          for (const media of job.media) {
+            if (!media.url) throw new Error('Media URL missing')
+            const response = await (opts.mediaFetch ?? fetch)(media.url)
+            if (!response.ok) throw new Error('Media download failed')
+            const sha256 = createHash('sha256').update(new Uint8Array(await response.arrayBuffer())).digest('hex')
+            if (sha256 !== media.sha256) throw new Error('Media checksum mismatch')
+          }
+          record(job, 'media verified', 200)
+        } catch {
+          const r = await result(job, { outcome: 'failed', error_code: 'MEDIA_FETCH_FAILED', error_message: 'fake: media download or checksum failed' })
+          record(job, 'failed MEDIA_FETCH_FAILED', r.status)
+          continue
+        }
       }
       const scenario = opts.scenario && opts.scenario !== 'random' ? opts.scenario : pick(random)
       if (scenario === 'lose-lease') {
