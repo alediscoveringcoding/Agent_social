@@ -527,12 +527,17 @@ components:
             type: object
             required: [platform, text]
             properties:
-              platform: { $ref: '#/components/schemas/Platform' }
+              platform:
+                type: string
+                description: |
+                  One of the Platform values. Any other name is accepted but gets no destination: the
+                  variant is kept on the revision and named in the reviewer notes (so one wrong name does
+                  not reject the whole batch). Send the Platform values.
               text: { type: string, description: 'For articles may be empty: the article body is used. For producthunt: the description.' }
               settings: { type: [object, 'null'] }
         article:
           type: [object, 'null']
-          required: [title, body_markdown]
+          description: title and body_markdown default to "" when missing; the composer then shows TITLE_MISSING. Other keys are dropped.
           properties:
             title: { type: string }
             subtitle: { type: [string, 'null'] }
@@ -550,10 +555,12 @@ components:
         card: { oneOf: [{ $ref: '#/components/schemas/CardSpec' }, { type: 'null' }] }
         figures:
           type: array
+          maxItems: 500
           default: []
           items: { $ref: '#/components/schemas/Figure' }
         validation_errors:
           type: array
+          maxItems: 500
           default: []
           items:
             oneOf:
@@ -561,6 +568,8 @@ components:
               - type: object
                 required: [message]
                 properties:
-                  code: { type: string }
+                  code: { type: string, maxLength: 64 }
+                  rule: { type: string, maxLength: 64, description: Alias of code (Track B sends rule); stored as code }
                   message: { type: string }
+                  field: { type: string, maxLength: 200 }
         notes: { type: [string, 'null'] }

@@ -77,19 +77,46 @@ export const FigureSchema = z.object({
 
 const settingsSchema = z.record(z.string(), z.unknown())
 
+/**
+ * `platform` is a free string here on purpose: a variant for a name outside
+ * the contract (say "linkedin" instead of "linkedin-page") is kept on the
+ * revision and named in the reviewer notes, but gets no destination. Refusing
+ * it would 422 the whole batch and lose every other draft with it.
+ */
 export const VariantSchema = z.object({
-  platform: z.enum(PLATFORMS),
+  platform: z.string().min(1).max(64),
   text: z.string().max(100_000),
   settings: settingsSchema.nullish(),
 })
 
+/** Lenient for the same reason: a missing title shows up as TITLE_MISSING in the composer. */
 export const ArticleSchema = z.object({
-  title: z.string().max(300),
+  title: z.string().max(300).default(''),
   subtitle: z.string().max(500).nullish(),
-  body_markdown: z.string().max(200_000),
+  body_markdown: z.string().max(200_000).default(''),
   tags: z.array(z.string().max(64)).max(20).nullish(),
   canonical_url: z.string().max(2048).nullish(),
 })
+
+/**
+ * A generator-reported problem: a string, or {code, message, field}. Track B
+ * sends `rule` for the code; both are accepted and stored as `code`.
+ */
+const GeneratorError = z.union([
+  z.string().max(2000).transform((message) => ({ message })),
+  z
+    .object({
+      code: z.string().max(64).nullish(),
+      rule: z.string().max(64).nullish(),
+      message: z.string().max(2000),
+      field: z.string().max(200).nullish(),
+    })
+    .transform(({ code, rule, message, field }) => ({
+      ...(code || rule ? { code: (code || rule) as string } : {}),
+      message,
+      ...(field ? { field } : {}),
+    })),
+])
 
 export const LaunchSchema = z.object({
   name: z.string().max(200),
@@ -108,14 +135,14 @@ export const DraftSchema = z.object({
   article: ArticleSchema.nullish(),
   launch: LaunchSchema.nullish(),
   card: CardSpecSchema.nullish(),
-  figures: z.array(FigureSchema).max(100).default([]),
-  validation_errors: z
-    .array(z.union([z.string().max(2000), z.object({ code: z.string().max(64).optional(), message: z.string().max(2000) })]))
-    .max(100)
-    .default([]),
+  // Track B re-extracts figures per text, so the same value repeats; 500 leaves room.
+  figures: z.array(FigureSchema).max(500).default([]),
+  validation_errors: z.array(GeneratorError).max(500).default([]),
   notes: z.string().max(4000).nullish(),
 })
 export type DraftInput = z.infer<typeof DraftSchema>
+/** A Draft as sent on the wire (before parsing), e.g. by the fake generator. */
+export type DraftWire = z.input<typeof DraftSchema>
 
 export const DraftsBody = z.object({
   drafts: z.array(DraftSchema).min(1).max(50),
