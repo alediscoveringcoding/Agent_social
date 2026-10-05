@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireAdminPage } from '@/lib/auth/admin'
 import { getDraft } from '@/lib/social/queries'
+// W2: available media is loaded only after the page guard.
+import { listMedia } from '@/lib/social/media-queries'
 import { isHttpUrl } from '@/lib/social/schemas'
 import { formatBucharest } from '@/lib/social/time'
 import { Badge, PageTitle } from '@/components/ui'
@@ -20,6 +22,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
   const draft = await getDraft(id)
   if (!draft) notFound()
 
+  const mediaLibrary = await listMedia(draft.brand.id)
   const editable = draft.status === 'draft'
   return (
     <>
@@ -53,7 +56,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
           )
         }
       />
-      <DraftEditor draft={draft} editable={editable} />
+      <DraftEditor key={draft.revision.id} draft={draft} editable={editable} mediaLibrary={mediaLibrary} />
     </>
   )
 }
