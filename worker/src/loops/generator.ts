@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { siteApi } from "../services/site-api.js";
-import { generateDrafts } from "../services/llm.js";
+import { AiNotConfiguredError, generateDrafts, resolveChoice } from "../services/llm.js";
 import { validateContent, extractFigures } from "../generator/validators.js";
 import { buildSystemPrompt, buildUserPrompt, brandFromSlug } from "../generator/prompts.js";
 import { buildRepairPrompt } from "../generator/repair.js";
@@ -56,11 +56,19 @@ async function processGenerationRequest(req: any) {
   logger.info("Processing generation request", { requestId: request_id, brand: brand.slug });
 
   try {
+    // The admin can pick the AI per request (input.ai); otherwise the .env default.
+    const choice = resolveChoice(input?.ai);
     const systemPrompt = buildSystemPrompt(brand, input);
     const userPrompt = buildUserPrompt(input);
 
-    const { drafts, stopReason } = await generateDrafts(systemPrompt, userPrompt);
-    logger.info("Generated drafts", { requestId: request_id, count: drafts.length, stopReason });
+    const { drafts, stopReason } = await generateDrafts(systemPrompt, userPrompt, choice);
+    logger.info("Generated drafts", {
+      requestId: request_id,
+      provider: choice.provider,
+      model: choice.model,
+      count: drafts.length,
+      stopReason,
+    });
 
     const validatedDrafts = drafts.map((draft: any, i: number) => validateDraft(draft, i));
 
@@ -79,6 +87,7 @@ async function processGenerationRequest(req: any) {
         const { drafts: repairedDrafts } = await generateDrafts(
           buildSystemPrompt(brand, input),
           repairPrompt,
+          choice,
         );
         finalDrafts = repairedDrafts.map((draft: any, i: number) => validateDraft(draft, i));
       } catch (repairErr) {
@@ -94,6 +103,7 @@ async function processGenerationRequest(req: any) {
     });
   } catch (err) {
     logger.error("Generation failed", { requestId: request_id, error: String(err) });
-    await siteApi.generationFailed(request_id, "GENERATION_ERROR", String(err));
+    const code = err instanceof AiNotConfiguredError ? err.code : "GENERATION_ERROR";
+    await siteApi.generationFailed(request_id, code, String(err));
   }
 }

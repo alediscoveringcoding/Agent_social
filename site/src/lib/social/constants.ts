@@ -197,6 +197,23 @@ export const PLATFORM_CARD_FORMAT: Record<Platform, CardFormat> = {
   producthunt: 'ph_gallery',
 }
 
+/**
+ * AI models the admin can pick per generation request (stored as input.ai).
+ * No pick = the worker's default from its .env. The worker needs the matching
+ * key (ANTHROPIC_API_KEY / GEMINI_API_KEY); without it the request fails with
+ * AI_NOT_CONFIGURED and says so in "Cereri recente".
+ */
+export const AI_PROVIDERS = ['claude', 'gemini'] as const
+export type AiProvider = (typeof AI_PROVIDERS)[number]
+
+export const AI_MODELS = [
+  { id: 'gemini-3.8-flash', provider: 'gemini', label: 'Gemini 3.8 Flash' },
+  { id: 'gemini-3.7-flash', provider: 'gemini', label: 'Gemini 3.7 Flash (cota gratuita separata)' },
+  { id: 'claude-opus-5-5', provider: 'claude', label: 'Claude Opus 5.5' },
+  { id: 'claude-sonnet-5-5', provider: 'claude', label: 'Claude Sonnet 5.5' },
+] as const satisfies ReadonlyArray<{ id: string; provider: AiProvider; label: string }>
+export type AiModelId = (typeof AI_MODELS)[number]['id']
+
 export const CARD_TEMPLATES = ['light', 'dark', 'mint'] as const
 export type CardTemplate = (typeof CARD_TEMPLATES)[number]
 

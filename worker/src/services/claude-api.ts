@@ -18,11 +18,12 @@ function getClient(): Anthropic {
 export async function generateDrafts(
   systemPrompt: string,
   userPrompt: string,
+  model: string = config.GENERATOR_MODEL,
 ): Promise<{ drafts: unknown[]; stopReason: string }> {
-  logger.info("Calling Claude API", { model: config.GENERATOR_MODEL });
+  logger.info("Calling Claude API", { model });
 
   const response = await getClient().messages.create({
-    model: config.GENERATOR_MODEL,
+    model,
     max_tokens: 8192,
     system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],

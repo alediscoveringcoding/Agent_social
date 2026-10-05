@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createGenerationRequest } from '@/lib/social/actions'
-import { CARD_TEMPLATES, CARD_TEMPLATE_LABELS, PLATFORMS, PLATFORM_LABELS, type CardTemplate, type Platform } from '@/lib/social/constants'
+import { AI_MODELS, CARD_TEMPLATES, CARD_TEMPLATE_LABELS, PLATFORMS, PLATFORM_LABELS, type CardTemplate, type Platform } from '@/lib/social/constants'
 import { Button, Field, inputClass } from '@/components/ui'
 
 interface Props {
@@ -23,6 +23,7 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
   const [platforms, setPlatforms] = useState<Platform[]>(['x', 'linkedin-page', 'facebook', 'instagram'])
   const [count, setCount] = useState(5)
   const [templates, setTemplates] = useState<CardTemplate[]>(['dark', 'light', 'mint'])
+  const [aiModel, setAiModel] = useState('')
 
   const available = useMemo(() => new Set(platformsByBrand[brandId] ?? []), [platformsByBrand, brandId])
   const missing = platforms.filter((p) => !available.has(p))
@@ -41,6 +42,7 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
         platforms,
         count,
         templates,
+        aiModel,
       })
       if (!r.ok) {
         toast.error(r.error)
@@ -157,6 +159,20 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
           </div>
         </fieldset>
       </div>
+
+      <Field
+        label="Model AI"
+        hint="Implicit foloseste setarea din .env-ul worker-ului. Worker-ul are nevoie de cheia furnizorului ales; fara ea, cererea esueaza cu AI_NOT_CONFIGURED."
+      >
+        <select value={aiModel} onChange={(e) => setAiModel(e.target.value)} className={inputClass}>
+          <option value="">Implicit (setarea worker-ului)</option>
+          {AI_MODELS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </Field>
 
       <div className="flex justify-end">
         <Button type="submit" disabled={pending || !brandId || platforms.length === 0}>

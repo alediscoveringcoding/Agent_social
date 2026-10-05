@@ -112,6 +112,18 @@ describe('drafting flow: actions and queries', () => {
     assert.match(((await bad({ brandId: '00000000-0000-4000-8000-000000000000' })) as { error: string }).error, /brand/)
   })
 
+  it('stores the picked AI model for the worker, and only a listed one', async () => {
+    const make = (aiModel?: string) =>
+      createGenerationRequest({ brandId: brand, source: { type: 'topic', topic: 'Subiect', hooks: [] }, platforms: ['x'], count: 1, templates: ['dark'], aiModel })
+    assert.equal((await make('gemini-3.7-flash')).ok, true)
+    assert.equal((await make('')).ok, true)
+    assert.match(((await make('gpt-5')) as { error: string }).error, /model AI/)
+    const inputs = (await rows(db, `select input from social_generation_requests order by created_at`)).map((r) => r.input as { ai?: unknown })
+    assert.deepEqual(inputs[0].ai, { provider: 'gemini', model: 'gemini-3.7-flash' })
+    assert.equal('ai' in inputs[1], false, 'no pick = no ai key, the worker default applies')
+    assert.equal(inputs.length, 2)
+  })
+
   it('lists generator drafts with their rule violations', async () => {
     for (const p of ['x', 'instagram', 'linkedin-page', 'facebook']) await createAccount(db, brand, p)
     await generate(['x', 'instagram', 'linkedin-page', 'facebook'], 6)

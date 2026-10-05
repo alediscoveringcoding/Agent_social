@@ -494,6 +494,17 @@ components:
         count: { type: integer, minimum: 1, maximum: 20 }
         language: { type: string, const: ro }
         templates: { type: array, items: { type: string, enum: [light, dark, mint] } }
+        ai:
+          type: object
+          description: >-
+            Optional AI pick from the admin form. Absent = the worker's default
+            (GENERATOR_PROVIDER / GENERATOR_MODEL / GEMINI_MODEL in its .env).
+            If the worker has no key for the provider it reports
+            /generation/{id}/failed with error_code AI_NOT_CONFIGURED.
+          required: [provider, model]
+          properties:
+            provider: { type: string, enum: [claude, gemini] }
+            model: { type: string, description: 'e.g. gemini-3.8-flash, claude-opus-5-5' }
     CardSpec:
       type: object
       required: [template, headline, brand]

@@ -35,6 +35,7 @@ export interface GenerationRequestSummary {
     platforms?: string[]
     count?: number
     templates?: string[]
+    ai?: { provider: string; model: string }
   }
   status: 'queued' | 'running' | 'done' | 'failed'
   attempts: number

@@ -32,13 +32,14 @@ function retryDelayMs(status: number, body: any, attempt: number): number | unde
 export async function generateDrafts(
   systemPrompt: string,
   userPrompt: string,
+  model: string = config.GEMINI_MODEL,
 ): Promise<{ drafts: unknown[]; stopReason: string }> {
   if (!config.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY is not set");
   }
-  logger.info("Calling Gemini API", { model: config.GEMINI_MODEL });
+  logger.info("Calling Gemini API", { model });
 
-  const url = `${GEMINI_BASE_URL}/models/${encodeURIComponent(config.GEMINI_MODEL)}:generateContent`;
+  const url = `${GEMINI_BASE_URL}/models/${encodeURIComponent(model)}:generateContent`;
   const request = JSON.stringify({
     // camelCase like every other field here (the API reference name).
     systemInstruction: { parts: [{ text: systemPrompt }] },

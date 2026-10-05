@@ -8,7 +8,7 @@
  */
 
 import { z } from 'zod'
-import { CARD_TEMPLATES, DELIVERY_OUTCOMES, PLATFORMS, POST_KINDS } from './constants.ts'
+import { AI_MODELS, AI_PROVIDERS, CARD_TEMPLATES, DELIVERY_OUTCOMES, PLATFORMS, POST_KINDS } from './constants.ts'
 
 export const isHttpUrl = (v: string) => /^https?:\/\/[^\s]+$/i.test(v)
 
@@ -200,5 +200,10 @@ export const GenerationInputSchema = z.object({
   count: z.number().int().min(1).max(20),
   language: z.literal('ro'),
   templates: z.array(z.enum(CARD_TEMPLATES)).min(1),
+  // Optional AI pick; absent = the worker's default. Only listed pairs pass.
+  ai: z
+    .object({ provider: z.enum(AI_PROVIDERS), model: z.string() })
+    .refine((a) => AI_MODELS.some((m) => m.id === a.model && m.provider === a.provider), 'unknown AI model')
+    .optional(),
 })
 export type GenerationInput = z.infer<typeof GenerationInputSchema>

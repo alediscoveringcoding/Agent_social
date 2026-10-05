@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin, type AdminIdentity } from '@/lib/auth/admin'
 import { AdminAuthError } from '@/lib/auth/decision'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { PLATFORM_KIND, type Platform, type PostKind } from './constants.ts'
+import { AI_MODELS, PLATFORM_KIND, type Platform, type PostKind } from './constants.ts'
 import { legalNamesFromEnv } from './content-rules.ts'
 import { buildDraftRevision, DraftEditError, type BaseRevision, type DraftEdit, type EditFigure } from './draft-edit.ts'
 import { GenerationInputSchema } from './schemas.ts'
@@ -65,6 +65,8 @@ export interface GenerationRequestForm {
   platforms: Platform[]
   count: number
   templates: Array<'light' | 'dark' | 'mint'>
+  /** An AI_MODELS id; empty or absent = the worker's default. */
+  aiModel?: string
 }
 
 export async function createGenerationRequest(form: GenerationRequestForm): Promise<ActionResult<{ requestId: string }>> {
@@ -72,7 +74,10 @@ export async function createGenerationRequest(form: GenerationRequestForm): Prom
     const db = createAdminClient()
     const platforms = [...new Set(form.platforms ?? [])]
     const kinds = [...new Set(platforms.map((p) => PLATFORM_KIND[p]).filter(Boolean))] as PostKind[]
+    const model = form.aiModel ? AI_MODELS.find((m) => m.id === form.aiModel) : undefined
+    if (form.aiModel && !model) return { ok: false, error: 'Alege un model AI din lista.' }
     const parsed = GenerationInputSchema.safeParse({
+      ...(model ? { ai: { provider: model.provider, model: model.id } } : {}),
       source: form.source,
       platforms,
       kinds,
@@ -105,7 +110,14 @@ export async function createGenerationRequest(form: GenerationRequestForm): Prom
 
     await logActivity(db, actor, {
       action: 'social.generation_requested',
-      details: { request_id: requestId, brand_id: form.brandId, platforms, count: parsed.data.count, source: parsed.data.source.type },
+      details: {
+        request_id: requestId,
+        brand_id: form.brandId,
+        platforms,
+        count: parsed.data.count,
+        source: parsed.data.source.type,
+        ai_model: parsed.data.ai?.model ?? null,
+      },
     })
     revalidateDrafting()
     return { ok: true, requestId }

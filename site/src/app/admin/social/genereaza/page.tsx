@@ -4,7 +4,7 @@ import { requireAdminPage } from '@/lib/auth/admin'
 import { listAccounts, listBrands, listGenerationRequests } from '@/lib/social/queries'
 import { Badge, Card, PageTitle } from '@/components/ui'
 import { formatBucharest } from '@/lib/social/time'
-import { PLATFORM_LABELS, type Platform } from '@/lib/social/constants'
+import { AI_MODELS, PLATFORM_LABELS, type Platform } from '@/lib/social/constants'
 import { GenerateForm } from './GenerateForm'
 
 export const metadata: Metadata = { title: 'Genereaza' }
@@ -14,6 +14,11 @@ const STATUS: Record<string, { label: string; tone: 'neutral' | 'accent' | 'dang
   running: { label: 'Se genereaza', tone: 'warn' },
   done: { label: 'Gata', tone: 'accent' },
   failed: { label: 'Esuat', tone: 'danger' },
+}
+
+function aiLabel(model: string | undefined): string {
+  if (!model) return 'AI implicit'
+  return AI_MODELS.find((m) => m.id === model)?.label.replace(/ \(.*\)$/, '') ?? model
 }
 
 export default async function GeneratePage() {
@@ -52,7 +57,7 @@ export default async function GeneratePage() {
                     </div>
                     <p className="mt-1 text-xs text-ink-soft">
                       {r.brand?.name ?? '-'} · {(r.input.platforms ?? []).map((p) => PLATFORM_LABELS[p as Platform] ?? p).join(', ')} ·{' '}
-                      {r.input.count ?? '?'} ciorne · {formatBucharest(r.created_at)}
+                      {r.input.count ?? '?'} ciorne · {aiLabel(r.input.ai?.model)} · {formatBucharest(r.created_at)}
                     </p>
                     {r.status === 'done' ? (
                       <Link href="/admin/social/ciorne" className="mt-1 inline-block text-xs font-semibold text-accent-dark hover:underline">
