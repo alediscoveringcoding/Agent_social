@@ -15,16 +15,6 @@ function getClient(): Anthropic {
   return client;
 }
 
-export interface GenerationInput {
-  brand: { slug: string; name: string };
-  source: { type: "article" | "topic"; url?: string; topic?: string; hooks?: string[] };
-  platforms: string[];
-  kinds: string[];
-  count: number;
-  language: string;
-  templates: string[];
-}
-
 export async function generateDrafts(
   systemPrompt: string,
   userPrompt: string,

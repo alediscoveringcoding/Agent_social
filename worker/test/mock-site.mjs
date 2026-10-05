@@ -26,8 +26,16 @@ if (!WORKER_TOKEN) {
   process.exit(1);
 }
 
+// Mirrors worker/src/delivery/hash.ts and site/src/lib/social/hash.ts: both
+// real sides normalize scheduled_at before hashing, so this fixture must too
+// or its destination_hash would never match the worker's recomputation.
+function toHashTimestamp(value) {
+  const truncated = new Date(Math.floor(new Date(value).getTime() / 1000) * 1000);
+  return truncated.toISOString().replace(".000Z", "Z");
+}
+
 function destinationHash(input) {
-  const canonical = canonicalize(input);
+  const canonical = canonicalize({ ...input, scheduled_at: toHashTimestamp(input.scheduled_at) });
   return createHash("sha256").update(canonical).digest("hex");
 }
 
@@ -58,7 +66,8 @@ function seedDeliveryJob({ accountId, text, scheduledAt }) {
     id: destination_id,
     text,
     settings: {},
-    scheduled_at: scheduledAt,
+    // The real site always sends this pre-normalized ("Already in hash form").
+    scheduled_at: toHashTimestamp(scheduledAt),
     destination_hash: "",
   };
   const account = state.accounts.get(accountId);
@@ -86,12 +95,14 @@ function seedDeliveryJob({ accountId, text, scheduledAt }) {
   return job_id;
 }
 
-function seedGenerationRequest({ brandSlug, brandName, input }) {
+function seedGenerationRequest({ brand, input }) {
+  // worker-api.openapi.yaml: GenerationRequest.brand is a plain slug string,
+  // e.g. "the-crypto-support" - not an {slug, name} object.
   const request_id = randomUUID();
   state.generationRequests.set(request_id, {
     request_id,
     status: "queued",
-    brand: { slug: brandSlug, name: brandName },
+    brand,
     input,
     drafts: [],
     lease_expires_at: null,
@@ -113,8 +124,7 @@ function seed() {
   });
 
   seedGenerationRequest({
-    brandSlug: "the-crypto-support",
-    brandName: "The Crypto Support",
+    brand: "the-crypto-support",
     input: {
       source: { type: "topic", topic: "Declaratia Unica", hooks: ["deadline 25 mai"] },
       platforms: ["devto"],
@@ -277,7 +287,7 @@ async function refresh() {
   ).join('') || '<tr><td colspan="4" class="empty">niciun job</td></tr>';
 
   document.getElementById('requests').innerHTML = data.generationRequests.map(r =>
-    '<tr><td>' + r.brand.name + '</td><td>' + (r.input.source.topic || r.input.source.url || '-') +
+    '<tr><td>' + r.brand + '</td><td>' + (r.input.source.topic || r.input.source.url || '-') +
     '</td><td>' + badge(r.status) + '</td><td>' + r.drafts.length + '</td></tr>'
   ).join('') || '<tr><td colspan="4" class="empty">nicio cerere</td></tr>';
 
@@ -340,8 +350,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && segments[1] === "generation-request") {
       const body = await readBody(req);
       const id = seedGenerationRequest({
-        brandSlug: body.brand_slug || "the-crypto-support",
-        brandName: body.brand_name || "The Crypto Support",
+        brand: body.brand || "the-crypto-support",
         input: body.input,
       });
       return send(res, 201, { request_id: id });

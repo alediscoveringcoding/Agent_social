@@ -26,6 +26,19 @@ try {
   console.warn("banned.txt not found");
 }
 
+// PRD section 5: the three seeded brands. The worker API sends only the slug
+// (worker-api.openapi.yaml GenerationRequest.brand); the generator needs a
+// display name too.
+const BRAND_NAMES: Record<string, string> = {
+  "taxes-support": "Taxes Support",
+  "the-crypto-support": "The Crypto Support",
+  "comets-of-web3": "Comets of Web3",
+};
+
+export function brandFromSlug(slug: string): { slug: string; name: string } {
+  return { slug, name: BRAND_NAMES[slug] ?? slug };
+}
+
 export function buildSystemPrompt(brand: { slug: string; name: string }, input: any): string {
   return `You are a social media content creator for "${brand.name}", a Romanian crypto tax calculator.
 

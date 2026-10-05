@@ -91,9 +91,11 @@ async function handlePublish(job: any) {
         postizMedia.push({ id: uploaded.id, path: uploaded.path });
       } catch (err) {
         logger.error("Media transfer failed", { jobId: job_id, mediaId: m.media_id });
+        // PRD 10.7: MEDIA_FETCH_FAILED retries once with a fresh claim, so this
+        // must be "retry", not "failed" (which the site would never requeue).
         await siteApi.result(job_id, {
           attempt_no,
-          outcome: "failed",
+          outcome: "retry",
           error_code: "MEDIA_FETCH_FAILED",
           error_message: String(err),
         });

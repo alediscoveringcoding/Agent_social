@@ -3,7 +3,7 @@ import { logger } from "../logger.js";
 import { siteApi } from "../services/site-api.js";
 import { generateDrafts } from "../services/claude-api.js";
 import { validateContent, extractFigures } from "../generator/validators.js";
-import { buildSystemPrompt, buildUserPrompt } from "../generator/prompts.js";
+import { buildSystemPrompt, buildUserPrompt, brandFromSlug } from "../generator/prompts.js";
 import { buildRepairPrompt } from "../generator/repair.js";
 
 export function startGeneratorLoop() {
@@ -49,7 +49,10 @@ function validateDraft(draft: any, i: number) {
 }
 
 async function processGenerationRequest(req: any) {
-  const { request_id, brand, input } = req;
+  // The worker API sends `brand` as a plain slug string (worker-api.openapi.yaml
+  // GenerationRequest), not an {slug, name} object.
+  const { request_id, brand: brandSlug, input } = req;
+  const brand = brandFromSlug(brandSlug);
   logger.info("Processing generation request", { requestId: request_id, brand: brand.slug });
 
   try {
