@@ -1,0 +1,135 @@
+services:
+  postiz:
+    image: ghcr.io/gitroomhq/postiz-app:v2.25.0
+    container_name: postiz-app
+    restart: unless-stopped
+    depends_on:
+      postiz-postgres:
+        condition: service_healthy
+      postiz-redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:4007:5000"
+    environment:
+      DATABASE_URL: "postgresql://postiz-user:postiz-password@postiz-postgres:5432/postiz-db"
+      REDIS_URL: "redis://postiz-redis:6379"
+      JWT_SECRET: "${POSTIZ_JWT_SECRET:-change-me-local-dev-secret-32chars}"
+      FRONTEND_URL: "http://localhost:4007"
+      NEXT_PUBLIC_BACKEND_URL: "http://localhost:4007"
+      BACKEND_INTERNAL_URL: "http://localhost:5000"
+      DISABLE_REGISTRATION: "${DISABLE_REGISTRATION:-false}"
+      IS_GENERAL: "true"
+      STORAGE_PROVIDER: "local"
+      UPLOAD_DIRECTORY: "/uploads"
+      # API rate limit: 90/hour is enough for our volume (<=50 deliveries/day)
+      API_LIMIT: "90"
+      # Temporal
+      TEMPORAL_ADDRESS: "temporal:7233"
+      TEMPORAL_NAMESPACE: "default"
+      # Provider keys, filled in local/.env as each platform is connected
+      # X_API_KEY: ""
+      # FACEBOOK_APP_ID: ""
+      # LINKEDIN_CLIENT_ID: ""
+    volumes:
+      - postiz-uploads:/uploads
+    networks:
+      - postiz-network
+      - temporal-network
+
+  postiz-postgres:
+    image: postgres:17-alpine
+    container_name: postiz-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postiz-user
+      POSTGRES_PASSWORD: postiz-password
+      POSTGRES_DB: postiz-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postiz-user -d postiz-db"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - postiz-pg-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    networks:
+      - postiz-network
+
+  postiz-redis:
+    image: redis:7.2-alpine
+    container_name: postiz-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - postiz-redis-data:/data
+    networks:
+      - postiz-network
+
+  # --- Temporal stack (required by Postiz v2.25.0) ---
+  temporal-postgresql:
+    image: postgres:16-alpine
+    container_name: temporal-postgresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - temporal-pg-data:/var/lib/postgresql/data
+    networks:
+      - temporal-network
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    container_name: temporal
+    restart: unless-stopped
+    depends_on:
+      temporal-postgresql:
+        condition: service_healthy
+    environment:
+      DB: postgresql
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: temporal-postgresql
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+    ports:
+      - "127.0.0.1:7233:7233"
+    networks:
+      - temporal-network
+
+  temporal-ui:
+    image: temporalio/ui:2.33.0
+    container_name: temporal-ui
+    restart: unless-stopped
+    depends_on:
+      - temporal
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: "http://localhost:8080"
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - temporal-network
+
+volumes:
+  postiz-pg-data:
+  postiz-redis-data:
+  postiz-uploads:
+  temporal-pg-data:
+
+networks:
+  postiz-network:
+    driver: bridge
+  temporal-network:
+    driver: bridge

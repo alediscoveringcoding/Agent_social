@@ -10,6 +10,8 @@ Product requirements and the work split: [docs/PRD.md](docs/PRD.md). Where this 
 
 Current phase: **localhost MVP**, no VPS yet. See [docs/amendment-01-localhost-mvp.md](docs/amendment-01-localhost-mvp.md).
 
+**Implemented so far:** the Postiz + Temporal Docker stack (`local/`), the worker (`worker/`: delivery, generator and account-sync loops), prompts (`prompts/`), dev scripts (`scripts/`), and a mock site API (`worker/test/mock-site.mjs`) standing in for Track A's Next.js admin until it exists. See "Running the localhost MVP" below.
+
 ## How it fits together
 
 ```mermaid
@@ -34,25 +36,36 @@ Rules that never change:
 
 ```
 social-infra/
-  docker-compose.yml
-  .env.example
-  Caddyfile
-  n8n/
-    workflows/            exported JSON, credential placeholders only
+  package.json              root workspace (worker)
+  local/
+    docker-compose.yml       Postiz v2.25.0 + Postgres + Redis + Temporal
+    .env.example
   worker/
     src/
-    Dockerfile
+      loops/                 delivery, generator, sync
+      services/              site-api, postiz-api, claude-api
+      generator/             prompts, schema, validators, repair
+      delivery/              hash (+ hash.test), the publish/poll/reconcile
+                             handlers live in loops/delivery.ts
+      utils/                 health
+    test/
+      mock-site.mjs          stands in for Track A's site (PRD task B9)
+    .env.example
+  prompts/
+    facts.yaml, banned.txt, system.md, social.md
   scripts/
-    backup.sh
-    restore.sh
+    dev-up.mjs, dev-down.mjs, health-check.mjs, backup-local.mjs
+  card-templates/
+    index.html               static brand-card design reference (not rendered by the worker)
+  supabase/
+    migrations/0001_social_schema.sql   reference copy; Track A owns the real one
   docs/
-    setup.md              VPS, DNS, developer apps, callback URLs
-    runbook.md            restore, reconnect accounts, upgrades
-    schema.md             copy of the data model for reference
-  .github/workflows/
-    lint.yml
+    PRD.md, amendment-01-localhost-mvp.md, setup.md, postiz-notes.md
+    contracts/hash-vectors.json
   README.md
 ```
+
+The VPS phase (Caddy, two subdomains, n8n, `.github/workflows/`) comes later — see "Moving to a server later" in the amendment.
 
 ## Services
 
@@ -70,51 +83,40 @@ Domains (example, adjust to yours):
 - `social.thecrypto.support` for Postiz
 - `n8n.thecrypto.support` for n8n
 
-Starting size: 4 vCPU, 8 GB RAM, persistent storage, EU region. Watch usage before upsizing.
+Starting size (VPS phase): 4 vCPU, 8 GB RAM, persistent storage, EU region. Watch usage before upsizing.
 
-## Quick start
+## Running the localhost MVP
+
+No VPS yet — see [docs/amendment-01-localhost-mvp.md](docs/amendment-01-localhost-mvp.md) for the full picture. Everything binds to `127.0.0.1`.
 
 ```bash
 git clone git@github.com:<org>/social-infra.git
 cd social-infra
-cp .env.example .env        # fill in values, never commit .env
-docker compose pull
-docker compose up -d
-docker compose ps
+npm install && npm install --prefix worker
+
+cp local/.env.example local/.env      # fill in, never commit
+cp worker/.env.example worker/.env    # fill in, never commit
+
+node scripts/dev-up.mjs               # starts Postiz + Temporal (local/docker-compose.yml)
 ```
 
-Before the first start:
+Then, in separate terminals:
 
-1. Point the two subdomains at the VPS with A records.
-2. Fill `.env` (see below).
-3. Open the Postiz URL, create the first user, then set registration to closed.
+1. Open http://localhost:4007, create the first Postiz user, generate a public API key (Settings > Public API), put it in `worker/.env` as `POSTIZ_API_KEY`. Set `DISABLE_REGISTRATION=true` in `local/.env` and restart the stack.
+2. `node worker/test/mock-site.mjs` — stands in for Track A's site until it exists (PRD workstream B9). Seeds one delivery job and one generation request.
+3. `cd worker && npm run dev` — the worker (delivery, generator, sync loops). Keep `WORKER_DRY_RUN=true` until you've connected a real throwaway account.
+4. `node scripts/health-check.mjs` to check everything is up.
+
+See [docs/setup.md](docs/setup.md) for per-platform connection steps.
 
 ## Environment
 
-Only placeholders live in git. Real values stay on the VPS.
+Only placeholders live in git (`.env` is git-ignored everywhere). Real values stay on each developer's or the publisher machine.
 
-```
-# Postiz (see the Postiz configuration reference for the full list)
-POSTIZ_URL=https://social.thecrypto.support
-POSTIZ_JWT_SECRET=
-POSTIZ_DB_PASSWORD=
-# platform developer app credentials, added per platform as they are approved
-LINKEDIN_CLIENT_ID=
-LINKEDIN_CLIENT_SECRET=
-FACEBOOK_APP_ID=
-FACEBOOK_APP_SECRET=
+- [local/.env.example](local/.env.example) — Postiz JWT secret, registration toggle, provider credentials as each platform is connected.
+- [worker/.env.example](worker/.env.example) — `SITE_BASE_URL`, `WORKER_TOKEN`, `POSTIZ_API_KEY`, `ANTHROPIC_API_KEY` (optional — the generator loop is skipped without it), loop intervals, `WORKER_DRY_RUN`.
 
-# n8n
-N8N_HOST=n8n.thecrypto.support
-N8N_ENCRYPTION_KEY=
-N8N_DB_PASSWORD=
-N8N_AUTOMATION_TOKEN=        # scoped token for the site's automation API
-
-# Worker
-SITE_BASE_URL=https://thecrypto.support
-WORKER_TOKEN=                # worker-only token for the site
-POSTIZ_API_KEY=              # held by the worker only
-```
+In the VPS phase these move to Vercel/VPS env and gain `N8N_AUTOMATION_TOKEN`, `N8N_ENCRYPTION_KEY`, a real `POSTIZ_URL` domain, and n8n's own env — see the amendment, section 11.
 
 ## Publishing flow
 
@@ -214,12 +216,13 @@ Data rules:
 
 ## Implementation phases
 
-- [ ] 0. Local sandbox: run Postiz, create an API key, create a post through the API, check the real rate limit
-- [ ] 1. VPS, DNS, compose stack, HTTPS, backups with one test restore
-- [ ] 2. Developer apps and callback URLs, first real connection (LinkedIn, Facebook, then Instagram)
-- [ ] 3. Site foundation: migration, Postiz adapter, admin-only test endpoint, feature flag
+- [x] 0a. Worker skeleton, Postiz/site/Claude API clients, delivery+generator+sync loops, content hash (JCS+SHA-256) verified against `docs/contracts/hash-vectors.json`, mock site API for end-to-end dry runs
+- [ ] 0b. Local sandbox: run Postiz for real, create an API key, create a post through the API, check the real rate limit (task B3, `docs/postiz-notes.md`)
+- [ ] 1. VPS, DNS, compose stack, HTTPS, backups with one test restore (deferred — localhost MVP first, see the amendment)
+- [ ] 2. Developer apps and callback URLs, first real connection (dev.to/Hashnode first, then LinkedIn, Facebook, Instagram)
+- [ ] 3. Site foundation (Track A): migration, Postiz adapter, admin-only test endpoint, feature flag
 - [ ] 4. First full flow: draft, approve, schedule, publish, retrieve URL
-- [ ] 5. n8n workflows, in the order listed above
+- [ ] 5. n8n workflows (dropped from the localhost MVP, see the amendment)
 - [ ] 6. Analytics, then enable remaining accounts one at a time
 
 ## Acceptance checks

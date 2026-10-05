@@ -1,0 +1,25 @@
+# Verified facts for the generator. Each fact has a fiscal year or validity range.
+# Only the generator uses these. A human maintains this file.
+
+tax_rates:
+  - fact: "Impozitul pe castigurile din criptomonede este 10%"
+    valid_from: "2024-01-01"
+    valid_to: "2025-12-31"
+    source: "Codul Fiscal, art. 94"
+
+deadlines:
+  - fact: "Declaratia Unica se depune pana pe 25 mai"
+    recurrence: "annual"
+    source: "ANAF"
+  - fact: "Termenul pentru plata impozitului este 25 mai"
+    recurrence: "annual"
+    source: "ANAF"
+
+thresholds:
+  - fact: "Veniturile sub 600 lei pe tranzactie nu sunt scutite de impozit"
+    note: "Common misconception: there is no minimum threshold"
+    source: "Codul Fiscal"
+
+product:
+  - fact: "The Crypto Support calculeaza automat impozitul pe tranzactiile crypto conform regulilor ANAF"
+  - fact: "Suporta importul de tranzactii de pe Binance, Coinbase, Kraken si alte exchange-uri"
