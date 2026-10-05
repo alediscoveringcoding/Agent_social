@@ -20,10 +20,10 @@
 
 import { SOCIAL_TIMEZONE, type Platform, type PostKind } from './constants.ts'
 import { toStoredValidation, type StoredValidation } from './draft-mapping.ts'
-import type { DraftFigure } from './figures.ts'
+import { detectFigures, unlistedFigures, type DraftFigure } from './figures.ts'
 import { approvalHash, destinationHash, toHashTimestamp } from './hash.ts'
 import { checkDailyCap, bucharestDay, zonedLocalToUtc, type CapItem, type CapViolation } from './time.ts'
-import { validateDestination, type DestinationValidation, type ValidationIssue } from './validation.ts'
+import { validateCardSpec, validateDestination, type CardSpec, type DestinationValidation, type ValidationIssue } from './validation.ts'
 
 export interface ApprovalMedia {
   media_id: string
@@ -33,6 +33,8 @@ export interface ApprovalMedia {
   mime: string
   width: number
   height: number
+  /** Immutable specification of the image actually attached to this destination. */
+  card_spec?: CardSpec | null
 }
 
 export interface ApprovalAccount {
@@ -128,6 +130,22 @@ export function checkDestinations(
       rules: row.account.rules ?? null,
       legalNames: opts.legalNames ?? [],
     })
+    // W1/W2 integration: the revision spec is a rendering default. Partial
+    // generation and library attachment may use different immutable cards.
+    for (const [index, image] of media.entries()) {
+      if (!image.card_spec) continue
+      validation.errors.push(...validateCardSpec(image.card_spec, opts.legalNames ?? []).map((issue) => ({
+        ...issue, field: `media.${index}.${issue.field ?? 'card'}`,
+      })))
+      const copy = [image.card_spec.headline, image.card_spec.stat, image.card_spec.subline].filter(Boolean).join(' ')
+      const figures = detectFigures(copy)
+      validation.figures.push(...figures)
+      validation.containsFigures ||= figures.length > 0
+      for (const figure of unlistedFigures(copy, row.figures ?? [])) {
+        validation.warnings.push({ code: 'FIGURE_NOT_LISTED', field: `media.${index}.card`, message: `Cifra "${figure.value}" apare pe card. Verific-o inainte de aprobare.` })
+      }
+    }
+    validation.ok = validation.errors.length === 0
     return { row, validation, containsFigures: validation.containsFigures || (row.figures ?? []).length > 0 }
   })
 }

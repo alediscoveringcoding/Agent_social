@@ -6,6 +6,7 @@ import type { StoredValidation } from './draft-mapping.ts'
 import type { DraftFigure } from './figures.ts'
 import type { Brand } from './queries.ts'
 import type { BookedJob } from './slots.ts'
+import type { CardSpec } from './validation.ts'
 
 /**
  * Reads for approval and scheduling (W1): the posts list, one post with its
@@ -149,14 +150,14 @@ interface DestinationRow {
     media_id: string
     position: number
     alt_text: string
-    file: { mime: string; width: number; height: number; sha256: string } | null
+    file: { mime: string; width: number; height: number; sha256: string; card_spec: CardSpec | null } | null
   }>
 }
 
 const DESTINATION_COLUMNS =
   'id, revision_id, account_id, platform, text, settings, scheduled_at, contains_figures, figures, validation, ' +
   'account:social_accounts(id, display_name, platform, mode, status, paused, daily_cap, rules), ' +
-  'media:social_destination_media(media_id, position, alt_text, file:social_media(mime, width, height, sha256))'
+  'media:social_destination_media(media_id, position, alt_text, file:social_media(mime, width, height, sha256, card_spec))'
 
 function toApprovalDestination(d: DestinationRow): ApprovalDestination & { revision_id: string; contains_figures: boolean; validation: Partial<StoredValidation> } {
   if (!d.account) throw new Error(`destination ${d.id} has no account`)
@@ -182,6 +183,7 @@ function toApprovalDestination(d: DestinationRow): ApprovalDestination & { revis
         mime: m.file!.mime,
         width: m.file!.width,
         height: m.file!.height,
+        card_spec: m.file!.card_spec,
       })),
     account: { ...d.account, rules: d.account.rules ?? {} },
   }
