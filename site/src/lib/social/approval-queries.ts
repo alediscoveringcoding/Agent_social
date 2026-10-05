@@ -312,7 +312,7 @@ export const POST_FILTERS = {
 export type PostFilter = keyof typeof POST_FILTERS
 
 export function isPostFilter(v: unknown): v is PostFilter {
-  return typeof v === 'string' && v in POST_FILTERS
+  return typeof v === 'string' && Object.hasOwn(POST_FILTERS, v)
 }
 
 export async function listPosts(filter: PostFilter = 'active', limit = 200): Promise<PostListItem[]> {

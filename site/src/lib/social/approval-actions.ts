@@ -421,7 +421,9 @@ export async function suggestTimes(input: {
       return fail('Orele implicite se scriu HH:mm, separate prin virgula (ex. 09:00, 13:00, 18:00).')
     }
     const now = new Date()
-    const booked = await bookedJobs(db, rows.map((r) => r.account_id), dayBoundsUtc(bucharestDay(now)).start, {
+    // W1: midnight slots also need the gap from late bookings on the previous day.
+    const from = new Date(dayBoundsUtc(bucharestDay(now)).start.getTime() - 60 * 60_000)
+    const booked = await bookedJobs(db, rows.map((r) => r.account_id), from, {
       excludeRevisionId: post.current_revision_id,
     })
     const out = suggestSlots(
@@ -481,6 +483,8 @@ export async function retryFailed(input: {
   return guarded<{ retried: number; skipped: Array<{ job_id: string; reason: string; message: string }> }>('retryFailed', async (actor) => {
     const db = createAdminClient()
     const postId = requireId(input.postId)
+    // W1: a cancelled post cannot restart failed deliveries.
+    await openPost(db, postId)
     const r = await rpc<{ retried: number; skipped: Array<{ job_id: string; reason: string }> }>(db, 'social_retry_failed', {
       p_post: postId,
       p_actor: actor.userId,

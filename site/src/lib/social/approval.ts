@@ -89,6 +89,13 @@ export function localToInstant(value: LocalTime | null | undefined): Date | null
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value.date) || !/^\d{2}:\d{2}$/.test(value.time)) {
     throw new ApprovalInputError('Data sau ora nu e valida.')
   }
+  // W1: reject calendar overflow before the DST-aware conversion.
+  const [year, month, day] = value.date.split('-').map(Number)
+  const calendar = new Date(`${value.date}T00:00:00Z`)
+  if (!Number.isFinite(calendar.getTime()) || calendar.getUTCFullYear() !== year ||
+      calendar.getUTCMonth() + 1 !== month || calendar.getUTCDate() !== day) {
+    throw new ApprovalInputError('Data sau ora nu e valida.')
+  }
   try {
     return zonedLocalToUtc(value.date, value.time, SOCIAL_TIMEZONE)
   } catch {
