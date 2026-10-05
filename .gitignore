@@ -25,3 +25,4 @@ backups/
 Thumbs.db
 desktop.ini
 .idea/
+site/node_modules/
