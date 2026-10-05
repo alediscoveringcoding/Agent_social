@@ -47,7 +47,7 @@ npm run ci        # typecheck, lint, tests, production build
 Run npm only inside Linux/WSL, never from Windows.
 
 1. From the repo root: `bash scripts/update.sh --no-pull --admin-email you@example.com`. It installs dependencies, creates ignored environment files, applies migrations and checks both packages.
-2. With the site stopped: `cd site && npm run admin:create -- --email you@example.com`. Set the password when prompted.
+2. With the site stopped: `cd site && npm run admin:create -- --email you@example.com` (replace the example address with your allowlisted email). The script generates a password and prints it once; save it. To choose one, add `--password 'your-password-at-least-12-characters'`. For an existing local account, `--reset` generates a new password and removes its authenticator, which must be enrolled again.
 3. `npm run dev`, open `http://localhost:3000/login`, sign in and enroll TOTP.
 4. `npm run social:fake-worker -- --sync`; open **Conturi** to assign brands and unpause the fake channels. Create manual Substack/Product Hunt accounts there.
 5. Request drafts in **Genereaza**, then `npm run social:fake-generator -- --once`. Edit in **Ciorne**, upload JPEG/PNG/WebP in **Media**, or generate and attach cards in the editor. Uploads strip EXIF/GPS metadata; attachment alt text is saved per revision.
