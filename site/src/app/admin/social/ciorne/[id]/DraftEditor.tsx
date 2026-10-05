@@ -251,7 +251,7 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
 
   return (
     <fieldset disabled={busy} className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-      <div className="space-y-6">
+      <fieldset disabled={mediaSelectionDirty} className="min-w-0 space-y-6">
         {draft.revision.notes || draft.revision.generator_errors.length ? (
           <Card className="bg-bg-mint">
             {draft.revision.notes ? <p className="whitespace-pre-line text-sm text-ink">{draft.revision.notes}</p> : null}
@@ -443,7 +443,7 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
             </div>
           ) : null}
         </Card>
-      </div>
+      </fieldset>
 
       <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
         <Card>
@@ -456,7 +456,7 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
           <p className="mt-1 text-xs text-ink-soft">
             Salvarea face o revizie noua; cea veche ramane in istoric. Aprobarea si programarea vin in pasul urmator.
           </p>
-          <Button className="mt-3 w-full" onClick={save} disabled={!editable || pending || dests.length === 0}>
+          <Button className="mt-3 w-full" onClick={save} disabled={!editable || pending || mediaSelectionDirty || dests.length === 0}>
             {pending ? 'Se salveaza...' : 'Salveaza revizia'}
           </Button>
         </Card>

@@ -124,7 +124,7 @@ describe('local publishing across W1-W4', () => {
   })
 
   it('fake generator -> edit -> numeric card -> approval -> downloaded media -> published overview/calendar', async () => {
-    const generation = await createGenerationRequest({ brandId: brand, source: { type: 'topic', topic: 'Declaratia' }, platforms: ['x'], count: 1, templates: ['mint'] })
+    const generation = await createGenerationRequest({ brandId: brand, source: { type: 'topic', topic: 'Declaratia', hooks: [] }, platforms: ['x'], count: 1, templates: ['mint'] })
     assert.equal(generation.ok, true)
     assert.equal((await runFakeGeneratorOnce(api))[0].status, 200)
     let draft = (await getDraft((await listDrafts())[0].id))!
@@ -154,7 +154,6 @@ describe('local publishing across W1-W4', () => {
   it('partial generation checks each attached immutable card even if global spec has no figures', async () => {
     const second = await createManualAccount({ platform: 'substack', brandId: brand, displayName: 'Newsletter local' })
     assert.equal(second.ok, true)
-    if (!second.ok) throw new Error(second.error)
     let draft = await createDraft([account, second.accountId])
     const firstCard = await generateCards({ postId: draft.id, baseRevisionId: draft.revision.id, spec, accountIds: [account] })
     assert.equal(firstCard.ok, true)
@@ -168,7 +167,6 @@ describe('local publishing across W1-W4', () => {
   it('manual handoff exposes signed card links and finishes with public URL', async () => {
     const account = await createManualAccount({ platform: 'substack', brandId: brand, displayName: 'Newsletter local' })
     assert.equal(account.ok, true)
-    if (!account.ok) throw new Error(account.error)
     let draft = await createDraft([account.accountId])
     assert.equal((await generateCards({ postId: draft.id, baseRevisionId: draft.revision.id, spec: { ...spec, stat: null } })).ok, true)
     draft = (await getDraft(draft.id))!
@@ -196,7 +194,7 @@ describe('local publishing across W1-W4', () => {
     const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
       cwd: workerRoot,
       env: { ...process.env, SITE_BASE_URL: base, WORKER_TOKEN: token, WORKER_ID: 'integration-real', WORKER_DRY_RUN: 'true', POSTIZ_BASE_URL: `${base}/postiz`, POSTIZ_API_KEY: 'fake-postiz-key', ANTHROPIC_API_KEY: '', GEMINI_API_KEY: '', GENERATOR_PROVIDER: '' },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000,
     })
     let output = ''
     child.stdout.on('data', chunk => { output += String(chunk) }); child.stderr.on('data', chunk => { output += String(chunk) })
