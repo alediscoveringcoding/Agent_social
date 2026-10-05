@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { siteApi } from "../services/site-api.js";
-import { generateDrafts } from "../services/claude-api.js";
+import { generateDrafts } from "../services/llm.js";
 import { validateContent, extractFigures } from "../generator/validators.js";
 import { buildSystemPrompt, buildUserPrompt, brandFromSlug } from "../generator/prompts.js";
 import { buildRepairPrompt } from "../generator/repair.js";

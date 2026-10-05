@@ -3,6 +3,7 @@ import { logger } from "./logger.js";
 import { startDeliveryLoop } from "./loops/delivery.js";
 import { startGeneratorLoop } from "./loops/generator.js";
 import { startSyncLoop } from "./loops/sync.js";
+import { generatorProvider } from "./services/llm.js";
 import { startHealthServer } from "./utils/health.js";
 
 async function main() {
@@ -17,10 +18,21 @@ async function main() {
   startSyncLoop();
   startHealthServer();
 
-  if (config.ANTHROPIC_API_KEY) {
+  const provider = generatorProvider();
+  const hasKey =
+    provider === "claude" ? !!config.ANTHROPIC_API_KEY : !!config.GEMINI_API_KEY;
+  if (provider && hasKey) {
+    logger.info("Generator loop enabled", {
+      provider,
+      model: provider === "gemini" ? config.GEMINI_MODEL : config.GENERATOR_MODEL,
+    });
     startGeneratorLoop();
   } else {
-    logger.warn("ANTHROPIC_API_KEY not set, generator loop disabled (delivery + sync still run)");
+    logger.warn(
+      provider
+        ? `GENERATOR_PROVIDER=${provider} but its API key is not set, generator loop disabled`
+        : "No ANTHROPIC_API_KEY or GEMINI_API_KEY set, generator loop disabled (delivery + sync still run)",
+    );
   }
 
   logger.info("All loops running");
