@@ -47,7 +47,7 @@ npm run ci        # typecheck, lint, tests, production build
 3. Copy `.env.example` to `.env.local` and fill it from `supabase status` (URL, anon key, service role key). Set `ADMIN_EMAILS`, `WORKER_TOKEN` (`openssl rand -hex 32`, same value in the worker's env) and, when testing delivery, `SOCIAL_PUBLISHING_ENABLED=true`.
 4. `npm run admin:create -- --email you@example.com` (refuses a non-local Supabase).
 5. `npm run dev`, open `http://localhost:3000/login`, sign in, enrol the authenticator.
-6. Without Track B running: `npm run social:fake-worker -- --sync` registers six fake channels (they arrive paused and without a brand: assign them in Supabase Studio, `http://127.0.0.1:54323`, until the accounts screen exists). Create a request in **Genereaza**, run `npm run social:fake-generator -- --once`, and the drafts appear in **Ciorne**.
+6. Without Track B running: `npm run social:fake-worker -- --sync` registers six fake channels. Open **Conturi** (`/admin/social/conturi`), assign each channel to a brand and unpause it. Create a request in **Genereaza**, run `npm run social:fake-generator -- --once`, and the drafts appear in **Ciorne**. Create Substack and Product Hunt accounts in **Conturi** for the **Publicare manuala** flow.
 7. With Track B: point the worker's `SITE_BASE_URL` at `http://localhost:3000` with the same `WORKER_TOKEN`.
 8. Concurrency check on real Postgres: `npm run social:fake-worker -- --race 8` (needs approved, due jobs).
 

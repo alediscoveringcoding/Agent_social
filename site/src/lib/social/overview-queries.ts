@@ -82,7 +82,7 @@ export async function getOverview(opts: { includeSeen?: boolean; now?: Date } = 
   const now = opts.now ?? new Date()
 
   let sweep: Record<string, unknown> | null = null
-  const swept = await admin.rpc('social_sweep', {})
+  const swept = await admin.rpc('social_sweep', { p_now: now.toISOString() })
   if (swept.error) console.error('[social/overview] sweep failed:', swept.error.message)
   else sweep = swept.data as Record<string, unknown>
 
