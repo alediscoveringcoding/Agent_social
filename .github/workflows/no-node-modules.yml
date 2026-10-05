@@ -1,0 +1,26 @@
+name: no-node-modules
+
+# This repo is public and must never carry node_modules. .gitignore and the
+# pre-commit hook stop it locally; this check fails any push or pull request
+# that still contains a node_modules path.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail if any node_modules path is tracked
+        run: |
+          found=$(git ls-files | grep -E '(^|/)node_modules(/|$)' || true)
+          if [ -n "$found" ]; then
+            echo "node_modules is tracked in this commit:"
+            echo "$found" | head -20
+            exit 1
+          fi
+          echo "No node_modules tracked."

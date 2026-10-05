@@ -4,6 +4,7 @@
   "type": "module",
   "workspaces": ["worker"],
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "dev:worker": "cd worker && npm run dev",
     "dev:mock-site": "node worker/test/mock-site.mjs",
     "dev:up": "node scripts/dev-up.mjs",

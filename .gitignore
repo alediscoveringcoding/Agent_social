@@ -3,7 +3,10 @@
 !.env.example
 
 # dependencies and build output
-node_modules/
+# node_modules at any depth, as a folder or a symlink (no trailing slash, so a
+# linked node_modules is caught too). Also enforced by .githooks/pre-commit and
+# .github/workflows/no-node-modules.yml, which catch a forced `git add -f`.
+node_modules
 .next/
 out/
 dist/
@@ -25,4 +28,3 @@ backups/
 Thumbs.db
 desktop.ini
 .idea/
-site/node_modules/

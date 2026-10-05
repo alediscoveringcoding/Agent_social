@@ -1,0 +1,11 @@
+#!/bin/sh
+# Refuse a commit that adds anything under node_modules, even one forced past
+# .gitignore with `git add -f`. Enabled by `npm install` at the repo root
+# (the "prepare" script sets core.hooksPath to .githooks).
+staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)node_modules(/|$)')
+if [ -n "$staged" ]; then
+  echo "pre-commit: node_modules must never be committed. Staged:" >&2
+  echo "$staged" | head -5 >&2
+  echo "Unstage with: git rm -r --cached <folder>/node_modules" >&2
+  exit 1
+fi
