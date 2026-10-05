@@ -26,6 +26,7 @@ export async function POST(request: Request) {
     if (error) throw new Error(`social_claim_deliveries: ${error.message}`)
 
     const claimed = ((data as { jobs?: ClaimedJob[] } | null)?.jobs ?? []) as ClaimedJob[]
-    return apiOk({ jobs: await buildDeliveryJobs(admin, claimed) })
+    // W2: local signed media URLs need the site's origin for worker downloads.
+    return apiOk({ jobs: await buildDeliveryJobs(admin, claimed, { origin: new URL(request.url).origin }) })
   })
 }
