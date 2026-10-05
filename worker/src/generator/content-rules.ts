@@ -43,4 +43,3 @@ export function findBareDomains(text: string, domains: readonly string[] = OUR_D
   }
   return [...found]
 }
-

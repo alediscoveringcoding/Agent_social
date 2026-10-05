@@ -200,12 +200,52 @@ describe('media in local mode', () => {
     preview.search = new URLSearchParams({ postId: d.postId, revisionId: result.revisionId, format: 'x', template: 'light', headline: 'Previzualizare' }).toString()
     assert.equal((await cardPreview(new Request(preview))).status, 200)
     assert.equal((await generateCards({ postId: d.postId, baseRevisionId: result.revisionId, spec: { template: 'dark', headline: 'Titlu', keyword: 'absent', alt_text: 'test' } })).ok, false)
+    assert.equal((await generateCards({ postId: d.postId, baseRevisionId: result.revisionId, spec: { template: 'light', headline: 'Declaratia', keyword: 'declaratia', alt_text: 'Card despre declaratie' } })).ok, false)
     assert.equal((await generateCards({ postId: d.postId, baseRevisionId: result.revisionId, spec: { template: 'dark', headline: 'Profit sigur', alt_text: 'test' } })).ok, false)
     const next = await draft()
     const reused = await setDestinationMedia({ postId: next.postId, baseRevisionId: next.revisionId, accountId: next.accountId, media: [{ mediaId: card.id }] })
     assert.ok(reused.ok); if (!reused.ok) return
     const [copyRevision] = await rows(db, 'select figures from social_post_revisions where id=$1', [reused.revisionId])
     assert.ok(copyRevision.figures.some((f: { value: string; source: string }) => f.value === '16%' && f.source === 'unverified'))
+  })
+  it('freezes card metadata before and after approval while library alt remains mutable', async () => {
+    const d = await draft()
+    const generated = await generateCards({ postId: d.postId, baseRevisionId: d.revisionId, spec: {
+      template: 'light', headline: 'Titlu de test', keyword: 'test', stat: null, alt_text: 'Card de test',
+    } })
+    assert.ok(generated.ok, JSON.stringify(generated)); if (!generated.ok) return
+    const id = generated.mediaIds[0]
+    const [original] = await rows(db, 'select * from social_media where id=$1', [id])
+    const otherBrand = await brandId(db, 'comets-of-web3')
+    const mutations: Array<[string, unknown[]]> = [
+      ['card_spec=$2::jsonb', [JSON.stringify({ ...original.card_spec, stat: '16%' })]],
+      ['format=$2', ['portrait']],
+      ['brand_id=$2', [otherBrand]],
+      ['id=$2', [randomUUID()]],
+      ["created_at=created_at + interval '1 second'", []],
+    ]
+    for (const phase of ['draft', 'approved']) {
+      if (phase === 'approved') await scheduleAndApprove(db, d.postId, actor.userId)
+      for (const [change, params] of mutations) {
+        await assert.rejects(rows(db, `update social_media set ${change} where id=$1`, [id, ...params]), /SOCIAL_MEDIA_IMMUTABLE/, `${phase}: ${change}`)
+      }
+      const suggestion = `Sugestie ${phase}`
+      assert.equal((await updateMediaAlt({ mediaId: id, altText: suggestion })).ok, true)
+      const [current] = await rows(db, 'select * from social_media where id=$1', [id])
+      assert.deepEqual(current, { ...original, alt_text: suggestion })
+      const attached = await rows(db, 'select alt_text from social_destination_media where media_id=$1', [id])
+      assert.ok(attached.length > 0)
+      assert.ok(attached.every(copy => copy.alt_text === 'Card de test'), 'attachment copies keep their original alt')
+    }
+  })
+  it('keeps media creator deletion compatible with ON DELETE SET NULL', async () => {
+    const creator = await adminUser(db, 'media-author@example.test')
+    const id = randomUUID()
+    await rows(db, `insert into social_media (id,source,storage_path,mime,width,height,bytes,sha256,alt_text,created_by)
+      values ($1,'upload',$2,'image/png',32,24,$3,$4,'Imagine de test',$5)`, [id, `uploads/${id}.png`, png.length, createHash('sha256').update(png).digest('hex'), creator])
+    await rows(db, 'delete from auth.users where id=$1', [creator])
+    const [media] = await rows(db, 'select created_by from social_media where id=$1', [id])
+    assert.equal(media.created_by, null)
   })
   it('refuses a media save whose draft was approved after loading; preserves approval and queued jobs', async () => {
     const d = await draft(new Date(Date.now() - 5000).toISOString())

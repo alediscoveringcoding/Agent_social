@@ -41,11 +41,10 @@ export function normalizeCardSpec(input: Partial<CardSpec> & { brand: string }):
   }
 }
 
-/** Where `keyword` sits in `headline` (exact match first, then ignoring case). */
+/** Where `keyword` sits in `headline`, using the exact approval match. */
 export function keywordRange(headline: string, keyword: string | null | undefined): [number, number] | null {
   if (!keyword) return null
-  let at = headline.indexOf(keyword)
-  if (at < 0) at = headline.toLowerCase().indexOf(keyword.toLowerCase())
+  const at = headline.indexOf(keyword)
   return at < 0 ? null : [at, at + keyword.length]
 }
 
@@ -57,7 +56,7 @@ export function checkCardSpec(spec: CardSpec, opts: { requireAlt?: boolean } = {
     out.push({ field: 'headline', message: `Titlul are ${spec.headline.length} caractere; cel mult ${CARD_LIMITS.headline}.` })
   }
   if (spec.keyword && !keywordRange(spec.headline, spec.keyword)) {
-    out.push({ field: 'keyword', message: 'Cuvantul evidentiat trebuie sa apara in titlu.' })
+    out.push({ field: 'keyword', message: 'Cuvantul evidentiat trebuie sa apara exact in titlu.' })
   }
   if (spec.stat && spec.stat.length > CARD_LIMITS.stat) {
     out.push({ field: 'stat', message: `Cifra are ${spec.stat.length} caractere; cel mult ${CARD_LIMITS.stat}.` })

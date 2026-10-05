@@ -13,6 +13,7 @@ import { CARD_BRAND_SLUGS, TOKENS, cardBrand } from '../cards/palette.ts'
 import { cardElement, cardText } from '../cards/layout.ts'
 import { checkCardSpec, keywordRange, normalizeCardSpec, type CardSpec } from '../cards/spec.ts'
 import { renderCardPng } from '../cards/render.ts'
+import { validateCardSpec } from '../validation.ts'
 
 const SPEC: Omit<CardSpec, 'template' | 'brand'> = {
   headline: 'Impozitul pe castigurile crypto creste din 2026',
@@ -51,7 +52,17 @@ describe('card spec', () => {
       checkCardSpec(bad, { requireAlt: true }).map((i) => i.field),
       ['headline', 'keyword', 'stat', 'subline', 'alt_text']
     )
-    assert.deepEqual(keywordRange('Taxa CRESTE acum', 'creste'), [5, 11])
+    assert.equal(keywordRange('Taxa CRESTE acum', 'creste'), null)
+    assert.deepEqual(keywordRange('Taxa CRESTE acum', 'CRESTE'), [5, 11])
+  })
+
+  it('rejects a keyword case mismatch in the studio, consistently with approval', () => {
+    const card = normalizeCardSpec({ ...SPEC, brand: 'taxes-support', headline: 'Declaratia', keyword: 'declaratia' })
+    assert.ok(checkCardSpec(card).some((issue) => issue.field === 'keyword'))
+    assert.ok(validateCardSpec(card).some((issue) => issue.code === 'CARD_KEYWORD'))
+    const corrected = { ...card, keyword: 'Declaratia' }
+    assert.deepEqual(checkCardSpec(corrected), [])
+    assert.deepEqual(validateCardSpec(corrected), [])
   })
 
   it('drops characters the card fonts do not cover', () => {
