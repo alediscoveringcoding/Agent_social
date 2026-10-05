@@ -4,13 +4,13 @@ Infrastructure for cross-posting and automation behind `/admin/social` on thecry
 
 This repo holds everything that runs on the VPS: self-hosted Postiz, self-hosted n8n, and a small publishing worker. The admin UI, the database schema and the approval rules live in the site repo (Vercel + Supabase).
 
-Status: proposal, implementation in progress. Nothing here publishes anything until an admin approves it.
+Status: local v1 implemented and tested. External platform connections and VPS deployment remain pending. Publishing requires admin approval.
 
 Product requirements and the work split: [docs/PRD.md](docs/PRD.md). Where this README and the PRD differ, the PRD wins until this README is updated.
 
 Current phase: **localhost MVP**, no VPS yet. See [docs/amendment-01-localhost-mvp.md](docs/amendment-01-localhost-mvp.md).
 
-**Implemented so far:** the Postiz + Temporal Docker stack (`local/`), the worker (`worker/`: delivery, generator and account-sync loops), prompts (`prompts/`), dev scripts (`scripts/`), and a mock site API (`worker/test/mock-site.mjs`) standing in for Track A's Next.js admin until it exists. See "Running the localhost MVP" below.
+**Implemented:** the Next.js admin (`site/`) with local PGlite, TOTP, approval/scheduling, media/cards, accounts, manual handoff, overview and calendar; the worker's delivery and structured-generation loops with lease heartbeats; the Postiz + Temporal Docker stack (`local/`), prompts and dev scripts. The mock site remains a worker-test fixture. See [site/README.md](site/README.md) for the complete offline flow.
 
 ## How it fits together
 

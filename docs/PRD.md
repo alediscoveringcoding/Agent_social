@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | Draft v1, ready for review |
-| Last updated | 2026-10-04 |
+| Status | Local v1 implemented (amendment 03); external service setup remains pending |
+| Last updated | 2026-10-05 |
 | Tracks | **A: Site** (proposed owner: Raul) · **B: Infra, worker, generator** (proposed owner: Ale) |
 | Related | [README](../README.md) (infra overview; this PRD wins where they differ) |
-| Amendments | [01: Localhost MVP](amendment-01-localhost-mvp.md) (no VPS, everything on localhost) · [02: Standalone site](amendment-02-standalone-site.md) · [03: Finishing the site locally](amendment-03-finish-the-site.md) (current: local mode, remaining work W1–W4) |
+| Amendments | [01: Localhost MVP](amendment-01-localhost-mvp.md) (no VPS, everything on localhost) · [02: Standalone site](amendment-02-standalone-site.md) · [03: Finishing the site locally](amendment-03-finish-the-site.md) (local mode and W1–W4 implemented) |
 
 > This repository is **public**. Never commit secrets, real `.env` files, account handles that are not public, or internal notes from the site repository.
 

@@ -2,12 +2,14 @@
 
 | | |
 | --- | --- |
-| Status | Accepted (working spec for the remaining build) |
+| Status | Done locally; external services remain out of scope |
 | Date | 2026-10-05 |
 | Amends | [PRD](PRD.md), [Amendment 01](amendment-01-localhost-mvp.md), [Amendment 02](amendment-02-standalone-site.md) |
 | Decision | Build everything that does not need an external service or a person's hands, so the whole flow runs on one Linux/WSL machine: generate → edit → cards and media → approve and schedule → worker (dry run) → published state, manual handoff, overview and calendar. |
 
 ## 1. Decisions taken since amendment 02
+
+W1–W4 are implemented: approval and scheduling, private media storage and all 54 card combinations, accounts/overview/calendar/manual handoff, and structured generation with lease heartbeats. Approval checks the immutable card actually attached to each destination. Media edits use an atomic draft-state guard; editor mutations block competing edits. Local acceptance covers fake generation and delivery, signed media downloads, manual publication, and the production worker's dry-run delivery path. No real AI or platform calls were used to validate the build.
 
 | Topic | Decision |
 | --- | --- |

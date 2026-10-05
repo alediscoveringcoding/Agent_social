@@ -30,7 +30,7 @@ import { getManualJob } from '../handoff-queries.ts'
 import { markManualPublished } from '../handoff-actions.ts'
 import { getOverview } from '../overview-queries.ts'
 import { getCalendarWeek } from '../calendar-queries.ts'
-import { weekMonday } from '../calendar.ts'
+import { resolveWeek } from '../calendar.ts'
 import { toLocalInputs } from '../time.ts'
 import { checkDestinations, type ApprovalDestination } from '../approval.ts'
 import { GET as download } from '@/app/api/media/[id]/route'
@@ -72,7 +72,8 @@ async function approve(postId: string, checked: boolean) {
 }
 async function makeDue(postId: string) {
   // Advance only fixture jobs instead of waiting for the chosen future slot.
-  await db.query(`update social_delivery_jobs set run_at=now()-interval '1 second' where post_id=$1`, [postId])
+  await db.query(`update social_delivery_jobs set run_at=now()-interval '1 second' where destination_id in
+    (select d.id from social_destinations d join social_post_revisions r on r.id=d.revision_id where r.post_id=$1)`, [postId])
 }
 
 describe('local publishing across W1-W4', () => {
@@ -138,7 +139,8 @@ describe('local publishing across W1-W4', () => {
     await makeDue(draft.id)
     const first = await runFakeWorkerOnce(api, { scenario: 'ok', downloadMedia: true })
     assert.ok(first.some(step => step.action.startsWith('submitted') && step.status === 200))
-    await db.query(`update social_delivery_jobs set next_check_at=now() where post_id=$1`, [draft.id])
+    await db.query(`update social_delivery_jobs set next_check_at=now() where destination_id in
+      (select d.id from social_destinations d join social_post_revisions r on r.id=d.revision_id where r.post_id=$1)`, [draft.id])
     await runFakeWorkerOnce(api, { scenario: 'ok' })
     const post = (await getPost(draft.id))!
     assert.equal(post.status, 'published')
@@ -146,7 +148,7 @@ describe('local publishing across W1-W4', () => {
     assert.ok(url)
     assert.ok(mediaDownloads > 0)
     assert.ok((await getOverview()).today.some(job => job.remote_url === url))
-    assert.ok((await getCalendarWeek(weekMonday(new Date()))).days.some(day => day.entries.some(entry => entry.remote_url === url)))
+    assert.ok((await getCalendarWeek(resolveWeek(undefined))).days.some(day => day.entries.some(entry => entry.remote_url === url)))
   })
 
   it('partial generation checks each attached immutable card even if global spec has no figures', async () => {
@@ -175,7 +177,7 @@ describe('local publishing across W1-W4', () => {
     await runFakeWorkerOnce(api)
     const job = (await getPost(draft.id))!.destinations[0].job!
     const handoff = (await getManualJob(job.id))!
-    assert.equal(handoff.handoff.plain.includes('Un ghid clar.'), true)
+    assert.equal(handoff.handoff.body.plain.includes('Un ghid clar.'), true)
     assert.ok(handoff.media[0].url?.startsWith('/api/media/'))
     assert.equal((await fetch(new URL(handoff.media[0].url!, base))).status, 200)
     const url = 'https://example.test/newsletter/publicat'

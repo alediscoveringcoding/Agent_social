@@ -1,5 +1,13 @@
 # Platform setup guide (localhost MVP)
 
+## Local site without external services
+
+The local site is complete under amendment 03. Run `bash scripts/update.sh --no-pull` in Linux/WSL, create an admin with `cd site && npm run admin:create -- --email you@example.com`, then start the site and enroll TOTP. See [site/README.md](../site/README.md) for the full workflow.
+
+Use `npm run social:fake-worker -- --sync` from `site/`, assign brands and unpause channels in `/admin/social/conturi`, then run the fake generator. Uploads and generated cards use private disk storage and signed media URLs. Approval, manual handoff, overview and calendar are available in the admin navigation.
+
+For an offline production-worker test keep AI keys blank and `WORKER_DRY_RUN=true`. Dry run downloads and verifies media but never calls Postiz; it skips Postiz sync/poll/reconciliation. The remaining sections apply when connecting real external services.
+
 ## Postiz initial setup
 
 1. `node scripts/dev-up.mjs` (or `docker compose up -d` in `local/`)
