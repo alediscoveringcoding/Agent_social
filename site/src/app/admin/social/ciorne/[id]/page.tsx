@@ -46,11 +46,15 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
           </>
         }
         actions={
-          editable ? (
+          <>
+          {/* W1: approval and scheduling live on the post page. */}
+          <Link href={`/admin/social/postari/${draft.id}`} className="rounded-lg border border-line-2 px-3 py-2 text-sm font-semibold text-ink hover:bg-bg-mint">Programare si aprobare</Link>
+          {editable ? (
             <DiscardButton postId={draft.id} title={draft.title} redirectTo="/admin/social/ciorne" />
           ) : (
             <Badge tone="warn">{draft.status === 'cancelled' ? 'Renuntata' : 'Nu mai e ciorna'}</Badge>
-          )
+          )}
+          </>
         }
       />
       <DraftEditor draft={draft} editable={editable} />
