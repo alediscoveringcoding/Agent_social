@@ -8,6 +8,8 @@ import { formatBucharest } from '@/lib/social/time'
 import { Badge, PageTitle } from '@/components/ui'
 import { DraftEditor } from './DraftEditor'
 import { DiscardButton } from '../DiscardButton'
+// W3: duplicate the current content into a fresh draft.
+import { DuplicateButton } from '../../DuplicateButton'
 
 export const metadata: Metadata = { title: 'Ciorna' }
 
@@ -46,11 +48,11 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
           </>
         }
         actions={
-          editable ? (
+          <><DuplicateButton postId={draft.id} />{editable ? (
             <DiscardButton postId={draft.id} title={draft.title} redirectTo="/admin/social/ciorne" />
           ) : (
             <Badge tone="warn">{draft.status === 'cancelled' ? 'Renuntata' : 'Nu mai e ciorna'}</Badge>
-          )
+          )}</>
         }
       />
       <DraftEditor draft={draft} editable={editable} />

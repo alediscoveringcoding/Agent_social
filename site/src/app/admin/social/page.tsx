@@ -1,28 +1,24 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Card, PageTitle } from '@/components/ui'
+import { Card, Empty, PageTitle } from '@/components/ui'
+import { requireAdminPage } from '@/lib/auth/admin'
+import { getOverview } from '@/lib/social/overview-queries'
+import { ACCOUNT_STATUS_LABELS } from '@/lib/social/constants'
+import { EventFeed } from './EventFeed'
+import { JobList } from './JobList'
+import { WorkerHealth } from './WorkerHealth'
 
-export const metadata: Metadata = { title: 'Social' }
-
-/** Overview (A10) comes later; for now the entry points of the drafting flow. */
-export default function SocialHome() {
-  return (
-    <>
-      <PageTitle title="Social" subtitle="Genereaza ciorne cu AI, verifica-le si transforma-le in postari." />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Link href="/admin/social/genereaza">
-          <Card className="h-full transition hover:border-accent">
-            <p className="font-bold text-ink">Genereaza ciorne</p>
-            <p className="mt-1 text-sm text-ink-soft">Alegi brandul, sursa si platformele. Ciornele apar in cateva minute.</p>
-          </Card>
-        </Link>
-        <Link href="/admin/social/ciorne">
-          <Card className="h-full transition hover:border-accent">
-            <p className="font-bold text-ink">Ciorne</p>
-            <p className="mt-1 text-sm text-ink-soft">Verifica regulile de continut, editeaza textul pe fiecare platforma.</p>
-          </Card>
-        </Link>
-      </div>
-    </>
-  )
+export const metadata: Metadata = { title: 'Prezentare' }
+export default async function SocialHome({ searchParams }: { searchParams: Promise<{ seen?: string }> }) {
+  await requireAdminPage('/admin/social')
+  const data = await getOverview({ includeSeen: (await searchParams).seen === '1' })
+  return <><PageTitle title="Prezentare" subtitle="Ciorne, publicari si conturi care au nevoie de tine." actions={<Link className="font-semibold text-accent-dark" href="/admin/social/genereaza">Genereaza ciorne</Link>} />
+    <div className="space-y-5"><WorkerHealth health={data.worker} now={data.now} />
+    <div className="grid gap-5 lg:grid-cols-2"><Card><h2 className="mb-3 font-bold">De aprobat ({data.approvalQueue.length})</h2>{!data.approvalQueue.length ? <Empty title="Nicio ciorna." /> : <ul className="space-y-2">{data.approvalQueue.map((d) => <li key={d.id}><Link href={`/admin/social/ciorne/${d.id}`} className="font-semibold text-accent-dark hover:underline">{d.title || '(fara titlu)'}</Link><p className="text-xs text-ink-soft">{d.brand?.name} · {d.destinations.length} destinatii · {d.unverified_figures} cifre neverificate</p></li>)}</ul>}</Card>
+    <Card><h2 className="mb-3 font-bold">Conturi de verificat</h2><p className="mb-2 text-sm">{data.unassigned} conturi asteapta un brand. <Link href="/admin/social/conturi" className="text-accent-dark">Gestioneaza conturile</Link></p><ul className="space-y-2 text-sm">{data.attention.map((a) => <li key={a.id}>{a.display_name} · {ACCOUNT_STATUS_LABELS[a.status]}{a.postiz_disabled ? ' · dezactivat in Postiz' : ''}</li>)}</ul></Card>
+    <Card><h2 className="mb-3 font-bold">Astazi ({data.today.length})</h2><JobList jobs={data.today} /></Card>
+    <Card><h2 className="mb-3 font-bold">Urmatoarele 7 zile ({data.upcoming.length})</h2><JobList jobs={data.upcoming} /></Card>
+    <Card><h2 className="mb-3 font-bold">Publicari esuate ({data.failures.length})</h2><JobList jobs={data.failures} /></Card>
+    <Card><h2 className="mb-3 font-bold"><Link href="/admin/social/manual" className="text-accent-dark">De publicat manual ({data.manualDue.length})</Link></h2><JobList jobs={data.manualDue} manual /></Card></div>
+    <EventFeed events={data.events} unseen={data.unseen} /></div></>
 }
