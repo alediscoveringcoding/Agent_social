@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Local v1 implemented (amendment 03); external service setup remains pending |
+| Status | Local v1 complete on main; offline acceptance passed; external setup and go-live pending |
 | Last updated | 2026-10-06 |
 | Tracks | **A: Site** (proposed owner: Raul) · **B: Infra, worker, generator** (proposed owner: Ale) |
 | Related | [README](../README.md) (infra overview; this PRD wins where they differ) |
@@ -14,13 +14,28 @@
 
 ## 1. Summary
 
-An admin opens `/admin/social`, asks the AI generator for a batch of posts (from a blog article or a topic), edits them, checks every number, approves, and schedules. At the scheduled time a worker on our VPS hands each approved post to a self-hosted Postiz, which publishes to Facebook, Instagram, LinkedIn, X, dev.to and Hashnode. Substack and Product Hunt get a ready-to-paste manual handoff. Every destination reports back its result and public URL.
+An admin opens `/admin/social`, requests a batch of posts (from a blog article or a topic), edits them, checks every number, approves, and schedules. The implemented local app runs in this repository with PGlite, private disk media and TOTP login. Fake generation/delivery and the production worker in dry run complete the flow without external services. Substack and Product Hunt have a ready-to-paste manual handoff.
+
+After external setup, the production worker will submit approved posts to self-hosted Postiz for automatic platforms and return their public URLs. VPS deployment, Supabase staging, platform connections and controlled real posts remain pending.
 
 ```
 generate (AI) → edit → approve (exact content) → schedule → worker submits when due → Postiz → platform → URL back in /admin
 ```
 
-The work is split into two tracks that meet only at written contracts (section 10), so Raul and Ale can build in parallel and integrate in week 3.
+The original two-track plan remains below. Amendments 01–03 define the current local scope; W1–W4 were completed concurrently, reviewed and merged into `main`. The production milestone dates in section 12 are the original plan, not a record of deployment.
+
+### Progress as of 2026-10-06
+
+| Workstream | Completed locally |
+| --- | --- |
+| W1 | Approval/scheduling pages and actions; suggested slots, figures gate, daily caps, cancel/retry/reschedule, immutable approved revisions |
+| W2 | Private storage, one-use upload tickets, metadata stripping, signed image downloads, library, card studio and destination previews; all 54 card combinations |
+| W3 | Accounts controls, worker health, overview/events, DST calendar, manual Substack/Product Hunt handoff, publication confirmation and duplicate |
+| W4 | Claude/Gemini structured output, validation/repair and figure provenance, generation heartbeats, lease-loss handling, media checksums and safe dry-run delivery |
+
+Acceptance passed in WSL: **276 site tests and 27 worker tests**, type checks, lint, migration application and the production build. Production HTTP smoke covered 16 authenticated pages, login redirects, both DST weeks, manual handoffs, card previews and signed downloads. Cross-stream acceptance used fresh local data and real HTTP to verify fake generation → edit/card → figures check and approval → downloaded media → published URL in overview/calendar, manual publication, and the production worker's dry run. Real AI and platform APIs were not called for acceptance.
+
+Final review added migration `0007_media_metadata_immutable.sql`, checked the copy/figures on each attached immutable card, prevented competing text/media edits, and aligned keyword validation. See [completed handoff](handoff-codex.md) and [site setup](../site/README.md). The local milestone is complete; live publishing and production go-live are still pending.
 
 ## 2. Goals, non-goals, success
 
@@ -57,8 +72,8 @@ The work is split into two tracks that meet only at written contracts (section 1
 | # | Decision | Source |
 | --- | --- | --- |
 | D1 | Self-hosted **Postiz, pinned to `v2.25.0`** (released 2026-10-02) does platform auth and publishing. Upgrades are deliberate PRs. | README, research report |
-| D2 | **Supabase Postgres** (the site's existing project) stores everything we own. Postiz keeps its own Postgres on the VPS. | Raul, 2026-10-04 |
-| D3 | **Supabase owns the schedule.** The worker submits to Postiz only when a post is due, using Postiz `type: "now"`. Postiz never holds a future-dated post of ours. | Resolves the "two schedules" problem |
+| D2 | **PGlite locally**, then a dedicated **Supabase Postgres** project, stores everything we own. Postiz keeps a separate Postgres. | Amendments 02 and 03 |
+| D3 | **The site database owns the schedule.** The worker submits to Postiz only when a post is due, using Postiz `type: "now"`. Postiz never holds a future-dated post of ours. | Resolves the "two schedules" problem |
 | D4 | **AI drafts, human approves.** The generator never approves or publishes. | Raul, 2026-10-04 (replaces "AI off" in the README) |
 | D5 | **Images: generated brand cards + uploads.** Video is out of v1. | Raul, 2026-10-04 |
 | D6 | **v1 platforms:** Facebook Page, Instagram, LinkedIn company page, X, Hashnode, dev.to (automatic through Postiz); Substack, Product Hunt (manual handoff). | Raul, 2026-10-04 |
@@ -157,15 +172,16 @@ Each requirement lists its track. "Must" is required for go-live; "Should" can s
 - Must: generator output passes the content rules (section 8) before it reaches the site. One automatic repair attempt with the validation errors; if still failing, the draft is delivered with `validation_errors` so a person can fix it.
 - Must: every number, percentage, amount and date in a draft is listed in `figures`, each marked `source: article | facts | unverified`. Numbers may only come from the source article or `worker/prompts/facts.yaml` (maintained by people, with the fiscal year each fact applies to). Anything else is `unverified`, which blocks approval until edited or confirmed.
 - Must: requests are idempotent; re-delivering drafts for the same request never creates duplicates.
-- Must: Claude API with model `claude-opus-5-5` by default (env `GENERATOR_MODEL`), effort set explicitly (`medium`), structured output (`output_config.format` with a JSON Schema, via the SDK's `messages.parse()`), and the server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`). Always check `stop_reason` before reading content.
+- Must: Claude API with model `claude-opus-5-5` by default (env `GENERATOR_MODEL`), effort set explicitly (`medium`), structured output (`output_config.format` with a JSON Schema, via the SDK's `beta.messages.stream()` and `finalMessage()`), and the server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`). Always check `stop_reason` before reading content.
+- Must: Claude and Gemini share a strict output schema; provider/model selection is part of the generation request. A missing selected provider key fails that request clearly. Generation heartbeats keep the lease alive during generation and repair, and lease loss stops reporting.
 - Should: n8n creates a generation request automatically when a new blog article appears (sitemap or RSS poll).
 - Should: campaign presets (for example a "Declaratia Unica" countdown in May) as saved request inputs.
 
 ### F3. Brand cards and media (A)
 
-- Must: render cards server-side from a card spec (section 10.5) with the site's tokens and Plus Jakarta Sans, in the formats each destination needs, as PNG into a private Supabase Storage bucket.
+- Must: render cards server-side from a card spec (section 10.5) with the site's tokens and Plus Jakarta Sans, in the formats each destination needs, as PNG into private storage: disk in local mode, Supabase Storage after migration.
 - Must: templates Light, Dark and Mint exactly as in the brand palette (section 8.3). At most one gold element per card. White text on `#11A594` only at 24px+ bold.
-- Must: uploads go straight from the browser to Storage with a server-issued signed upload URL (no file passes through a Vercel function). Images only in v1: JPEG/PNG/WebP, ≤ 8 MB, metadata (EXIF/GPS) stripped on ingest.
+- Must: uploads use a server-issued, short-lived ticket: the local upload route in local mode, or a direct signed Storage URL in Supabase mode (no file passes through a Vercel function). Images only in v1: JPEG/PNG/WebP, ≤ 8 MB, metadata (EXIF/GPS) stripped on ingest.
 - Must: every image has alt text (generator suggests it; admin can edit).
 - Must: compute and store `sha256`, MIME type, width, height, bytes.
 
@@ -189,7 +205,7 @@ Each requirement lists its track. "Must" is required for go-live; "Should" can s
 ### F6. Delivery (B: worker; A: claim/report API and state)
 
 - Must: worker loop every 30 s: claim due jobs (≤ 5 at a time), verify hash, transfer media, submit, poll, reconcile, report. Section 10.3 defines the protocol.
-- Must: `WORKER_DRY_RUN=true` does everything except the Postiz create call and logs the payload that would have been sent.
+- Must: `WORKER_DRY_RUN=true` verifies claimed hashes, downloads/checks media and reports test publication results without calling Postiz. It skips Postiz upload, sync, polling and reconciliation. AI generation is separate; keep AI keys blank and use fake generation for an offline run.
 - Must: global kill switch on the site (`SOCIAL_PUBLISHING_ENABLED=false` makes claim return nothing) and a per-account pause.
 
 ### F7. Account sync (B)
@@ -202,6 +218,8 @@ Each requirement lists its track. "Must" is required for go-live; "Should" can s
 - Must: as in flow 6.2, with copy formats, downloads, open-editor link, checklist, mark as published with URL.
 
 ### F9. Notifications (B: n8n; A: event feed)
+
+Local v1 implements the in-app event feed. External notifications and the automation API below are deferred by amendments 01 and 03.
 
 - Must: the site writes events to an outbox; n8n polls `/events` and notifies the team for: `delivery_failed`, `delivery_stale`, `account_reconnect_required`, `manual_due`, `drafts_ready`, `generation_failed`, `foreign_post`, `worker_silent`.
 - Channel: Q6 (email through the site's existing email setup, or a team Telegram chat).
@@ -365,6 +383,7 @@ Base: `${SITE_BASE_URL}/api/worker/social/v1`. Headers: `Authorization: Bearer $
 | `POST /deliveries/{id}/submitted` | `{attempt_no, postiz_post_id, postiz_group}` | Idempotent |
 | `POST /deliveries/{id}/result` | `{attempt_no, outcome, remote_url?, error_code?, error_message?, retry_after_seconds?}` | `outcome`: `published` · `failed` · `retry` · `reconciling` · `not_found` |
 | `POST /generation/claim` | `{limit: 1}` → `{requests: [{request_id, brand, input, lease_expires_at}]}` | |
+| `POST /generation/{id}/heartbeat` | `{}` → `{lease_expires_at}` | Owner-only extension by 10 min; unknown request 404, lost/expired lease 409 |
 | `POST /generation/{id}/drafts` | `{drafts: Draft[]}` → `{created, skipped}` | Idempotent on `request_id + client_ref`; marks request `done` and emits `drafts_ready` |
 | `POST /generation/{id}/failed` | `{error_code, error_message}` | |
 | `POST /accounts/sync` | `{integrations: [{postiz_integration_id, provider, name, picture_url, profile_url, disabled, refresh_needed, rules}], postiz_recent_posts: [{postiz_post_id, integration_id, created_at}]}` | Upserts by integration id, updates status, emits `account_reconnect_required` and `foreign_post` |
@@ -403,6 +422,8 @@ For `poll` and `reconcile` jobs, `postiz` holds `{post_id, group}` when known an
 3. **reconcile**: list Postiz posts for that integration between `attempt_started_at − 5 min` and `+ 60 min`, match on normalized text. Found, so report `/submitted` (then poll). Not found and at least 15 min since the attempt, so report `not_found`.
 
 ### 10.4 Automation API (A implements, n8n in B consumes)
+
+Deferred in local v1 by amendments 01 and 03. The following contract is the future integration target, not a live endpoint in the current app.
 
 Base: `${SITE_BASE_URL}/api/automation/social/v1`. Header: `Authorization: Bearer ${N8N_AUTOMATION_TOKEN}`.
 
@@ -512,43 +533,43 @@ Neutral `settings` per platform (B maps them to Postiz provider settings):
 
 ## 11. Workstreams
 
-Each task lists what "done" means. Tasks inside a track can be reordered by its owner; dependencies across tracks only go through the contracts.
+Each task retains its original completion criteria. The progress column records what is implemented and verified as of 2026-10-06; external staging, real providers and live publishing are listed separately from local completion.
 
 ### Track A: Site (proposed owner: Raul)
 
-Works in the site repo under `/admin/social` with the existing conventions (read the repo's agent notes first; admin writes go through the server-side admin client; CSP nonces on scripts; verify with `npm run ci`).
+Works in `site/` in this repository, under `/admin/social` (read the repo's agent notes first; admin writes go through the server-side admin client; CSP nonces on scripts; verify with `npm run ci`).
 
-| # | Task | Done when |
-| --- | --- | --- |
-| A1 | Schema migration, RLS, immutability trigger for approved revisions, claim function (`for update skip locked`, leases, cap, stale window, kill switch), lease sweeper | Migration applied to staging; concurrent-claim test shows no double claims |
-| A2 | Worker API and automation API (section 10.3, 10.4), token auth with constant-time compare, event outbox | OpenAPI contract tests pass; hash vectors pass |
-| A3 | Fake worker and fake generator scripts that drive the APIs with random outcomes (published, failed, reconciling, drafts with validation errors) | A can demo every UI state without Track B |
-| A4 | Accounts screen (F1) | Synced and manual accounts manageable; status badges; worker health |
-| A5 | Generate form and drafts inbox (F2 site side) | Request created, drafts from fake generator appear |
-| A6 | Card renderer and media library (F3) | All six formats render for all three templates and three brands; uploads go direct to Storage |
-| A7 | Composer and validation (F4, section 8) | Every hard check in 8.2 blocks approval with a clear message |
-| A8 | Approval, cancel, retry, reschedule (F5) | Acceptance checks 1–4 in section 14 pass |
-| A9 | Overview, calendar, manual handoff (F8, F10) | Manual flow completes end to end with fake worker |
+| # | Task | Original completion criteria | Progress |
+| --- | --- | --- | --- |
+| A1 | Schema migration, RLS, immutability trigger for approved revisions, claim function (`for update skip locked`, leases, cap, stale window, kill switch), lease sweeper | Migration applied to staging; concurrent-claim test shows no double claims | Done on local PGlite; Supabase staging pending |
+| A2 | Worker API and automation API (section 10.3, 10.4), token auth with constant-time compare, event outbox | OpenAPI contract tests pass; hash vectors pass | Worker API/outbox done; automation API deferred |
+| A3 | Fake worker and fake generator scripts that drive the APIs with random outcomes (published, failed, reconciling, drafts with validation errors) | A can demo every UI state without Track B | Done; fixture scenarios and combined local flow tested |
+| A4 | Accounts screen (F1) | Synced and manual accounts manageable; status badges; worker health | Done locally, including manual accounts and worker health |
+| A5 | Generate form and drafts inbox (F2 site side) | Request created, drafts from fake generator appear | Done; fake generation and drafts editing tested |
+| A6 | Card renderer and media library (F3) | All six formats render for all three templates and three brands; uploads go direct to Storage | Done locally; 54 renders and upload/download checks pass; real Storage pending |
+| A7 | Composer and validation (F4, section 8) | Every hard check in 8.2 blocks approval with a clear message | Done; content, card/figure checks and frozen revisions tested |
+| A8 | Approval, cancel, retry, reschedule (F5) | Acceptance checks 1–4 in section 14 pass | Done; checks 1–4 covered, including DST and cap regression tests |
+| A9 | Overview, calendar, manual handoff (F8, F10) | Manual flow completes end to end with fake worker | Done; overview/calendar URLs and manual publication tested |
 
 ### Track B: Infra, worker, generator (proposed owner: Ale)
 
 Works in this repo.
 
-| # | Task | Done when |
-| --- | --- | --- |
-| B1 | Repo hygiene: `.gitignore`, `.env.example` built from the Postiz configuration reference (real variable names such as `FRONTEND_URL`, `MAIN_URL`, `JWT_SECRET`, `REDIS_URL`, `DISABLE_REGISTRATION`, `STORAGE_PROVIDER`, `UPLOAD_DIRECTORY`, `API_LIMIT`, `RESTRICT_UPLOAD_DOMAINS` plus each provider's keys), README aligned with this PRD | No secret can be committed by accident; README and PRD agree |
-| B2 | **Day 1:** account inventory and developer apps: Meta (business verification, app, Pages + Instagram), LinkedIn (app + Community Management API application), X (developer account, billing, spend cap), dev.to key, Hashnode token, Anthropic API key with a monthly limit. Callback URLs on the chosen domain (Q1). Status table in `docs/setup.md` | Every v1 account has a known state and owner; blockers have dates |
-| B3 | Local Postiz `v2.25.0` sandbox: API key, upload, create `type: "now"` to a throwaway dev.to account, list posts, confirm which fields give publish state and release URL, confirm `API_LIMIT` behaviour. Findings in `docs/postiz-notes.md` | Notes answer every "verify" item in this PRD |
-| B4 | VPS stack: Compose (Postiz, Postgres, Redis, Temporal, n8n, worker, Caddy), pinned images, HTTPS, Postiz uploads reachable over HTTPS (platforms fetch media), registration closed, n8n UI restricted, daily backups, one test restore on a clean machine | Restore drill documented in `docs/runbook.md` |
-| B5 | Worker delivery (F6, section 10.3): claim loop, hash check, media transfer, submit, poll, reconcile, error classification, dry-run, JSON logs without secrets | Passes against the mock site and the Postiz sandbox, including killed-mid-submit tests |
-| B6 | Generator (F2): Claude call, prompts from the brand voice, `facts.yaml`, `banned.txt`, validators from section 8, one repair attempt, draft output | 5 sample articles produce valid drafts; every figure is sourced or flagged |
-| B7 | Account sync and foreign-post detection (F7) | Disconnecting a channel in Postiz shows `reconnect_required` in admin within 15 min |
-| B8 | n8n: new-article poll → generation request; events → notifications; (Should) campaign presets | Each workflow exported to `n8n/workflows/` with placeholders only |
-| B9 | Mock site API for B's tests (from the OpenAPI file) | Worker CI runs without the real site |
+| # | Task | Original completion criteria | Progress |
+| --- | --- | --- | --- |
+| B1 | Repo hygiene: `.gitignore`, `.env.example` built from the Postiz configuration reference (real variable names such as `FRONTEND_URL`, `MAIN_URL`, `JWT_SECRET`, `REDIS_URL`, `DISABLE_REGISTRATION`, `STORAGE_PROVIDER`, `UPLOAD_DIRECTORY`, `API_LIMIT`, `RESTRICT_UPLOAD_DOMAINS` plus each provider's keys), README aligned with this PRD | No secret can be committed by accident; README and PRD agree | Local repo hygiene and current docs implemented |
+| B2 | **Day 1:** account inventory and developer apps: Meta (business verification, app, Pages + Instagram), LinkedIn (app + Community Management API application), X (developer account, billing, spend cap), dev.to key, Hashnode token, Anthropic API key with a monthly limit. Callback URLs on the chosen domain (Q1). Status table in `docs/setup.md` | Every v1 account has a known state and owner; blockers have dates | Pending external account inventory, approvals and billing setup |
+| B3 | Local Postiz `v2.25.0` sandbox: API key, upload, create `type: "now"` to a throwaway dev.to account, list posts, confirm which fields give publish state and release URL, confirm `API_LIMIT` behaviour. Findings in `docs/postiz-notes.md` | Notes answer every "verify" item in this PRD | Pending real Postiz sandbox validation |
+| B4 | VPS stack: Compose (Postiz, Postgres, Redis, Temporal, n8n, worker, Caddy), pinned images, HTTPS, Postiz uploads reachable over HTTPS (platforms fetch media), registration closed, n8n UI restricted, daily backups, one test restore on a clean machine | Restore drill documented in `docs/runbook.md` | Deferred; no VPS deployment or restore drill |
+| B5 | Worker delivery (F6, section 10.3): claim loop, hash check, media transfer, submit, poll, reconcile, error classification, dry-run, JSON logs without secrets | Passes against the mock site and the Postiz sandbox, including killed-mid-submit tests | Done with mock/local dry-run acceptance; live Postiz validation pending |
+| B6 | Generator (F2): Claude call, prompts from the brand voice, `facts.yaml`, `banned.txt`, validators from section 8, one repair attempt, draft output | 5 sample articles produce valid drafts; every figure is sourced or flagged | Implemented/tested with injected Claude/Gemini clients; real sample batches pending |
+| B7 | Account sync and foreign-post detection (F7) | Disconnecting a channel in Postiz shows `reconnect_required` in admin within 15 min | Implemented; fixture reconnect/foreign-post tests pass; real sync pending |
+| B8 | n8n: new-article poll → generation request; events → notifications; (Should) campaign presets | Each workflow exported to `n8n/workflows/` with placeholders only | Deferred; local notifications use the in-app feed |
+| B9 | Mock site API for B's tests (from the OpenAPI file) | Worker CI runs without the real site | Done; lease-aware mock and worker tests run offline |
 
 ## 12. Milestones and integration
 
-Times are relative to kickoff. External approvals (Meta, LinkedIn, X) have no guaranteed timeline and are tracked separately; no milestone waits on them.
+The table preserves the original production plan and relative kickoff dates. **The local amendment-03 milestone was completed on 2026-10-06:** all four workstreams are on `main` and offline acceptance passed. The local feature criteria in M1–M3 are covered; staging, real AI sample batches, Postiz connections, live posts, VPS and restore criteria remain pending. M4/M5 have not been completed. External approvals have no guaranteed timeline.
 
 | Milestone | When | Exit criteria |
 | --- | --- | --- |
@@ -559,7 +580,7 @@ Times are relative to kickoff. External approvals (Meta, LinkedIn, X) have no gu
 | **M4 Accounts** | Week 4 onward | Each production account enabled one at a time after one controlled test post; LinkedIn manual until approved |
 | **M5 Go-live** | When section 14 passes | Kill switch on, accounts unpaused one by one |
 
-Integration environment: a Vercel preview or staging deployment of the site plus a non-production Supabase project (Q7). The worker never points at production before M5.
+Current integration environment: Next.js plus PGlite/private storage in WSL, fake generation/delivery, and the production worker in dry run against local HTTP. The future live integration environment is a Vercel preview/staging deployment plus a non-production Supabase project (Q7). The worker never points at production before M5.
 
 ## 13. Non-functional requirements
 
@@ -575,6 +596,8 @@ Integration environment: a Vercel preview or staging deployment of the site plus
 | Licensing | Postiz is AGPL-3.0; we run it unmodified behind its API. Talk to the team before modifying it. |
 
 ## 14. Go-live acceptance checks
+
+Local automated tests cover authorization, frozen revisions/media, figures, caps/DST, claims/leases, reconciliation, stale jobs, retries, fixture account/foreign-post handling and the kill switch. Substack manual publication is tested end to end; Product Hunt launch-kit fields and handoff pages are also covered. Live platform posts, real-service restart/reconciliation behavior, automation integration and a clean-machine restore remain unverified; this list remains the production gate.
 
 1. Non-admins, sessions without MFA, the n8n token and the worker token cannot approve or publish.
 2. Editing approved content (any text, setting, media, account or time) invalidates the approval; a direct database update of an approved destination is rejected.
@@ -620,7 +643,7 @@ Answer before or at M0. Each has a default so work can start.
 
 ## 17. Changes to the README this PRD makes
 
-Track B updates the README in B1:
+The README now reflects local completion, the real site startup path, validation results and remaining external work. These original alignment decisions still apply; n8n and its automation API remain deferred:
 
 - AI generation is **on** (drafts only, human approval) instead of off.
 - X is **automatic** under a spend cap instead of manual handoff.

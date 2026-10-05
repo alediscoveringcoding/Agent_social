@@ -8,12 +8,14 @@ Specs: [PRD](../docs/PRD.md), [amendment 01: localhost MVP](../docs/amendment-01
 
 ## Status
 
+W1–W4 are integrated on `main` as of 2026-10-06. The full WSL update check passed: 276 site tests, 27 worker tests, both type checks, lint, migrations and the production build. HTTP checks covered authenticated pages, login redirects, both DST weeks, card previews and signed downloads. Cross-stream tests complete fake/dry-run publication and manual handoff; external services remain pending. See [the progress in the PRD](../docs/PRD.md#progress-as-of-2026-10-06).
+
 | Task | What | State |
 | --- | --- | --- |
 | A1 | Schema, RLS, guard triggers, state machine as SQL functions, seed brands (`supabase/migrations/0001_…`, `0002_…`) | Done, tested on PGlite |
 | A2 | Worker API v1 (PRD 10.3), token auth, kill switch, event outbox | Done, tested in process |
 | A3 | Fake worker and fake generator (`scripts/`) | Done, tested in process |
-| Admin auth | Login (Supabase Auth, `ADMIN_EMAILS`), TOTP enrol/verify, aal2 on every page and action, nonce CSP in `src/proxy.ts`, `npm run admin:create` | Done; decision logic unit-tested, flow not yet run against Supabase |
+| Admin auth | Local login / later Supabase Auth, `ADMIN_EMAILS`, TOTP enrol/verify, aal2 on every page and action, nonce CSP in `src/proxy.ts`, `npm run admin:create` | Done locally; password/session/TOTP tests and authenticated page checks pass; real Supabase pending |
 | A5 | Generate form (`/admin/social/genereaza`) and drafts inbox (`/admin/social/ciorne`) | Done, actions tested on PGlite |
 | A4 / A7 (editing part) | Draft editor (`/admin/social/ciorne/[id]`): destinations per account, text and settings per platform, live content rules, figure confirmation, revisions | Done |
 | Media (F3/F4) | Private local disk storage and Supabase uploads, media library, destination attachment and alternative text | Done, local upload and download flow tested |
