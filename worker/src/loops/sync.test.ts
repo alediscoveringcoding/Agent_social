@@ -9,6 +9,10 @@ const NEW_PROVIDERS: Array<[identifier: string, platform: string]> = [
   ["threads", "threads"], ["bluesky", "bluesky"], ["mastodon", "mastodon"], ["mastodon-custom", "mastodon"],
   ["linkedin", "linkedin"], ["reddit", "reddit"], ["pinterest", "pinterest"], ["telegram", "telegram"],
   ["discord", "discord"], ["medium", "medium"], ["wrapcast", "farcaster"], ["nostr", "nostr"], ["lemmy", "lemmy"],
+  // The second batch: every other Postiz provider, with tiktok-business as an alias of tiktok.
+  ["slack", "slack"], ["wordpress", "wordpress"], ["listmonk", "listmonk"], ["vk", "vk"], ["gmb", "gmb"], ["tumblr", "tumblr"],
+  ["dribbble", "dribbble"], ["mewe", "mewe"], ["skool", "skool"], ["whop", "whop"], ["moltbook", "moltbook"], ["kick", "kick"],
+  ["twitch", "twitch"], ["tiktok", "tiktok"], ["tiktok-business", "tiktok"], ["youtube", "youtube"],
 ];
 
 test("sync sends the provider of every new platform and maps it to our platform", () => {
@@ -27,16 +31,18 @@ test("the provider field is `identifier` in Postiz's public API; providerIdentif
   assert.equal(mapIntegration({ id: "1", name: "a", provider: "x" }).provider, "x");
   assert.equal(platformForProvider("LinkedIn-Page"), "linkedin-page");
   assert.equal(platformForProvider("linkedin"), "linkedin");
-  assert.equal(platformForProvider("tiktok"), null);
+  assert.equal(platformForProvider("vimeo"), null);
+  assert.equal(platformForProvider("tiktok-business"), "tiktok");
+
   assert.equal(platformForProvider(undefined), null);
 });
 
 test("the sync body keeps unknown providers for the site to ignore, and reads the channel of a recent post", () => {
   const body = buildSyncPayload(
-    [{ id: "1", name: "Bluesky", identifier: "bluesky" }, { id: "2", name: "Un canal video", identifier: "tiktok" }],
+    [{ id: "1", name: "Bluesky", identifier: "bluesky" }, { id: "2", name: "Un canal video", identifier: "vimeo" }],
     [{ id: "post-1", integration: { id: "1" }, publishDate: "2026-10-07T07:00:00.000Z" }, { id: "post-2", integration: "2", createdAt: "2026-10-07T06:00:00Z" }],
   );
-  assert.deepEqual(body.integrations.map((i) => i.provider), ["bluesky", "tiktok"]);
+  assert.deepEqual(body.integrations.map((i) => i.provider), ["bluesky", "vimeo"]);
   assert.deepEqual(body.postiz_recent_posts.map((p) => p.integration_id), ["1", "2"]);
   assert.deepEqual(mapRecentPost({ id: "p", integrationId: "3" }).integration_id, "3");
 });

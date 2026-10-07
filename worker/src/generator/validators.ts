@@ -47,7 +47,23 @@ export const LENGTH_LIMITS: Record<string, number> = {
   farcaster: 320,
   nostr: 100000,
   lemmy: 10000,
+  slack: 40000,
+  wordpress: 100000,
+  vk: 2048,
+  gmb: 1500,
+  tumblr: 32768,
+  dribbble: 40000,
+  mewe: 63206,
+  skool: 5000,
+  whop: 50000,
+  moltbook: 300,
+  kick: 500,
+  twitch: 500,
+  tiktok: 2000,
+  youtube: 5000,
 };
+export const TIKTOK_TITLE_MAX = 90;
+export const YOUTUBE_TITLE_MAX = 100;
 export const BLUESKY_MAX_BYTES = 3000;
 export const REDDIT_TITLE_MAX = 300;
 export const PINTEREST_TITLE_MAX = 100;
@@ -77,6 +93,14 @@ export function validateVariantFields(platform: string, variant: { title?: strin
     else if (chars < LEMMY_TITLE_MIN || chars > LEMMY_TITLE_MAX || /[\r\n]/.test(title)) {
       add("lemmy_title", `Lemmy title needs ${LEMMY_TITLE_MIN} to ${LEMMY_TITLE_MAX} characters on one line (got ${chars})`);
     }
+  }
+  // Dribbble and Skool refuse a post without a title; TikTok's is optional but capped; YouTube's is capped.
+  if (platform === "dribbble" && !title) add("dribbble_title", "Dribbble needs a title");
+  if (platform === "skool" && !title) add("skool_title", "Skool needs a title");
+  if (platform === "tiktok" && chars > TIKTOK_TITLE_MAX) add("tiktok_title", `TikTok title exceeds ${TIKTOK_TITLE_MAX} characters (got ${chars})`);
+  if (platform === "youtube") {
+    if (!title) add("youtube_title", "YouTube needs a title");
+    else if (chars > YOUTUBE_TITLE_MAX) add("youtube_title", `YouTube title exceeds ${YOUTUBE_TITLE_MAX} characters (got ${chars})`);
   }
   return errors;
 }

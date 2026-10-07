@@ -27,7 +27,7 @@ Keep verified facts as source "facts", numbers actually present in the source as
 Do not invent facts from an article URL when no source contents are available. Mark unverifiable claims "unverified" or omit them.
 KINDS:
 - social: fill canonical_text and platform variant text.
-- article (devto, hashnode, substack, medium): fill article.title, subtitle, body_markdown, tags (at most four; at most three of at most 25 characters each when medium is a target), canonical_url. For these destinations variant text is ""; the worker uses body_markdown. canonical_url is the source article URL on our blog. Medium needs a nonempty subtitle.
+- article (devto, hashnode, substack, medium, wordpress, listmonk): fill article.title, subtitle, body_markdown, tags (at most four; at most three of at most 25 characters each when medium is a target), canonical_url. For these destinations variant text is ""; the worker uses body_markdown. canonical_url is the source article URL on our blog. Medium needs a nonempty subtitle. For listmonk the title becomes the e-mail subject and the subtitle its one-line preview.
 - launch (producthunt): fill launch.name, tagline (at most 60 characters), description (at most 260), maker_comment. Product Hunt variant text is ""; the worker uses description. This is a manual launch kit.
 Use null only for article or launch when absent. All other optional strings use "".
 PLATFORMS (social variants; the worker enforces these limits):
@@ -38,6 +38,11 @@ PLATFORMS (social variants; the worker enforces these limits):
 - reddit: variant.title (at most 300 characters) plus a body in text (at most 10000). pinterest: variant.title (at most 100) and text as the pin description (at most 500); variant.link is the destination URL.
 - telegram: at most 4096 characters, but keep it under 1000 because an image turns the text into its caption. discord: at most 1980 characters, a short announcement.
 - farcaster: at most 320 bytes of text (ASCII, so 320 characters). nostr: plain text, no markup. lemmy: variant.title (3 to 200 characters, one line) and a markdown body in text (at most 10000); variant.link is optional.
+- slack: at most 40000 characters, a short team message. vk: at most 2048. mewe: plain text. moltbook: at most 300 characters. kick and twitch: a chat message of at most 500 characters, text only, no links needed.
+- gmb (Google Business post): at most 1500 characters, about the business offer or help, one image at most.
+- tumblr: a post of at most 32768 characters; variant.title optional, variant.link optional.
+- dribbble: variant.title and a short description in text (the image is the card). skool and whop: variant.title and a community post in text (skool at most 5000 characters, whop at most 50000).
+- tiktok: a photo post. variant.title at most 90 characters and a description in text of at most 2000. youtube is a video platform: write variant.title (at most 100 characters) and the video description (at most 5000) in text; a person adds the video.
 VARIANT FIELDS: variant.title and variant.link are "" for every platform not named above. The worker adds subreddit, board, channel and community: never invent them.
 CARDS: headline at most 70, keyword must occur in headline, stat at most 8, subline at most 110, accessible nonempty alt_text. Vary light/dark/mint templates.
 Do not return settings, card.brand or validation_errors: the worker adds them.

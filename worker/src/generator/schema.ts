@@ -27,8 +27,8 @@ export const ModelDraftSchema = z.strictObject({
     text: z.string().describe("Social copy; empty string for article and launch destinations"),
     // Optional-looking fields are required strings: Claude structured outputs
     // allow at most 24 optional parameters, so "absent" is an empty string.
-    title: z.string().describe("Post title for reddit (at most 300 characters), pinterest (at most 100) and lemmy (3 to 200); empty string for every other platform"),
-    link: z.string().describe("Destination URL for pinterest and optional link for lemmy, normally the source URL; empty string for every other platform"),
+    title: z.string().describe("Post title for reddit (at most 300 characters), pinterest (at most 100), lemmy (3 to 200), dribbble, skool, tiktok (at most 90) and youtube (at most 100); optional for tumblr and whop; empty string for every other platform"),
+    link: z.string().describe("Destination URL for pinterest, optional link for lemmy and tumblr, normally the source URL; empty string for every other platform"),
   })),
   article: article.nullable(),
   launch: launch.nullable(),

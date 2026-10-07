@@ -6,7 +6,8 @@
 // Postiz overwrites `settings.__type` with the integration's own provider
 // identifier, so the value set here is a hint, not the authority.
 
-import { POSTIZ_PROVIDER, type Platform, isPlatform } from "../platforms.js";
+import { MANUAL_ONLY_PLATFORMS, POSTIZ_PROVIDER, type Platform, isPlatform } from "../platforms.js";
+import { markdownToPostizHtml } from "./markdown-html.js";
 
 type Neutral = Record<string, unknown>;
 
@@ -63,6 +64,10 @@ function omitEmpty(o: Record<string, unknown>): Record<string, unknown> {
 }
 
 export function postizSettings(platform: string, s: Neutral, media: UploadedMedia[] = []): Record<string, unknown> {
+  if (isPlatform(platform) && MANUAL_ONLY_PLATFORMS.includes(platform)) {
+    // Substack and Product Hunt have no publishing API; YouTube's Postiz provider publishes video only.
+    throw new Error(`No Postiz post for platform "${platform}" (manual handoff only)`);
+  }
   if (!isPlatform(platform) || POSTIZ_PROVIDER[platform] === undefined) {
     throw new Error(`No Postiz provider for platform "${platform}" (manual handoff only)`);
   }
@@ -123,6 +128,54 @@ export function postizSettings(platform: string, s: Neutral, media: UploadedMedi
           value: omitEmpty({ subreddit: str(s, "community"), id: str(s, "community_id"), title: str(s, "title"), url: str(s, "link") }),
         }],
       };
+    case "slack":
+      // SlackDto: the channel id (Postiz lists channels with GET /integrations/function).
+      return { __type, channel: str(s, "channel") };
+    case "wordpress":
+      // WordpressDto: title and type are required; categories and tags are numeric ids (not set here).
+      return omitEmpty({
+        __type, title: str(s, "title"), type: str(s, "post_type") || "post",
+        status: ["publish", "draft", "pending", "private"].includes(str(s, "status")) ? str(s, "status") : "publish",
+        ...mainImage(s, media),
+      });
+    case "listmonk":
+      // ListmonkDto: the e-mail subject, a preview line (a string, may be empty), the list id, an optional template id.
+      return { __type, subject: str(s, "title"), preview: str(s, "subtitle"), list: str(s, "list"), ...(str(s, "template") ? { template: str(s, "template") } : {}) };
+    case "gmb": {
+      // GmbSettingsDto: a standard post, with a call-to-action button when one is chosen.
+      const cta = str(s, "cta_type");
+      return omitEmpty({
+        __type, topicType: "STANDARD",
+        callToActionType: cta && cta !== "NONE" ? cta : "",
+        callToActionUrl: cta && cta !== "NONE" && cta !== "CALL" ? str(s, "cta_url") : "",
+      });
+    }
+    case "tumblr":
+      // TumblrDto: tags are one comma-separated string.
+      return omitEmpty({ __type, title: str(s, "title"), link: str(s, "link"), sourceUrl: str(s, "source_url"), tags: tagList(s).join(",") });
+    case "dribbble":
+      // DribbbleDto: title and an optional team link; the shot is the single 400x300 or 800x600 image.
+      return omitEmpty({ __type, title: str(s, "title"), team: str(s, "team") });
+    case "mewe":
+      return omitEmpty({ __type, postType: str(s, "post_type") === "group" ? "group" : "timeline", group: str(s, "post_type") === "group" ? str(s, "group") : "" });
+    case "skool":
+      return { __type, group: str(s, "group"), label: str(s, "label"), title: str(s, "title") };
+    case "whop":
+      return omitEmpty({ __type, company: str(s, "company"), experience: str(s, "experience"), title: str(s, "title") });
+    case "moltbook":
+      // MoltbookDto: submolt is optional; Postiz posts to "general" without it.
+      return omitEmpty({ __type, submolt: str(s, "submolt") });
+    case "twitch":
+      return omitEmpty({ __type, messageType: str(s, "message_type"), announcementColor: str(s, "announcement_color") });
+    case "tiktok": {
+      // TikTokDto: the required fields are fixed to a plain direct photo post; privacy defaults to the safest value.
+      const privacy = ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"].includes(str(s, "privacy_level"))
+        ? str(s, "privacy_level") : "SELF_ONLY";
+      return omitEmpty({
+        __type, title: str(s, "title"), privacy_level: privacy, duet: false, stitch: false, comment: true, autoAddMusic: "no",
+        brand_content_toggle: false, brand_organic_toggle: false, content_posting_method: "DIRECT_POST",
+      });
+    }
     default:
       // facebook, linkedin-page, linkedin, threads, bluesky, mastodon, telegram, nostr: no settings.
       return { __type };
@@ -139,6 +192,8 @@ export function postizContent(platform: string, text: string, s: Neutral): strin
     const title = str(s, "title");
     if (title && !/^\s*#\s/.test(text)) return `# ${title}\n\n${text}`;
   }
+  // WordPress and Listmonk have an HTML editor: the article's markdown becomes the HTML Postiz keeps.
+  if (platform === "wordpress" || platform === "listmonk") return markdownToPostizHtml(text);
   return text;
 }
 

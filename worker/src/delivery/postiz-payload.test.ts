@@ -1,20 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildPostizPost, postIdFromCreate, postizContent, postizSettings, type UploadedMedia } from "./postiz-payload.js";
-import { PLATFORMS, POSTIZ_PROVIDER } from "../platforms.js";
+import { MANUAL_ONLY_PLATFORMS, PLATFORMS, POSTIZ_PROVIDER } from "../platforms.js";
+import { markdownToPostizHtml } from "./markdown-html.js";
 
 const image: UploadedMedia = { media_id: "media-1", id: "up-1", path: "https://postiz.test/uploads/a.png", alt_text: "Card despre declaratie" };
 
-test("every platform with a Postiz provider yields settings tagged with its identifier; manual-only ones refuse", () => {
+test("every automatic platform yields settings tagged with its identifier; manual-only ones refuse, YouTube included", () => {
   for (const platform of PLATFORMS) {
-    const provider = POSTIZ_PROVIDER[platform];
-    if (provider === undefined) {
+    if (MANUAL_ONLY_PLATFORMS.includes(platform)) {
       assert.throws(() => postizSettings(platform, {}), /manual handoff only/, platform);
     } else {
-      assert.equal(postizSettings(platform, {}, [image]).__type, provider, platform);
+      assert.equal(postizSettings(platform, {}, [image]).__type, POSTIZ_PROVIDER[platform], platform);
     }
   }
-  assert.throws(() => postizSettings("tiktok", {}), /No Postiz provider/);
+  assert.equal(POSTIZ_PROVIDER.youtube, "youtube", "the channel syncs; the post is never built");
+  assert.throws(() => postizSettings("vimeo", {}), /No Postiz provider/);
 });
 
 test("Postiz identifiers of the new platforms (v2.25.0)", () => {
@@ -95,4 +96,87 @@ test("the request body is Postiz's CreatePostDto and the answer is a list of {po
   assert.deepEqual(postIdFromCreate({ id: "p-2", group: "g-2" }), { postId: "p-2", group: "g-2" });
   assert.deepEqual(postIdFromCreate({ posts: [{ id: "p-3" }] }), { postId: "p-3", group: undefined });
   assert.deepEqual(postIdFromCreate([]), { postId: undefined, group: undefined });
+});
+
+// Second batch: every other Postiz provider (v2.25.0).
+test("Postiz identifiers of the second batch", () => {
+  for (const p of ["slack", "wordpress", "listmonk", "vk", "gmb", "tumblr", "dribbble", "mewe", "skool", "whop", "moltbook", "kick", "twitch", "tiktok", "youtube"] as const) {
+    assert.equal(POSTIZ_PROVIDER[p], p, p);
+  }
+});
+
+test("vk and kick send only __type; slack, discord-like platforms send their channel", () => {
+  assert.deepEqual(postizSettings("vk", { anything: "ignored" }), { __type: "vk" });
+  assert.deepEqual(postizSettings("kick", {}), { __type: "kick" });
+  assert.deepEqual(postizSettings("slack", { channel: "C0123ABCD" }), { __type: "slack", channel: "C0123ABCD" });
+});
+
+test("wordpress: the article becomes HTML, the type and status default, the first image is the featured image", () => {
+  assert.deepEqual(postizSettings("wordpress", { title: "Un titlu" }, [image]), {
+    __type: "wordpress", title: "Un titlu", type: "post", status: "publish", main_image: { id: "up-1", path: image.path },
+  });
+  assert.deepEqual(postizSettings("wordpress", { title: "T", post_type: "page", status: "draft" }), { __type: "wordpress", title: "T", type: "page", status: "draft" });
+  assert.equal(postizSettings("wordpress", { title: "T", status: "bogus" }).status, "publish");
+  const post = buildPostizPost({ platform: "wordpress", integrationId: "int-w", text: "# Titlu\n\nUn **ghid** calm.", settings: { title: "Titlu" }, media: [] });
+  assert.equal(post.posts[0].value[0].content, "<h1>Titlu</h1><p>Un <strong>ghid</strong> calm.</p>");
+});
+
+test("listmonk: subject, preview, list and template; the body is HTML", () => {
+  assert.deepEqual(postizSettings("listmonk", { title: "Subiect", subtitle: "Previzualizare", list: "3", template: "2" }), {
+    __type: "listmonk", subject: "Subiect", preview: "Previzualizare", list: "3", template: "2",
+  });
+  assert.deepEqual(postizSettings("listmonk", { title: "Subiect", list: "3" }), { __type: "listmonk", subject: "Subiect", preview: "", list: "3" });
+  assert.equal(postizContent("listmonk", "Un text.", {}), "<p>Un text.</p>");
+});
+
+test("gmb: a standard post, and a button only when one is chosen (CALL needs no link)", () => {
+  assert.deepEqual(postizSettings("gmb", {}), { __type: "gmb", topicType: "STANDARD" });
+  assert.deepEqual(postizSettings("gmb", { cta_type: "NONE" }), { __type: "gmb", topicType: "STANDARD" });
+  assert.deepEqual(postizSettings("gmb", { cta_type: "LEARN_MORE", cta_url: "https://thecrypto.support/x" }), {
+    __type: "gmb", topicType: "STANDARD", callToActionType: "LEARN_MORE", callToActionUrl: "https://thecrypto.support/x",
+  });
+  assert.deepEqual(postizSettings("gmb", { cta_type: "CALL", cta_url: "https://ignored.test" }), { __type: "gmb", topicType: "STANDARD", callToActionType: "CALL" });
+});
+
+test("tumblr, dribbble, mewe, skool, whop, moltbook, twitch", () => {
+  assert.deepEqual(postizSettings("tumblr", { title: "T", link: "https://thecrypto.support/x", source_url: "https://thecrypto.support/s", tags: ["taxe", "crypto"] }), {
+    __type: "tumblr", title: "T", link: "https://thecrypto.support/x", sourceUrl: "https://thecrypto.support/s", tags: "taxe,crypto",
+  });
+  assert.deepEqual(postizSettings("tumblr", {}), { __type: "tumblr" });
+  assert.deepEqual(postizSettings("dribbble", { title: "Un shot", team: "https://dribbble.com/echipa" }), { __type: "dribbble", title: "Un shot", team: "https://dribbble.com/echipa" });
+  assert.deepEqual(postizSettings("mewe", {}), { __type: "mewe", postType: "timeline" });
+  assert.deepEqual(postizSettings("mewe", { post_type: "group", group: "123" }), { __type: "mewe", postType: "group", group: "123" });
+  assert.deepEqual(postizSettings("mewe", { post_type: "timeline", group: "ignored" }), { __type: "mewe", postType: "timeline" });
+  assert.deepEqual(postizSettings("skool", { group: "taxes-ro", label: "abc", title: "Titlu" }), { __type: "skool", group: "taxes-ro", label: "abc", title: "Titlu" });
+  assert.deepEqual(postizSettings("whop", { company: "biz_1", experience: "exp_1" }), { __type: "whop", company: "biz_1", experience: "exp_1" });
+  assert.deepEqual(postizSettings("moltbook", {}), { __type: "moltbook" });
+  assert.deepEqual(postizSettings("moltbook", { submolt: "taxe" }), { __type: "moltbook", submolt: "taxe" });
+  assert.deepEqual(postizSettings("twitch", {}), { __type: "twitch" });
+  assert.deepEqual(postizSettings("twitch", { message_type: "announcement", announcement_color: "blue" }), { __type: "twitch", messageType: "announcement", announcementColor: "blue" });
+});
+
+test("tiktok: a direct photo post, private unless a person says otherwise", () => {
+  const base = { __type: "tiktok", privacy_level: "SELF_ONLY", duet: false, stitch: false, comment: true, autoAddMusic: "no", brand_content_toggle: false, brand_organic_toggle: false, content_posting_method: "DIRECT_POST" };
+  assert.deepEqual(postizSettings("tiktok", {}), base);
+  assert.deepEqual(postizSettings("tiktok", { title: "Titlu", privacy_level: "PUBLIC_TO_EVERYONE" }), { ...base, title: "Titlu", privacy_level: "PUBLIC_TO_EVERYONE" });
+  assert.equal(postizSettings("tiktok", { privacy_level: "EVERYONE" }).privacy_level, "SELF_ONLY");
+  const post = buildPostizPost({ platform: "tiktok", integrationId: "int-t", text: "Descriere", settings: {}, media: [image, { ...image, id: "up-2" }] });
+  assert.equal(post.posts[0].value[0].image.length, 2);
+});
+
+test("youtube needs video: the app never builds a Postiz post for it", () => {
+  assert.throws(() => postizSettings("youtube", { title: "T" }), /manual handoff only/);
+  assert.throws(() => buildPostizPost({ platform: "youtube", integrationId: "int-y", text: "D", settings: {}, media: [] }), /manual handoff only/);
+});
+
+test("markdown for HTML-editor providers keeps only the tags Postiz keeps", () => {
+  assert.equal(markdownToPostizHtml("# A\n## B\n#### C"), "<h1>A</h1><h2>B</h2><h3>C</h3>");
+  assert.equal(markdownToPostizHtml("Prima linie\nal doua rand\n\nUn paragraf nou."), "<p>Prima linie al doua rand</p><p>Un paragraf nou.</p>");
+  assert.equal(markdownToPostizHtml("- unu\n- doi\n  continuat"), "<ul><li>unu</li><li>doi continuat</li></ul>");
+  assert.equal(markdownToPostizHtml("1. primul\n2. al doilea"), "<ul><li>1) primul</li><li>2) al doilea</li></ul>");
+  assert.equal(markdownToPostizHtml("Un *accent*, un `cod` si **tare** si [link](https://thecrypto.support/x) si https://thecrypto.support/y."), '<p>Un accent, un cod si <strong>tare</strong> si <a href="https://thecrypto.support/x">link</a> si <a href="https://thecrypto.support/y">https://thecrypto.support/y</a>.</p>');
+  assert.equal(markdownToPostizHtml("```\nlinia 1\n<b>\n```"), "<p>linia 1</p><p>&lt;b&gt;</p>");
+  assert.equal(markdownToPostizHtml("> citat\n\n---\n\nFinal"), "<p>citat</p><p>Final</p>");
+  assert.equal(markdownToPostizHtml("[rau](javascript:alert(1)) <script>x</script>"), "<p>[rau](javascript:alert(1)) &lt;script&gt;x&lt;/script&gt;</p>");
+  assert.equal(markdownToPostizHtml(""), "");
 });

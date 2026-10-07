@@ -22,7 +22,14 @@ export function variantSettings(
       const target = link || (sourceUrl ?? "");
       return { ...(title ? { title } : {}), ...(target ? { link: target } : {}) };
     }
-    case "lemmy": return { ...(title ? { title } : {}), ...(link ? { link } : {}) };
+    case "lemmy":
+    case "tumblr": return { ...(title ? { title } : {}), ...(link ? { link } : {}) };
+    case "dribbble":
+    case "skool":
+    case "whop":
+    case "youtube": return title ? { title } : {};
+    // The site fills privacy_level itself (SELF_ONLY), so a person widens it; only the title comes from the model.
+    case "tiktok": return title ? { title } : {};
     default: return {};
   }
 }
