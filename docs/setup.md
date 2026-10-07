@@ -68,7 +68,7 @@ Connect each in Postiz (Settings > Integrations), then run an account sync (the 
 | Pinterest | Server env `PINTEREST_CLIENT_ID`, `PINTEREST_CLIENT_SECRET`; OAuth | the board's numeric id |
 | Telegram | Server env `TELEGRAM_TOKEN` (a bot), the bot added to the chat or channel | none |
 | Discord | Server env `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN_ID`; the bot in the server | the channel's numeric id |
-| Medium | The form asks for an API key (integration token) | none |
+| Medium | The form asks for an API key (integration token). Medium has issued none since 2025-01-01; without an older token, use a manual Medium account | none |
 | Farcaster | Server env `NEYNAR_CLIENT_ID`, `NEYNAR_APP_FID` and the other `NEYNAR_*` values of the Postiz docs | optional channel id |
 | Nostr | The form asks for the private key as a hex string. Use a throwaway key | none |
 | Lemmy | The form asks for service (instance URL), identifier and password | the community's name and its numeric id |
