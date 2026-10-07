@@ -6,7 +6,7 @@
 | Last updated | 2026-10-07 |
 | Tracks | **A: Site** (proposed owner: Raul) · **B: Infra, worker, generator** (proposed owner: Ale) |
 | Related | [README](../README.md) (infra overview; this PRD wins where they differ) |
-| Amendments | [01: Localhost MVP](amendment-01-localhost-mvp.md) (no VPS, everything on localhost) · [02: Standalone site](amendment-02-standalone-site.md) · [03: Finishing the site locally](amendment-03-finish-the-site.md) (local mode and W1–W4 implemented) · [04: More platforms](amendment-04-more-platforms.md) (every Postiz provider: 35 platforms, Pinterest and Dribbble card formats) |
+| Amendments | [01: Localhost MVP](amendment-01-localhost-mvp.md) (no VPS, everything on localhost) · [02: Standalone site](amendment-02-standalone-site.md) · [03: Finishing the site locally](amendment-03-finish-the-site.md) (local mode and W1–W4 implemented) · [04: More platforms](amendment-04-more-platforms.md) (every Postiz provider: 35 platforms, Pinterest and Dribbble card formats) · [05: Manual channels](amendment-05-manual-channels.md) (nine manual-only channels, 44 platforms) |
 
 > This repository is **public**. Never commit secrets, real `.env` files, account handles that are not public, or internal notes from the site repository.
 
@@ -38,6 +38,8 @@ Acceptance passed in WSL: **276 site tests and 27 worker tests**, type checks, l
 Final review added migration `0007_media_metadata_immutable.sql`, checked the copy/figures on each attached immutable card, prevented competing text/media edits, and aligned keyword validation. See [completed handoff](handoff-codex.md) and [site setup](../site/README.md). The local milestone is complete; live publishing and production go-live are still pending.
 
 Amendment 04 (2026-10-07) added every Postiz provider: twelve platforms first, then fifteen more (35 in all), all automatic through Postiz except YouTube (video only, manual-only), and the Pinterest and Dribbble card formats (migrations `0008_more_platforms.sql` and `0009_all_postiz_platforms.sql`): see section 5 and [amendment 04](amendment-04-more-platforms.md). No platform connection exists yet.
+
+Amendment 05 (2026-10-07) added nine manual-only channels with no usable publishing API (Quora, LinkedIn articles, TradingView, Investing.com, Indie Hackers, Stack Exchange, GitHub, generic forums and press outlets): 35 + 9 = 44 platforms, migration `0010_manual_channels.sql`; see section 5 and [amendment 05](amendment-05-manual-channels.md).
 
 ## 2. Goals, non-goals, success
 
@@ -161,6 +163,24 @@ The owner then asked for support of every Postiz provider. The pinned `v2.25.0` 
 | TikTok | social (photo post) | `tiktok` (`tiktok-business`) | description ≤ 2,000 | **at least 1**, ≤ 35, **shorter side ≤ 1,080 px**; PNG is converted to JPEG by Postiz | title ≤ 90, visibility (default **private**, `SELF_ONLY`, because unaudited apps can only post privately); duet, stitch, music and the like are fixed off | Postiz `tiktok.provider.ts` (`maxLength` 2000, `convertToJPEG`, `checkValidity`), `tiktok.dto.ts`; TikTok Content Posting API, photo post (title 90, description 4,000, up to 35 images) |
 | YouTube | social (video) | `youtube` | description ≤ 5,000 | thumbnail only | **title (≤ 100)**, tags (≤ 500 characters in all, a tag with a space counts two more) | Postiz `youtube.provider.ts` (`maxLength` 5000, "Item must be a video"), `youtube.settings.dto.ts`. **Manual-only: needs video** |
 
+### Platforms added by amendment 05 (manual channels)
+
+Nine platforms with no usable publishing API, all **manual-only**: the site prepares the text, fields and checklist (section 6.2) and a person publishes. Decisions, reasons and the owner's to-do list: [amendment 05](amendment-05-manual-channels.md); the per-site API research is in [visibility-channels.md](visibility-channels.md). "Flagged" means the limit is our own sensible cap (no primary source found on 2026-10-07).
+
+| Platform | Kind | Postiz provider | Text limit | Images | Required fields, tags, titles | Sources |
+| --- | --- | --- | --- | --- | --- | --- |
+| Quora | social | none | ≤ 20,000 (flagged) | card as default | **question or Space URL** | no API (verified 2026-10-07) |
+| LinkedIn (articol) | **article** | none | ≤ 110,000 (flagged) | ≤ 1 (cover) | **title (≤ 100)**, subtitle | LinkedIn's Posts API cannot create articles or newsletters; limits from third-party references (flagged) |
+| TradingView | social | none | ≤ 10,000 (flagged) | chart attached by hand | **symbol** (`BINANCE:BTCUSDT`), **title (≤ 100, flagged)** | no publishing API; TradingView help ("How can I publish an idea?") |
+| Investing.com | social | none | ≤ 5,000 (flagged) | card as default | **instrument page URL** | no API |
+| Indie Hackers | social | none | ≤ 20,000 (flagged) | card as default | **title (≤ 150, flagged)**, optional group | no API |
+| Stack Exchange | social | none | body 30–30,000 | card as default | site (default `money.stackexchange.com`), type `answer`/`question`; answer: **question URL**; question: **title 15–150**, **1–5 tags** | Stack Exchange help center; write API exists (`/questions/add`, `/answers/add`) but the self-promotion rules require disclosing affiliation, so it stays manual |
+| GitHub | **article** | none | release body ≤ 125,000 | card as default | **`owner/name`**, **title**, type `release` (**tag**) or `discussion` (**category**) | GitHub REST (`POST /repos/{owner}/{repo}/releases`) and GraphQL (`createDiscussion`) exist; direct integration is a later step |
+| Forum | social | none | ≤ 20,000 (flagged) | card as default | **thread URL or title** (exactly one); one account per forum | no common API |
+| Presa (comunicat) | **article** | none | ≤ 50,000 (flagged) | card as default | **title**, lead (subtitle); one account per outlet; "Despre" paragraph | not applicable |
+
+Platform count: 35 + 9 = 44. Forum and Presa accounts are created by hand in `/admin/social/conturi`; the editor link is https only (an outlet's contact page, not `mailto:`).
+
 Postiz needs server variables per provider (OAuth apps, bots); they are listed in [setup.md](setup.md). Every platform of the first batch and this one has the same fields in the composer, the preview and the manual handoff. Platform count: 20 + 15 = 35 (Substack and Product Hunt have no Postiz provider; 33 platforms come from the 36 identifiers).
 
 ### Daily cap
@@ -183,7 +203,7 @@ Postiz needs server variables per provider (OAuth apps, bots); they are listed i
 8. The worker polls Postiz until the post is published or failed, and reports the public URL or the error.
 9. **Overview** shows each destination's state; a failed destination can be retried alone.
 
-### 6.2 Manual handoff (Substack, Product Hunt, YouTube, LinkedIn before approval, any account switched to manual mode)
+### 6.2 Manual handoff (Substack, Product Hunt, YouTube, Quora, LinkedIn (articol), TradingView, Investing.com, Indie Hackers, Stack Exchange, GitHub, Forum, Presa, LinkedIn before approval, any account switched to manual mode)
 
 1. Same generate/edit/approve flow. At the slot time the job becomes `manual_pending` and a notification goes out.
 2. The destination page shows: copy buttons (plain, markdown, HTML), image downloads, an "Open editor" link to the platform, and a checklist (for Product Hunt).
@@ -299,7 +319,7 @@ Both tracks implement these: the generator (B) validates before delivering draft
 | Bare domain | `taxes.support` / `thecrypto.support` only as part of a URL |
 | Length | per platform (section 5), counted the platform's way: X weighted, Bluesky graphemes (and 3,000 bytes), Mastodon links as 23, Farcaster bytes, Telegram 1,024 with an image |
 | Instagram | at least one image, no URLs in caption |
-| Required fields (amendment 04) | Reddit: subreddit and title (≤ 300), a `link` post needs a URL, a `media` post exactly one image. Pinterest: at least one image, numeric board id, title (≤ 100), link. Discord: channel id. Lemmy: community name, community id, title (3–200). Medium: title, subtitle. Farcaster: a channel, if given, is a valid channel id. Slack: channel id. WordPress, Listmonk: title (the subject); Listmonk also a list id. Dribbble: one 400×300 or 800×600 image and a title. TikTok: at least one image, none over 1,080 px on the short side. Skool: group, category, title. Whop: company, forum. MeWe: group when posting to a group. Google Business: a link for every button but "call". YouTube: title (≤ 100), tags (≤ 500 characters in all), and a warning that it needs video |
+| Required fields (amendment 04) | Reddit: subreddit and title (≤ 300), a `link` post needs a URL, a `media` post exactly one image. Pinterest: at least one image, numeric board id, title (≤ 100), link. Discord: channel id. Lemmy: community name, community id, title (3–200). Medium: title, subtitle. Farcaster: a channel, if given, is a valid channel id. Slack: channel id. WordPress, Listmonk: title (the subject); Listmonk also a list id. Dribbble: one 400×300 or 800×600 image and a title. TikTok: at least one image, none over 1,080 px on the short side. Skool: group, category, title. Whop: company, forum. MeWe: group when posting to a group. Google Business: a link for every button but "call". YouTube: title (≤ 100), tags (≤ 500 characters in all), and a warning that it needs video. Amendment 05: Quora: question or Space URL. LinkedIn (articol): title (≤ 100). TradingView: symbol and title (≤ 100). Investing.com: instrument URL. Indie Hackers: title. Stack Exchange: an answer needs the question URL; a question needs a title (15–150) and 1–5 tags; body 30–30,000; a warning when no affiliation is stated. GitHub: `owner/name`, title, and a tag (release) or a category (discussion). Forum: exactly one of thread URL and title. Presa: title |
 | Tags (amendment 04) | Medium at most 3 tags of at most 25 characters (dev.to 4, Hashnode 5, Instagram 30 hashtags as before); Threads warns past one hashtag |
 | Figures | any digit, `%`, `lei`, `RON`, `EUR` or date triggers `contains_figures`; approval needs "figures checked"; any `unverified` figure blocks approval until resolved |
 | Article canonical | dev.to, Hashnode and Medium posts must have `canonical` set to our blog URL |
@@ -486,7 +506,7 @@ n8n polls the site, so **n8n needs no public webhook** and its UI can stay behin
 
 ### 10.5 Draft and card spec (B produces, A consumes)
 
-`platform` values used everywhere in the contracts: `facebook`, `instagram`, `linkedin-page`, `x`, `devto`, `hashnode`, `substack`, `producthunt`, and (amendment 04) `threads`, `bluesky`, `mastodon`, `linkedin` (a personal profile; `linkedin-page` is the company page), `reddit`, `pinterest`, `telegram`, `discord`, `medium`, `farcaster`, `nostr`, `lemmy`, and the second batch `slack`, `wordpress`, `listmonk`, `vk`, `gmb`, `tumblr`, `dribbble`, `mewe`, `skool`, `whop`, `moltbook`, `kick`, `twitch`, `tiktok`, `youtube` (35 in all). The worker maps them to Postiz provider identifiers (section 5; Farcaster is `wrapcast`; `instagram-standalone`, `mastodon-custom` and `tiktok-business` are aliases of `instagram`, `mastodon` and `tiktok`). `substack`, `producthunt` and `youtube` are manual-only.
+`platform` values used everywhere in the contracts: `facebook`, `instagram`, `linkedin-page`, `x`, `devto`, `hashnode`, `substack`, `producthunt`, and (amendment 04) `threads`, `bluesky`, `mastodon`, `linkedin` (a personal profile; `linkedin-page` is the company page), `reddit`, `pinterest`, `telegram`, `discord`, `medium`, `farcaster`, `nostr`, `lemmy`, and the second batch `slack`, `wordpress`, `listmonk`, `vk`, `gmb`, `tumblr`, `dribbble`, `mewe`, `skool`, `whop`, `moltbook`, `kick`, `twitch`, `tiktok`, `youtube` (35), and (amendment 05, manual-only) `quora`, `linkedin-article`, `tradingview`, `investing`, `indiehackers`, `stackexchange`, `github`, `forum`, `press` (44 in all). The worker maps them to Postiz provider identifiers (section 5; Farcaster is `wrapcast`; `instagram-standalone`, `mastodon-custom` and `tiktok-business` are aliases of `instagram`, `mastodon` and `tiktok`). `substack`, `producthunt`, `youtube` and the nine of amendment 05 are manual-only.
 
 Generation `input`:
 
@@ -577,6 +597,14 @@ Neutral `settings` per platform (B maps them to Postiz provider settings):
 | `twitch` | `message_type`, `announcement_color` |
 | `tiktok` | `title`, `privacy_level` (default `SELF_ONLY`) |
 | `youtube` | `title`, `tags` (manual handoff only) |
+| `quora` | `target_url` (manual handoff only) |
+| `linkedin-article`, `press` | `title`, `subtitle` (the lead of a press release) (manual handoff only) |
+| `tradingview` | `symbol`, `title` (manual handoff only) |
+| `investing` | `instrument_url` (manual handoff only) |
+| `indiehackers` | `title`, `group` (manual handoff only) |
+| `stackexchange` | `site`, `post_type` (`answer` or `question`), `question_url`, `title`, `tags` (at most 5) (manual handoff only) |
+| `github` | `repo`, `post_type` (`release` or `discussion`), `title`, `tag`, `category` (manual handoff only) |
+| `forum` | `thread_url` or `title`, exactly one (manual handoff only) |
 | `linkedin`, `threads`, `bluesky`, `mastodon`, `telegram`, `nostr`, `vk`, `kick` | none |
 
 The generator never invents `subreddit`, `board`, `channel`, `community` or `community_id`: a person fills them in the composer, and approval stays blocked until they are set. It does supply `title` (Reddit, Pinterest, Lemmy) and the Pinterest `link` (the source article).

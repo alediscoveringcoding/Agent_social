@@ -104,5 +104,7 @@ Postiz lists boards, channels and communities when you compose a post in its own
 | Instagram | — | Track B | blocked on Facebook |
 | Threads, Bluesky, Mastodon, LinkedIn (profile), Reddit, Pinterest, Telegram, Discord, Medium, Farcaster, Nostr, Lemmy | — | Track B | not yet connected (amendment 04) |
 | Slack, WordPress, Listmonk, VK, Google Business, Tumblr, Dribbble, MeWe, Skool, Whop, Moltbook, Kick, Twitch, TikTok, YouTube (manual) | — | Track B | not yet connected (amendment 04, second batch) |
+| Quora, LinkedIn (articol), TradingView, Investing.com, Indie Hackers, Stack Exchange, GitHub | — | Track B | manual accounts to create by hand (amendment 05) |
+| Forum (one account per forum), Presa (one account per outlet) | — | Track B | manual accounts to create by hand, each with its own page as the editor link (amendment 05) |
 
 Fill this table in as each account is connected (PRD task B2).
