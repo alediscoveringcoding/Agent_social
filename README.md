@@ -21,7 +21,7 @@ Current phase: **local v1 complete on `main`**, verified on 2026-10-06. [Amendme
 
 Final review fixed approval checks for the actual attached card, immutable card metadata (migration `0007`), competing media/text edits, and consistent keyword matching. All four branches were merged into `main`; the feature branches remain available.
 
-**Verified:** `bash scripts/update.sh --no-pull` passed with 276 site tests and 27 worker tests, type checks, lint, migrations and a production build. HTTP smoke checks covered 16 authenticated pages, login redirects, both DST weeks, card previews and signed image downloads. The combined flow uses a fresh local database: fake generation → edit/card → approval → media download → published URL in overview/calendar, plus manual publication and the production worker in dry run. No real AI or platform API calls were used for acceptance. After amendment 04 (twelve more platforms): `npm run ci` in `site` with 315 tests, and 51 worker tests.
+**Verified:** `bash scripts/update.sh --no-pull` passed with 276 site tests and 27 worker tests, type checks, lint, migrations and a production build. HTTP smoke checks covered 16 authenticated pages, login redirects, both DST weeks, card previews and signed image downloads. The combined flow uses a fresh local database: fake generation → edit/card → approval → media download → published URL in overview/calendar, plus manual publication and the production worker in dry run. No real AI or platform API calls were used for acceptance. After amendment 04 (every Postiz provider, 35 platforms): `npm run ci` in `site` with 341 tests and a production build, and 63 worker tests.
 
 **Remaining:** real Postiz sandbox validation and platform connections/developer approvals; Supabase/Vercel staging and VPS setup; controlled real posts and a restore drill. n8n, the automation API and email/Telegram notifications are deferred. See [site/README.md](site/README.md) to run the app and [the completed handoff](docs/handoff-codex.md) for validation details.
 
@@ -171,11 +171,12 @@ Conventions:
 | dev.to, Hashnode, X, Facebook, Instagram | Automatic when the channel and permissions are configured; X needs a billing cap |
 | LinkedIn (company page and personal profile) | Manual until developer approval, then automatic |
 | Threads, Bluesky, Mastodon, Reddit, Pinterest, Telegram, Discord, Medium, Farcaster, Nostr, Lemmy | Automatic through Postiz once the channel is connected ([amendment 04](docs/amendment-04-more-platforms.md)); most need a developer app or platform approval first (check each platform's current terms), and an account can wait in manual mode meanwhile |
-| Substack, Product Hunt | Manual handoff |
+| Slack, WordPress, Listmonk, VK, Google Business, Tumblr, Dribbble, MeWe, Skool, Whop, Moltbook, Kick, Twitch, TikTok (photo posts) | Automatic through Postiz once the channel is connected (amendment 04, second batch) |
+| Substack, Product Hunt, YouTube | Manual handoff (YouTube needs video, which is uploaded by hand) |
 
-Twenty platforms in all. Some need a field the generator cannot know (a subreddit, a Pinterest board, a Discord channel, a Lemmy community): a person fills it in the composer, and approval waits for it. Limits and sources are in the [PRD platform tables](docs/PRD.md#5-scope-brands-accounts-platforms).
+Thirty-five platforms in all: every provider of the pinned Postiz `v2.25.0` (36 identifiers, of which four are aliases) plus Substack and Product Hunt. Some need a field the generator cannot know (a subreddit, a Pinterest board, a Discord or Slack channel, a Lemmy community, a Listmonk list): a person fills it in the composer, and approval waits for it. Limits and sources are in the [PRD platform tables](docs/PRD.md#5-scope-brands-accounts-platforms); server variables per provider are in [setup.md](docs/setup.md).
 
-Images are supported in local v1; video/TikTok/YouTube are outside its scope (so TikTok and YouTube are not added). Real platform connections and controlled posts remain pending; [PRD section 5](docs/PRD.md#5-scope-brands-accounts-platforms) owns the platform requirements.
+Images are supported in local v1; video is outside its scope, so TikTok gets photo posts and YouTube a manual handoff. Real platform connections and controlled posts remain pending; [PRD section 5](docs/PRD.md#5-scope-brands-accounts-platforms) owns the platform requirements.
 
 Every account shows one of: connected, reconnect required, developer setup required, approval pending, manual publishing.
 

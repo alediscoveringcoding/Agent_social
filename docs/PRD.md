@@ -6,7 +6,7 @@
 | Last updated | 2026-10-07 |
 | Tracks | **A: Site** (proposed owner: Raul) · **B: Infra, worker, generator** (proposed owner: Ale) |
 | Related | [README](../README.md) (infra overview; this PRD wins where they differ) |
-| Amendments | [01: Localhost MVP](amendment-01-localhost-mvp.md) (no VPS, everything on localhost) · [02: Standalone site](amendment-02-standalone-site.md) · [03: Finishing the site locally](amendment-03-finish-the-site.md) (local mode and W1–W4 implemented) · [04: More platforms](amendment-04-more-platforms.md) (12 more Postiz platforms, a Pinterest card format) |
+| Amendments | [01: Localhost MVP](amendment-01-localhost-mvp.md) (no VPS, everything on localhost) · [02: Standalone site](amendment-02-standalone-site.md) · [03: Finishing the site locally](amendment-03-finish-the-site.md) (local mode and W1–W4 implemented) · [04: More platforms](amendment-04-more-platforms.md) (every Postiz provider: 35 platforms, Pinterest and Dribbble card formats) |
 
 > This repository is **public**. Never commit secrets, real `.env` files, account handles that are not public, or internal notes from the site repository.
 
@@ -37,7 +37,7 @@ Acceptance passed in WSL: **276 site tests and 27 worker tests**, type checks, l
 
 Final review added migration `0007_media_metadata_immutable.sql`, checked the copy/figures on each attached immutable card, prevented competing text/media edits, and aligned keyword validation. See [completed handoff](handoff-codex.md) and [site setup](../site/README.md). The local milestone is complete; live publishing and production go-live are still pending.
 
-Amendment 04 (2026-10-07) added twelve more platforms, all automatic through Postiz, and a Pinterest card format (migration `0008_more_platforms.sql`): see section 5 and [amendment 04](amendment-04-more-platforms.md). No platform connection exists yet.
+Amendment 04 (2026-10-07) added every Postiz provider: twelve platforms first, then fifteen more (35 in all), all automatic through Postiz except YouTube (video only, manual-only), and the Pinterest and Dribbble card formats (migrations `0008_more_platforms.sql` and `0009_all_postiz_platforms.sql`): see section 5 and [amendment 04](amendment-04-more-platforms.md). No platform connection exists yet.
 
 ## 2. Goals, non-goals, success
 
@@ -52,7 +52,7 @@ Amendment 04 (2026-10-07) added twelve more platforms, all automatic through Pos
 ### Non-goals for v1
 
 - Comments, inboxes, DMs, advertising.
-- Video (TikTok, YouTube, Reels). Images only in v1.
+- Video (YouTube uploads, TikTok and Instagram video, Reels). Images only in v1: TikTok gets photo posts, and YouTube a manual handoff where the video is uploaded by hand (amendment 04).
 - Analytics dashboards (phase 2; the data model leaves room).
 - Connecting accounts from inside `/admin`. In v1 accounts are connected in the Postiz UI by the Track B owner and synced into `/admin` automatically.
 - Multi-tenant SaaS, billing, or anything for non-staff users.
@@ -139,7 +139,29 @@ Twelve platforms, all with a Postiz provider in the pinned `v2.25.0` source, so 
 
 Counting is platform-specific, like X's weighted length: Bluesky counts graphemes, Mastodon counts a link as 23, Farcaster counts bytes, every other platform counts code points (`site/src/lib/social/text-length.ts`, copied to the worker).
 
-Not added: **TikTok and YouTube** (video only; this app makes text and images) and the other Postiz providers outside the list (Slack, Twitch, Kick, Tumblr, Dribbble, WordPress, Listmonk, Skool, MeWe, VK, Whop, Google Business, Moltbook).
+#### Second batch: every other Postiz provider
+
+The owner then asked for support of every Postiz provider. The pinned `v2.25.0` already contains all 36 provider files (identifiers listed in [amendment 04](amendment-04-more-platforms.md)), so no Postiz upgrade is needed. Four identifiers are aliases, not platforms: `instagram-standalone` is Instagram, `mastodon-custom` is Mastodon, `tiktok-business` is TikTok and `wrapcast` is Farcaster. Fifteen more platforms are added; **YouTube is manual-only** because its Postiz provider accepts exactly one video and nothing else (`checkValidity`: "Item must be a video"), and this app makes text and images. A YouTube channel still syncs and shows in the accounts screen (always as a manual account), the generator drafts its title and description, and the handoff page says "needs video"; no video upload is built. **TikTok is automatic**: its provider publishes photo posts (several images, no video).
+
+| Platform | Kind | Postiz provider | Text limit | Images | Required fields, tags, titles | Sources |
+| --- | --- | --- | --- | --- | --- | --- |
+| Slack | social | `slack` | ≤ 40,000 | images only, no video | **channel (id)** | Postiz `slack.provider.ts` (`maxLength` 400000, "No video support for Slack, only images"), `slack.dto.ts`; Slack API `chat.postMessage`: Slack truncates above 40,000 characters (advises 4,000), which is the limit enforced |
+| WordPress | **article** | `wordpress` | body ≤ 100,000, sent as HTML | 1 featured image | **title** (≥ 2), post type (default `post`), status (default `publish`) | Postiz `wordpress.provider.ts` (`maxLength` 100000, HTML editor), `wordpress.dto.ts` (title, type, status `publish`/`draft`/`pending`/`private`, `main_image`; category and tag ids are numeric and not set here). The worker turns the markdown body into the tags Postiz keeps for HTML editors (`p`, `h1`–`h3`, `ul`, `li`, `strong`, `a`) |
+| Listmonk | **article** (newsletter) | `listmonk` | none that matters (Postiz 100,000,000), sent as HTML | none | **subject** (the title), preview line (the subtitle), **list (numeric id)**, optional template id | Postiz `listmonk.provider.ts`, `listmonk.dto.ts` |
+| VK | social | `vk` | ≤ 2,048 | uploaded to the wall post | none | Postiz `vk.provider.ts` (`maxLength` 2048) |
+| Google Business | social | `gmb` | ≤ 1,500 | ≤ 1 (4:3, the `dribbble` card format) | optional button (`cta_type`) and its link; the post is a standard post (event and offer fields are not exposed) | Postiz `gmb.provider.ts` (`maxLength` 1500; "can only have one image", no video), `gmb.settings.dto.ts` |
+| Tumblr | social | `tumblr` | ≤ 32,768 | ≤ 30 | optional title (≤ 4,096), link, source URL, tags (one string, ≤ 4,096) | Postiz `tumblr.provider.ts` (`maxLength` 32768, "up to 30 images"), `tumblr.dto.ts` |
+| Dribbble | social | `dribbble` | description ≤ 40,000 | **exactly 1, 400×300 or 800×600** | **title**, optional team link; new `dribbble` card format 800×600 | Postiz `dribbble.provider.ts` (`maxLength` 40000, "Requires one item", the two sizes, no mp4), `dribbble.dto.ts`; Dribbble API v2 (shots are 400×300 / 800×600) |
+| MeWe | social | `mewe` | ≤ 63,206 | images (video skipped) | post to profile or to a **group (id)** | Postiz `mewe.provider.ts` (`maxLength` 63206), `mewe.dto.ts` |
+| Skool | social | `skool` | ≤ 5,000 | passed to the provider, no cap | **group**, **category (label id)**, **title** | Postiz `skool.provider.ts` (`maxLength` 5000), `skool.dto.ts` |
+| Whop | social (forum post) | `whop` | ≤ 50,000 (markdown) | passed to the provider, no cap | **company (id)**, **forum (experience id)**, optional title | Postiz `whop.provider.ts` (`maxLength` 50000), `whop.dto.ts` |
+| Moltbook | social | `moltbook` | ≤ 300 | text only | optional submolt (Postiz posts to `general` without one) | Postiz `moltbook.provider.ts` (`maxLength` 300; the title is the first 100 characters) |
+| Kick | social (live chat message) | `kick` | ≤ 500 | text only | none | Postiz `kick.provider.ts` (`maxLength` 500, "Kick chat doesn't support media attachments") |
+| Twitch | social (live chat message or announcement) | `twitch` | ≤ 500 | text only | optional message type and announcement colour | Postiz `twitch.provider.ts` (`maxLength` 500), `twitch.dto.ts` |
+| TikTok | social (photo post) | `tiktok` (`tiktok-business`) | description ≤ 2,000 | **at least 1**, ≤ 35, **shorter side ≤ 1,080 px**; PNG is converted to JPEG by Postiz | title ≤ 90, visibility (default **private**, `SELF_ONLY`, because unaudited apps can only post privately); duet, stitch, music and the like are fixed off | Postiz `tiktok.provider.ts` (`maxLength` 2000, `convertToJPEG`, `checkValidity`), `tiktok.dto.ts`; TikTok Content Posting API, photo post (title 90, description 4,000, up to 35 images) |
+| YouTube | social (video) | `youtube` | description ≤ 5,000 | thumbnail only | **title (≤ 100)**, tags (≤ 500 characters in all, a tag with a space counts two more) | Postiz `youtube.provider.ts` (`maxLength` 5000, "Item must be a video"), `youtube.settings.dto.ts`. **Manual-only: needs video** |
+
+Postiz needs server variables per provider (OAuth apps, bots); they are listed in [setup.md](setup.md). Every platform of the first batch and this one has the same fields in the composer, the preview and the manual handoff. Platform count: 20 + 15 = 35 (Substack and Product Hunt have no Postiz provider; 33 platforms come from the 36 identifiers).
 
 ### Daily cap
 
@@ -161,7 +183,7 @@ Not added: **TikTok and YouTube** (video only; this app makes text and images) a
 8. The worker polls Postiz until the post is published or failed, and reports the public URL or the error.
 9. **Overview** shows each destination's state; a failed destination can be retried alone.
 
-### 6.2 Manual handoff (Substack, Product Hunt, LinkedIn before approval, any account switched to manual mode)
+### 6.2 Manual handoff (Substack, Product Hunt, YouTube, LinkedIn before approval, any account switched to manual mode)
 
 1. Same generate/edit/approve flow. At the slot time the job becomes `manual_pending` and a notification goes out.
 2. The destination page shows: copy buttons (plain, markdown, HTML), image downloads, an "Open editor" link to the platform, and a checklist (for Product Hunt).
@@ -277,7 +299,7 @@ Both tracks implement these: the generator (B) validates before delivering draft
 | Bare domain | `taxes.support` / `thecrypto.support` only as part of a URL |
 | Length | per platform (section 5), counted the platform's way: X weighted, Bluesky graphemes (and 3,000 bytes), Mastodon links as 23, Farcaster bytes, Telegram 1,024 with an image |
 | Instagram | at least one image, no URLs in caption |
-| Required fields (amendment 04) | Reddit: subreddit and title (≤ 300), a `link` post needs a URL, a `media` post exactly one image. Pinterest: at least one image, numeric board id, title (≤ 100), link. Discord: channel id. Lemmy: community name, community id, title (3–200). Medium: title, subtitle. Farcaster: a channel, if given, is a valid channel id |
+| Required fields (amendment 04) | Reddit: subreddit and title (≤ 300), a `link` post needs a URL, a `media` post exactly one image. Pinterest: at least one image, numeric board id, title (≤ 100), link. Discord: channel id. Lemmy: community name, community id, title (3–200). Medium: title, subtitle. Farcaster: a channel, if given, is a valid channel id. Slack: channel id. WordPress, Listmonk: title (the subject); Listmonk also a list id. Dribbble: one 400×300 or 800×600 image and a title. TikTok: at least one image, none over 1,080 px on the short side. Skool: group, category, title. Whop: company, forum. MeWe: group when posting to a group. Google Business: a link for every button but "call". YouTube: title (≤ 100), tags (≤ 500 characters in all), and a warning that it needs video |
 | Tags (amendment 04) | Medium at most 3 tags of at most 25 characters (dev.to 4, Hashnode 5, Instagram 30 hashtags as before); Threads warns past one hashtag |
 | Figures | any digit, `%`, `lei`, `RON`, `EUR` or date triggers `contains_figures`; approval needs "figures checked"; any `unverified` figure blocks approval until resolved |
 | Article canonical | dev.to, Hashnode and Medium posts must have `canonical` set to our blog URL |
@@ -464,7 +486,7 @@ n8n polls the site, so **n8n needs no public webhook** and its UI can stay behin
 
 ### 10.5 Draft and card spec (B produces, A consumes)
 
-`platform` values used everywhere in the contracts: `facebook`, `instagram`, `linkedin-page`, `x`, `devto`, `hashnode`, `substack`, `producthunt`, and (amendment 04) `threads`, `bluesky`, `mastodon`, `linkedin` (a personal profile; `linkedin-page` is the company page), `reddit`, `pinterest`, `telegram`, `discord`, `medium`, `farcaster`, `nostr`, `lemmy`. The worker maps them to Postiz provider identifiers (section 5; Farcaster is `wrapcast`).
+`platform` values used everywhere in the contracts: `facebook`, `instagram`, `linkedin-page`, `x`, `devto`, `hashnode`, `substack`, `producthunt`, and (amendment 04) `threads`, `bluesky`, `mastodon`, `linkedin` (a personal profile; `linkedin-page` is the company page), `reddit`, `pinterest`, `telegram`, `discord`, `medium`, `farcaster`, `nostr`, `lemmy`, and the second batch `slack`, `wordpress`, `listmonk`, `vk`, `gmb`, `tumblr`, `dribbble`, `mewe`, `skool`, `whop`, `moltbook`, `kick`, `twitch`, `tiktok`, `youtube` (35 in all). The worker maps them to Postiz provider identifiers (section 5; Farcaster is `wrapcast`; `instagram-standalone`, `mastodon-custom` and `tiktok-business` are aliases of `instagram`, `mastodon` and `tiktok`). `substack`, `producthunt` and `youtube` are manual-only.
 
 Generation `input`:
 
@@ -527,6 +549,7 @@ Card formats the renderer (A) produces per destination:
 | `hashnode_cover` | 1600×840 | Hashnode, Substack, Medium |
 | `ph_gallery` | 1270×760 | Product Hunt |
 | `pinterest` | 1000×1500 | Pinterest (2:3 pins; amendment 04) |
+| `dribbble` | 800×600 | Dribbble (shots must be 400×300 or 800×600), Google Business (4:3) |
 
 Neutral `settings` per platform (B maps them to Postiz provider settings):
 
@@ -541,7 +564,20 @@ Neutral `settings` per platform (B maps them to Postiz provider settings):
 | `pinterest` | `board` (numeric id), `title`, `link` |
 | `discord`, `farcaster` | `channel` (a numeric id for Discord; optional for Farcaster) |
 | `lemmy` | `community`, `community_id`, `title`, `link` |
-| `linkedin`, `threads`, `bluesky`, `mastodon`, `telegram`, `nostr` | none |
+| `slack` | `channel` (id) |
+| `wordpress` | `title`, `post_type` (default `post`), `status` (default `publish`) |
+| `listmonk` | `title` (the subject), `subtitle` (the preview line), `list` (id), `template` (id) |
+| `gmb` | `cta_type`, `cta_url` |
+| `tumblr` | `title`, `link`, `source_url`, `tags` |
+| `dribbble` | `title`, `team` |
+| `mewe` | `post_type` (`timeline` or `group`), `group` |
+| `skool` | `group`, `label`, `title` |
+| `whop` | `company`, `experience`, `title` |
+| `moltbook` | `submolt` |
+| `twitch` | `message_type`, `announcement_color` |
+| `tiktok` | `title`, `privacy_level` (default `SELF_ONLY`) |
+| `youtube` | `title`, `tags` (manual handoff only) |
+| `linkedin`, `threads`, `bluesky`, `mastodon`, `telegram`, `nostr`, `vk`, `kick` | none |
 
 The generator never invents `subreddit`, `board`, `channel`, `community` or `community_id`: a person fills them in the composer, and approval stays blocked until they are set. It does supply `title` (Reddit, Pinterest, Lemmy) and the Pinterest `link` (the source article).
 

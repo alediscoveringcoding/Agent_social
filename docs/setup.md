@@ -56,7 +56,7 @@ For an offline production-worker test keep AI keys blank and `WORKER_DRY_RUN=tru
 
 ### More platforms (amendment 04)
 
-Connect each in Postiz (Settings > Integrations), then run an account sync (the worker does it, or `npm run social:fake-worker -- --sync` locally). The channel arrives in `/admin/social/conturi` paused and without a brand; assign a brand and unpause it. The site knows a channel by the `identifier` Postiz reports (`threads`, `bluesky`, `mastodon` or `mastodon-custom`, `linkedin`, `reddit`, `pinterest`, `telegram`, `discord`, `medium`, `wrapcast` for Farcaster, `nostr`, `lemmy`); any other provider is ignored and listed in the sync answer. What Postiz v2.25.0 asks for, from its provider source:
+Connect each in Postiz (Settings > Integrations), then run an account sync (the worker does it, or `npm run social:fake-worker -- --sync` locally). The channel arrives in `/admin/social/conturi` paused and without a brand; assign a brand and unpause it. The site knows every provider of Postiz v2.25.0 by the `identifier` Postiz reports; four are aliases (`mastodon-custom` is Mastodon, `instagram-standalone` is Instagram, `tiktok-business` is TikTok, `wrapcast` is Farcaster). A provider the site does not know is ignored and listed in the sync answer. A YouTube channel syncs as a manual account (it needs video). What Postiz v2.25.0 asks for, from its provider source:
 
 | Platform | What the Postiz server and the channel need (provider source, v2.25.0) | Ids the composer asks for |
 | --- | --- | --- |
@@ -72,6 +72,21 @@ Connect each in Postiz (Settings > Integrations), then run an account sync (the 
 | Farcaster | Server env `NEYNAR_CLIENT_ID`, `NEYNAR_APP_FID` and the other `NEYNAR_*` values of the Postiz docs | optional channel id |
 | Nostr | The form asks for the private key as a hex string. Use a throwaway key | none |
 | Lemmy | The form asks for service (instance URL), identifier and password | the community's name and its numeric id |
+| Slack | Server env `SLACK_ID`, `SLACK_SECRET`; OAuth | the channel id |
+| WordPress | The form asks for domain URL, username and password (use an application password) | none (post type and status have defaults) |
+| Listmonk | The form asks for URL, username and password | the list id; optional template id |
+| VK | Server env `VK_ID`; OAuth | none |
+| Google Business (`gmb`) | Server env `GOOGLE_GMB_CLIENT_ID`, `GOOGLE_GMB_CLIENT_SECRET` (Postiz falls back to `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`); OAuth | optional button type and URL |
+| Tumblr | Server env `TUMBLR_CLIENT_ID`, `TUMBLR_CLIENT_SECRET`; OAuth | none |
+| Dribbble | Server env `DRIBBBLE_CLIENT_ID`, `DRIBBBLE_CLIENT_SECRET`; OAuth. In v2.25.0 its token refresh calls Pinterest's endpoint (a copy-paste in Postiz), so expect to reconnect the channel when its token expires | optional team link |
+| MeWe | Server env `MEWE_API_KEY`, `MEWE_APP_ID`, `MEWE_HOST` | the group id when posting to a group |
+| Skool | Connected through the Postiz browser extension (it reads Skool's `auth_token` and `client_id` cookies) | the group and the category |
+| Whop | Server env `WHOP_CLIENT_ID`; OAuth | the company id and the forum (experience) id |
+| Moltbook | Registers an agent on Moltbook and keeps its API key (Postiz's web3-style connect flow) | optional submolt |
+| Kick | Server env `KICK_CLIENT_ID`, `KICK_SECRET`; OAuth. Posts are live chat messages | none |
+| Twitch | Server env `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`; OAuth. Posts are chat messages or announcements | none |
+| TikTok | Server env `TIKTOK_CLIENT_ID`, `TIKTOK_CLIENT_SECRET` (`tiktok-business`: `TIKTOK_BUSINESS_CLIENT_ID`, `TIKTOK_BUSINESS_CLIENT_SECRET`); OAuth. Photo posts; an app that has not passed TikTok's audit can only post privately | privacy level (private by default) |
+| YouTube | Server env `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`; OAuth. Manual-only here: the video is uploaded by hand | none |
 
 Where a platform's developer app or API access needs approval first (several do; read its current terms), connect the channel later and use a manual account (created in `/admin/social/conturi`) meanwhile.
 
@@ -88,5 +103,6 @@ Postiz lists boards, channels and communities when you compose a post in its own
 | Facebook | — | Track B | blocked on business verification |
 | Instagram | — | Track B | blocked on Facebook |
 | Threads, Bluesky, Mastodon, LinkedIn (profile), Reddit, Pinterest, Telegram, Discord, Medium, Farcaster, Nostr, Lemmy | — | Track B | not yet connected (amendment 04) |
+| Slack, WordPress, Listmonk, VK, Google Business, Tumblr, Dribbble, MeWe, Skool, Whop, Moltbook, Kick, Twitch, TikTok, YouTube (manual) | — | Track B | not yet connected (amendment 04, second batch) |
 
 Fill this table in as each account is connected (PRD task B2).
