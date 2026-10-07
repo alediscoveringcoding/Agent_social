@@ -8,7 +8,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { ReactElement } from 'react'
 import sharp from 'sharp'
-import { CARD_FORMATS, CARD_FORMAT_NAMES, CARD_TEMPLATES } from '../constants.ts'
+import { CARD_FORMATS, CARD_FORMAT_NAMES, CARD_TEMPLATES, PLATFORMS, PLATFORM_CARD_FORMAT } from '../constants.ts'
 import { CARD_BRAND_SLUGS, TOKENS, cardBrand } from '../cards/palette.ts'
 import { cardElement, cardText } from '../cards/layout.ts'
 import { checkCardSpec, keywordRange, normalizeCardSpec, type CardSpec } from '../cards/spec.ts'
@@ -113,5 +113,24 @@ describe('card renderer', () => {
   it('renders a card with only a headline', async () => {
     const card = await renderCardPng({ template: 'mint', brand: 'comets-of-web3', headline: 'Scurt' }, 'devto_cover', cardBrand('comets-of-web3'))
     assert.equal((await sharp(card.bytes).metadata()).width, 1000)
+  })
+})
+
+describe('card formats after amendment 04', () => {
+  it('has 7 formats, so 63 format/template/brand combinations, and Pinterest pins are 1000x1500', () => {
+    assert.equal(CARD_FORMAT_NAMES.length, 7)
+    assert.equal(CARD_FORMAT_NAMES.length * CARD_TEMPLATES.length * CARD_BRAND_SLUGS.length, 63)
+    assert.deepEqual(CARD_FORMATS.pinterest, { width: 1000, height: 1500 })
+  })
+
+  it('every platform gets a format the renderer has, and each format is used or documented', () => {
+    for (const platform of PLATFORMS) assert.ok(PLATFORM_CARD_FORMAT[platform] in CARD_FORMATS, platform)
+    const used = new Set(Object.values(PLATFORM_CARD_FORMAT))
+    for (const format of CARD_FORMAT_NAMES) assert.ok(used.has(format), `${format} is used by a platform`)
+  })
+
+  it('a Pinterest card is stacked like the portrait card, with one gold element at most', () => {
+    const nodes = walk(cardElement({ ...SPEC, template: 'dark', brand: 'taxes-support' }, 'pinterest', cardBrand('taxes-support')))
+    assert.equal(nodes.filter((n) => n.style.color === TOKENS.gold || n.style.backgroundColor === TOKENS.gold).length, 1)
   })
 })

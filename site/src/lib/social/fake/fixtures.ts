@@ -9,8 +9,10 @@
  *   x-too-long       X text over 280 weighted characters (TOO_LONG)
  *   ig-link          link and bare domain in the Instagram caption (IG_URL, BARE_DOMAIN)
  *   banned           "profit sigur" (BANNED_PHRASE)
- *   article          dev.to / Hashnode / Substack article with canonical URL
+ *   article          dev.to / Hashnode / Substack / Medium article with canonical URL
  *   launch           Product Hunt launch kit
+ *   more-platforms   Threads, Bluesky, Mastodon, LinkedIn (profile), Reddit,
+ *                    Pinterest, Telegram, Discord, Farcaster, Nostr, Lemmy
  *
  * Every entry carries the generator's own `validation_errors` the way the
  * real generator reports a draft it could not repair.
@@ -155,6 +157,7 @@ export const DRAFT_FIXTURES: Fixture[] = [
       { platform: 'devto', text: '', settings: {} },
       { platform: 'hashnode', text: '', settings: {} },
       { platform: 'substack', text: '', settings: {} },
+      { platform: 'medium', text: '', settings: {} },
     ],
     article: {
       title: 'Cum calculezi impozitul pe crypto',
@@ -169,7 +172,69 @@ export const DRAFT_FIXTURES: Fixture[] = [
     card: card('Cum calculezi impozitul pe crypto', 'impozitul', null, 'light'),
     figures: [],
     validation_errors: [],
-    notes: 'Fixture: articol pentru dev.to, Hashnode si Substack.',
+    notes: 'Fixture: articol pentru dev.to, Hashnode, Substack si Medium.',
+  },
+  {
+    name: 'more-platforms',
+    kind: 'social',
+    title: 'Declaratia Unica pe mai multe platforme',
+    canonical_text: 'Ai pana pe 25 mai sa depui Declaratia Unica pentru castigurile din 2025.',
+    source_url: 'https://thecrypto.support/ghid/declaratia-unica',
+    variants: [
+      { platform: 'threads', text: 'Ai pana pe 25 mai sa depui Declaratia Unica. Iti explicam calm, pas cu pas.', settings: {} },
+      {
+        platform: 'bluesky',
+        text: 'Ai pana pe 25 mai sa depui Declaratia Unica. Ghid pas cu pas: https://thecrypto.support/ghid/declaratia-unica',
+        settings: {},
+      },
+      {
+        platform: 'mastodon',
+        text: 'Declaratia Unica se depune pana pe 25 mai. Am scris un ghid scurt: https://thecrypto.support/ghid/declaratia-unica',
+        settings: {},
+      },
+      {
+        platform: 'linkedin',
+        text: 'Declaratia Unica se depune pana pe 25 mai. Am pus intr-un ghid scurt ce trebuie sa stii despre castigurile din crypto: https://thecrypto.support/ghid/declaratia-unica',
+        settings: {},
+      },
+      {
+        platform: 'reddit',
+        text: 'Termenul pentru Declaratia Unica este 25 mai. Am adunat intr-un ghid pasii pentru castigurile din crypto din 2025.',
+        settings: { post_type: 'self', title: 'Declaratia Unica: termenul este 25 mai, iata pasii pentru crypto' },
+      },
+      {
+        platform: 'pinterest',
+        text: 'Declaratia Unica se depune pana pe 25 mai. Pasii pentru castigurile din crypto, pe scurt.',
+        settings: { title: 'Declaratia Unica: termen 25 mai', link: 'https://thecrypto.support/ghid/declaratia-unica' },
+      },
+      {
+        platform: 'telegram',
+        text: 'Ai pana pe 25 mai sa depui Declaratia Unica. Ghidul pas cu pas: https://thecrypto.support/ghid/declaratia-unica',
+        settings: {},
+      },
+      {
+        platform: 'discord',
+        text: 'Reminder: Declaratia Unica se depune pana pe 25 mai. Ghid: https://thecrypto.support/ghid/declaratia-unica',
+        settings: {},
+      },
+      { platform: 'farcaster', text: 'Declaratia Unica se depune pana pe 25 mai. Ghid pas cu pas in linkul de mai jos.', settings: {} },
+      { platform: 'nostr', text: 'Ai pana pe 25 mai sa depui Declaratia Unica. Iti explicam pas cu pas, fara stres.', settings: {} },
+      {
+        platform: 'lemmy',
+        text: 'Termenul pentru Declaratia Unica este 25 mai. Ghidul are pasii pentru castigurile din crypto din 2025.',
+        settings: { title: 'Declaratia Unica: termenul este 25 mai' },
+      },
+    ],
+    article: null,
+    launch: null,
+    card: card('Declaratia Unica se depune pana pe 25 mai', '25 mai', '25 mai', 'mint'),
+    figures: [
+      { value: '25 mai', context: 'termen Declaratia Unica', source: 'facts' },
+      { value: '2025', context: 'anul veniturilor', source: 'facts' },
+    ],
+    validation_errors: [],
+    notes:
+      'Fixture: platformele din amendamentul 04. Reddit, Pinterest, Discord si Lemmy cer inca un camp (subreddit, board, canal, comunitate); Pinterest cere si imaginea.',
   },
   {
     name: 'launch',

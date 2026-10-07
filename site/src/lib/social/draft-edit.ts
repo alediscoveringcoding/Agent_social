@@ -28,6 +28,20 @@ export const SETTINGS_KEYS: Record<Platform, readonly string[]> = {
   hashnode: ['title', 'subtitle', 'tags', 'canonical_url', 'cover_media_id'],
   substack: ['title', 'subtitle'],
   producthunt: ['name', 'tagline', 'maker_comment'],
+  // Amendment 04. The fields of the platforms below are listed with their
+  // labels in platform-settings.ts (a test keeps the two in step).
+  threads: [],
+  bluesky: [],
+  mastodon: [],
+  linkedin: [],
+  reddit: ['subreddit', 'title', 'post_type', 'link_url', 'flair_id'],
+  pinterest: ['board', 'title', 'link'],
+  telegram: [],
+  discord: ['channel'],
+  medium: ['title', 'subtitle', 'tags', 'canonical_url'],
+  farcaster: ['channel'],
+  nostr: [],
+  lemmy: ['community', 'community_id', 'title', 'link'],
 }
 
 export const FIGURE_SOURCES = ['article', 'facts', 'unverified', 'confirmed'] as const

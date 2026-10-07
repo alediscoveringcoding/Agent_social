@@ -14,7 +14,7 @@ import { setTestAdmin } from '../../testing/auth-shim.ts'
 import { routeFetch } from '../../testing/route-fetch.ts'
 import { adminUser, brandId, createAccount, resetSocial, rows, scheduleAndApprove } from '../../testing/social-fixtures.ts'
 import { WorkerApi } from '../fake/worker-api-client.ts'
-import { syncFakeAccounts } from '../fake/fake-worker.ts'
+import { FAKE_INTEGRATIONS, syncFakeAccounts } from '../fake/fake-worker.ts'
 import { createManualAccount, deleteManualAccount, updateAccount } from '../accounts-actions.ts'
 import { getWorkerHealth, listAdminAccounts } from '../accounts-queries.ts'
 import { STATUSES_FOR_MODE, publishBlockers } from '../accounts.ts'
@@ -74,7 +74,7 @@ describe('accounts screen: actions and queries (W3)', () => {
   it('synced channels arrive unassigned and paused; assigning and unpausing happens here', async () => {
     assert.equal((await syncFakeAccounts(api)).status, 200)
     const listed = await listAdminAccounts()
-    assert.equal(listed.length, 6)
+    assert.equal(listed.length, FAKE_INTEGRATIONS.length)
     assert.ok(listed.every((a) => a.brand_id === null && a.paused && a.mode === 'auto' && a.status === 'connected'))
     assert.ok(listed.every((a) => publishBlockers(a).includes('fara brand')))
 

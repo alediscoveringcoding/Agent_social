@@ -13,6 +13,19 @@ export const PLATFORMS = [
   'hashnode',
   'substack',
   'producthunt',
+  // Amendment 04: more platforms. All are Postiz providers (v2.25.0).
+  'threads',
+  'bluesky',
+  'mastodon',
+  'linkedin',
+  'reddit',
+  'pinterest',
+  'telegram',
+  'discord',
+  'medium',
+  'farcaster',
+  'nostr',
+  'lemmy',
 ] as const
 export type Platform = (typeof PLATFORMS)[number]
 
@@ -23,15 +36,31 @@ export function isPlatform(value: unknown): value is Platform {
 export const PLATFORM_LABELS: Record<Platform, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
-  'linkedin-page': 'LinkedIn',
+  'linkedin-page': 'LinkedIn (pagina)',
   x: 'X',
   devto: 'dev.to',
   hashnode: 'Hashnode',
   substack: 'Substack',
   producthunt: 'Product Hunt',
+  threads: 'Threads',
+  bluesky: 'Bluesky',
+  mastodon: 'Mastodon',
+  linkedin: 'LinkedIn (profil)',
+  reddit: 'Reddit',
+  pinterest: 'Pinterest',
+  telegram: 'Telegram',
+  discord: 'Discord',
+  medium: 'Medium',
+  farcaster: 'Farcaster',
+  nostr: 'Nostr',
+  lemmy: 'Lemmy',
 }
 
-/** No publishing API (PRD section 5): always a manual handoff. */
+/**
+ * No publishing API (PRD section 5): always a manual handoff. Amendment 04
+ * adds none: every new platform has a Postiz provider. Any account can still
+ * be switched to manual mode (a channel waiting for a platform's approval).
+ */
 export const MANUAL_ONLY_PLATFORMS: readonly Platform[] = ['substack', 'producthunt']
 
 /** Content kind per platform (PRD section 5). */
@@ -44,6 +73,18 @@ export const PLATFORM_KIND: Record<Platform, PostKind> = {
   hashnode: 'article',
   substack: 'article',
   producthunt: 'launch',
+  threads: 'social',
+  bluesky: 'social',
+  mastodon: 'social',
+  linkedin: 'social',
+  reddit: 'social',
+  pinterest: 'social',
+  telegram: 'social',
+  discord: 'social',
+  medium: 'article',
+  farcaster: 'social',
+  nostr: 'social',
+  lemmy: 'social',
 }
 
 export const POST_KINDS = ['social', 'article', 'launch'] as const
@@ -177,6 +218,8 @@ export const CARD_FORMATS = {
   devto_cover: { width: 1000, height: 420 },
   hashnode_cover: { width: 1600, height: 840 },
   ph_gallery: { width: 1270, height: 760 },
+  // Amendment 04: Pinterest pins are 2:3.
+  pinterest: { width: 1000, height: 1500 },
 } as const
 export type CardFormat = keyof typeof CARD_FORMATS
 export const CARD_FORMAT_NAMES = Object.keys(CARD_FORMATS) as CardFormat[]
@@ -195,6 +238,18 @@ export const PLATFORM_CARD_FORMAT: Record<Platform, CardFormat> = {
   hashnode: 'hashnode_cover',
   substack: 'hashnode_cover',
   producthunt: 'ph_gallery',
+  threads: 'square',
+  bluesky: 'x',
+  mastodon: 'x',
+  linkedin: 'square',
+  reddit: 'x',
+  pinterest: 'pinterest',
+  telegram: 'x',
+  discord: 'x',
+  medium: 'hashnode_cover',
+  farcaster: 'x',
+  nostr: 'x',
+  lemmy: 'square',
 }
 
 /**
@@ -235,7 +290,13 @@ export type MediaMime = (typeof MEDIA_MIME_TYPES)[number]
 
 export const SOCIAL_BUCKET = 'social-media'
 
-/** Postiz provider identifiers (with the spellings seen in v2.25.0) to our platforms. */
+/**
+ * Postiz provider identifiers (with the spellings seen in v2.25.0) to our
+ * platforms. The identifier is the `identifier` field of Postiz's
+ * GET /public/v1/integrations (the worker also accepts `providerIdentifier`).
+ * Farcaster is `wrapcast` in Postiz; `mastodon-custom` is a Mastodon channel
+ * on an instance the operator chose.
+ */
 export const PROVIDER_TO_PLATFORM: Record<string, Platform> = {
   x: 'x',
   facebook: 'facebook',
@@ -247,6 +308,20 @@ export const PROVIDER_TO_PLATFORM: Record<string, Platform> = {
   devto: 'devto',
   'dev.to': 'devto',
   hashnode: 'hashnode',
+  threads: 'threads',
+  bluesky: 'bluesky',
+  mastodon: 'mastodon',
+  'mastodon-custom': 'mastodon',
+  linkedin: 'linkedin',
+  reddit: 'reddit',
+  pinterest: 'pinterest',
+  telegram: 'telegram',
+  discord: 'discord',
+  medium: 'medium',
+  wrapcast: 'farcaster',
+  farcaster: 'farcaster',
+  nostr: 'nostr',
+  lemmy: 'lemmy',
 }
 
 /** Where the "Open editor" link of a manual destination points by default. */
@@ -258,4 +333,16 @@ export const DEFAULT_OPEN_EDITOR_URLS: Partial<Record<Platform, string>> = {
   x: 'https://x.com/compose/post',
   devto: 'https://dev.to/new',
   hashnode: 'https://hashnode.com/draft',
+  threads: 'https://www.threads.com/',
+  bluesky: 'https://bsky.app/',
+  mastodon: 'https://joinmastodon.org/servers',
+  linkedin: 'https://www.linkedin.com/feed/',
+  reddit: 'https://www.reddit.com/submit',
+  pinterest: 'https://www.pinterest.com/pin-creation-tool/',
+  telegram: 'https://web.telegram.org/',
+  discord: 'https://discord.com/channels/@me',
+  medium: 'https://medium.com/new-story',
+  farcaster: 'https://warpcast.com/',
+  nostr: 'https://nostrudel.ninja/',
+  lemmy: 'https://join-lemmy.org/instances',
 }

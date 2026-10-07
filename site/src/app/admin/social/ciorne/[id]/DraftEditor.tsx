@@ -4,11 +4,13 @@ import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { saveDraft } from '@/lib/social/actions'
-import { PLATFORM_LABELS, type Platform } from '@/lib/social/constants'
+import { PLATFORM_KIND, PLATFORM_LABELS, type Platform } from '@/lib/social/constants'
 import type { EditFigure } from '@/lib/social/draft-edit'
+import { SETTINGS_FIELDS } from '@/lib/social/platform-settings'
 import type { DraftDetail } from '@/lib/social/queries'
+import { lengthUnit } from '@/lib/social/text-length'
 import { formatBucharest } from '@/lib/social/time'
-import { maxLengthFor, measureLength, validateDestination, type DestinationValidation } from '@/lib/social/validation'
+import { MEDIUM_MAX_TAGS, measureLength, validateDestination, type DestinationValidation } from '@/lib/social/validation'
 import { Badge, Button, Card, Field, cn, inputClass } from '@/components/ui'
 // W2: revision-bound media controls and destination preview.
 import type { MediaItem } from '@/lib/social/media-queries'
@@ -42,12 +44,15 @@ function initialFor(platform: Platform, draft: DraftDetail): DestState['settings
     hashnode: { title: a.title, subtitle: a.subtitle, tags: a.tags, canonical_url: canonical },
     substack: { title: a.title, subtitle: a.subtitle },
     producthunt: { name: l.name, tagline: l.tagline, maker_comment: l.maker_comment },
+    medium: { title: a.title, subtitle: a.subtitle, tags: a.tags, canonical_url: canonical },
+    reddit: { post_type: 'self' },
+    pinterest: { link: draft.source_url ?? '' },
   }
   const base = defaults[platform] ?? {}
   const text =
     variant?.text ||
     (platform === 'producthunt' ? (l.description as string) : undefined) ||
-    (['devto', 'hashnode', 'substack'].includes(platform) ? (a.body_markdown as string) : undefined) ||
+    (PLATFORM_KIND[platform] === 'article' ? (a.body_markdown as string) : undefined) ||
     draft.revision.canonical_text
   return { ...base, ...(variant?.settings ?? {}), __text: text ?? '' }
 }
@@ -131,8 +136,42 @@ function SettingsFields({
           <div className="sm:col-span-2">{text('maker_comment', 'Comentariul makerului')}</div>
         </div>
       )
-    default:
-      return null
+    default: {
+      // Amendment 04 platforms: fields come from platform-settings.ts.
+      const fields = SETTINGS_FIELDS[platform]
+      if (!fields?.length) return null
+      return (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {fields.map((f) => {
+            const label = f.required ? `${f.label} *` : f.label
+            if (f.kind === 'tags') return tags(MEDIUM_MAX_TAGS)
+            if (f.kind === 'select') {
+              return (
+                <Field label={label} hint={f.hint} key={f.key}>
+                  <select
+                    value={(settings[f.key] as string) ?? f.options?.[0]?.value ?? ''}
+                    disabled={disabled}
+                    onChange={(e) => onChange({ ...settings, [f.key]: e.target.value })}
+                    className={inputClass}
+                  >
+                    {f.options?.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )
+            }
+            return (
+              <div key={f.key} className={f.wide ? 'sm:col-span-2' : undefined}>
+                {text(f.key, label, f.hint)}
+              </div>
+            )
+          })}
+        </div>
+      )
+    }
   }
 }
 
@@ -343,8 +382,12 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
                     hint={
                       <span className={cn(activeV.maxLength !== null && activeV.length > activeV.maxLength && 'font-bold text-danger')}>
                         {measureLength(activeAcc.platform, activeDest.text)}
-                        {maxLengthFor(activeAcc.platform, activeAcc.rules) !== null ? ` / ${maxLengthFor(activeAcc.platform, activeAcc.rules)}` : ''}{' '}
-                        {activeAcc.platform === 'x' ? 'caractere ponderate X (un link = 23)' : 'caractere'}
+                        {activeV.maxLength !== null ? ` / ${activeV.maxLength}` : ''}{' '}
+                        {activeAcc.platform === 'x'
+                          ? 'caractere ponderate X (un link = 23)'
+                          : activeAcc.platform === 'mastodon'
+                            ? 'caractere (un link = 23)'
+                            : lengthUnit(activeAcc.platform)}
                       </span>
                     }
                   >
@@ -352,8 +395,8 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
                       value={activeDest.text}
                       disabled={!editable}
                       onChange={(e) => updateDest(activeDest.accountId, { text: e.target.value })}
-                      rows={['devto', 'hashnode', 'substack'].includes(activeAcc.platform) ? 14 : 6}
-                      className={cn(inputClass, ['devto', 'hashnode', 'substack'].includes(activeAcc.platform) && 'font-mono text-xs')}
+                      rows={PLATFORM_KIND[activeAcc.platform] === 'article' ? 14 : 6}
+                      className={cn(inputClass, PLATFORM_KIND[activeAcc.platform] === 'article' && 'font-mono text-xs')}
                     />
                   </Field>
                   {variant && variant.text && variant.text !== activeDest.text && editable ? (

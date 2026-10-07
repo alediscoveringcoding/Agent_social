@@ -23,7 +23,9 @@ import {
   isOurBlogUrl,
 } from './content-rules.ts'
 import { detectFigures, unlistedFigures, unverifiedFigures, type DraftFigure, type FigureMatch } from './figures.ts'
-import { X_MAX_WEIGHTED_LENGTH, xWeightedLength } from './x-length.ts'
+import { lengthUnit, measurePlatformLength, utf8Length } from './text-length.ts'
+import { REDDIT_POST_TYPES } from './platform-settings.ts'
+import { X_MAX_WEIGHTED_LENGTH } from './x-length.ts'
 
 export interface ValidationIssue {
   code: string
@@ -75,6 +77,20 @@ export const PLATFORM_MAX_LENGTH: Partial<Record<Platform, number>> = {
   'linkedin-page': 3000,
   facebook: 63206,
   producthunt: 260,
+  // Amendment 04 (sources in PRD section 5). Postiz's provider limit is used
+  // where it is lower than the platform's own.
+  threads: 500,
+  bluesky: 300, // graphemes
+  mastodon: 500, // a link counts 23
+  linkedin: 3000,
+  reddit: 10000, // body; Reddit itself allows 40,000
+  pinterest: 500, // description; the Pinterest API allows 800
+  telegram: 4096, // 1,024 when an image is attached (caption): TELEGRAM_CAPTION_MAX
+  discord: 1980, // Discord's message limit is 2,000; Postiz keeps 1,980
+  medium: 100000,
+  farcaster: 320, // UTF-8 bytes; a long cast (Farcaster Pro) holds 1,024
+  nostr: 100000,
+  lemmy: 10000, // body; Lemmy itself allows 50,000
 }
 
 export const MAX_IMAGES: Partial<Record<Platform, number>> = {
@@ -84,12 +100,54 @@ export const MAX_IMAGES: Partial<Record<Platform, number>> = {
   'linkedin-page': 9,
   devto: 1,
   hashnode: 1,
+  threads: 20, // carousel
+  bluesky: 4,
+  mastodon: 4, // instance default
+  linkedin: 9,
+  reddit: 1, // a media post holds exactly one file
+  pinterest: 5,
+  telegram: 10, // one media group
+  discord: 10, // attachments per message
+  medium: 1,
+  farcaster: 2, // embeds per cast
+  lemmy: 1, // the post's thumbnail
 }
 
 export const COVER_SIZES: Partial<Record<Platform, { width: number; height: number }>> = {
   devto: { width: 1000, height: 420 },
   hashnode: { width: 1600, height: 840 },
   producthunt: { width: 1270, height: 760 },
+  pinterest: { width: 1000, height: 1500 },
+}
+
+/** Alt text limits that are documented: Mastodon 1,500, Lemmy 1,500, Pinterest 500. */
+export const ALT_TEXT_MAX: Partial<Record<Platform, number>> = { mastodon: 1500, lemmy: 1500, pinterest: 500 }
+
+export const TELEGRAM_CAPTION_MAX = 1024
+export const BLUESKY_MAX_BYTES = 3000
+export const REDDIT_TITLE_MAX = 300
+export const PINTEREST_TITLE_MAX = 100
+export const PINTEREST_LINK_MAX = 2048
+export const LEMMY_TITLE_MIN = 3
+export const LEMMY_TITLE_MAX = 200
+export const LEMMY_LINK_MAX = 2000
+export const MEDIUM_MAX_TAGS = 3
+export const MEDIUM_TAG_MAX = 25
+export const THREADS_TOPIC_TAGS = 1
+
+const SUBREDDIT_RE = /^(?:\/?r\/)?[A-Za-z0-9_]{2,21}$/
+const DISCORD_CHANNEL_RE = /^\d{17,20}$/
+const NUMERIC_ID_RE = /^\d+$/
+const LEMMY_COMMUNITY_RE = /^[A-Za-z0-9_]{2,40}$/
+const FARCASTER_CHANNEL_RE = /^[a-z0-9-]{1,40}$/
+
+function isHttpUrl(v: string): boolean {
+  try {
+    const u = new URL(v)
+    return u.protocol === 'https:' || u.protocol === 'http:'
+  } catch {
+    return false
+  }
 }
 
 export const PH_TAGLINE_MAX = 60
@@ -121,15 +179,25 @@ function rulesMaxLength(rules: Record<string, unknown> | null | undefined): numb
   return null
 }
 
-export function maxLengthFor(platform: Platform, rules?: Record<string, unknown> | null): number | null {
-  const base = PLATFORM_MAX_LENGTH[platform] ?? null
+/**
+ * The limit for a destination. `imageCount` matters for Telegram only: with
+ * an image the text becomes its caption, which holds 1,024 characters.
+ */
+export function maxLengthFor(
+  platform: Platform,
+  rules?: Record<string, unknown> | null,
+  imageCount = 0
+): number | null {
+  let base = PLATFORM_MAX_LENGTH[platform] ?? null
+  if (platform === 'telegram' && imageCount > 0 && base !== null) base = Math.min(base, TELEGRAM_CAPTION_MAX)
   const fromPostiz = rulesMaxLength(rules)
   if (base === null) return fromPostiz
   return fromPostiz === null ? base : Math.min(base, fromPostiz)
 }
 
+/** The length the platform counts (X weighted, Bluesky graphemes, Farcaster bytes, ...): see text-length.ts. */
 export function measureLength(platform: Platform, text: string): number {
-  return platform === 'x' ? xWeightedLength(text) : Array.from(text).length
+  return measurePlatformLength(platform, text)
 }
 
 /** Every published string of the destination, labelled for messages. */
@@ -158,6 +226,139 @@ function fieldLabel(field: string): string {
   if (field.startsWith('settings.tags.')) return 'etichete'
   if (field.startsWith('media.')) return `textul alternativ al imaginii ${Number(field.split('.')[1]) + 1}`
   return field
+}
+
+/**
+ * Required fields and limits of the platforms added in amendment 04 (the
+ * sources are in the PRD section 5 table). Text length, image count and alt
+ * text are checked by validateDestination for every platform.
+ */
+function validateNewPlatform(input: ValidateDestinationInput, errors: ValidationIssue[], warnings: ValidationIssue[]): void {
+  const { platform, settings } = input
+  const err = (code: string, field: string, message: string) => errors.push({ code, field, message })
+  const warn = (code: string, field: string, message: string) => warnings.push({ code, field, message })
+  const chars = (v: string) => Array.from(v).length
+
+  switch (platform) {
+    case 'threads': {
+      const tags = countHashtags(input.text)
+      if (tags > THREADS_TOPIC_TAGS) {
+        warn('THREADS_HASHTAGS', 'text', `Threads face tag de subiect doar din primul hashtag; ai ${tags} hashtaguri.`)
+      }
+      break
+    }
+    case 'reddit': {
+      const sub = str(settings.subreddit).trim()
+      if (!sub) {
+        err('REDDIT_SUBREDDIT_MISSING', 'settings.subreddit', 'Reddit: alege subreddit-ul (de exemplu r/numele_comunitatii).')
+      } else if (!SUBREDDIT_RE.test(sub)) {
+        err('REDDIT_SUBREDDIT_INVALID', 'settings.subreddit', 'Reddit: subreddit-ul arata ca r/nume (litere, cifre si _, 2 pana la 21).')
+      }
+      const title = str(settings.title).trim()
+      if (!title) {
+        err('REDDIT_TITLE_MISSING', 'settings.title', 'Reddit: lipseste titlul.')
+      } else if (chars(title) > REDDIT_TITLE_MAX) {
+        err('REDDIT_TITLE_TOO_LONG', 'settings.title', `Reddit: titlul are ${chars(title)} din ${REDDIT_TITLE_MAX} caractere.`)
+      }
+      const type = str(settings.post_type).trim() || 'self'
+      if (!(REDDIT_POST_TYPES as readonly string[]).includes(type)) {
+        err('REDDIT_TYPE_INVALID', 'settings.post_type', 'Reddit: tipul postarii e Text, Link sau Imagine.')
+      }
+      if (type === 'link') {
+        const url = str(settings.link_url).trim()
+        if (!url) err('REDDIT_LINK_MISSING', 'settings.link_url', 'Reddit: o postare de tip Link are nevoie de link.')
+        else if (!isHttpUrl(url)) err('REDDIT_LINK_INVALID', 'settings.link_url', 'Reddit: linkul trebuie sa inceapa cu https://.')
+      }
+      if (type === 'media' && input.media.length !== 1) {
+        err('REDDIT_MEDIA_COUNT', 'media', 'Reddit: o postare cu imagine are exact o imagine.')
+      }
+      if (type !== 'media' && input.media.length > 0) {
+        warn('REDDIT_IMAGE_IGNORED', 'media', 'Reddit publica imaginea doar la tipul Imagine; la celelalte tipuri nu apare.')
+      }
+      break
+    }
+    case 'pinterest': {
+      if (input.media.length === 0) {
+        err('PIN_NO_IMAGE', 'media', 'Pinterest are nevoie de cel putin o imagine.')
+      }
+      const board = str(settings.board).trim()
+      if (!board) {
+        err('PIN_BOARD_MISSING', 'settings.board', 'Pinterest: alege board-ul (id-ul numeric din Postiz).')
+      } else if (!NUMERIC_ID_RE.test(board)) {
+        err('PIN_BOARD_INVALID', 'settings.board', 'Pinterest: board-ul se da prin id-ul numeric, nu prin nume.')
+      }
+      const title = str(settings.title).trim()
+      if (!title) {
+        err('PIN_TITLE_MISSING', 'settings.title', 'Pinterest: lipseste titlul.')
+      } else if (chars(title) > PINTEREST_TITLE_MAX) {
+        err('PIN_TITLE_TOO_LONG', 'settings.title', `Pinterest: titlul are ${chars(title)} din ${PINTEREST_TITLE_MAX} caractere.`)
+      }
+      const link = str(settings.link).trim()
+      if (!link) {
+        err('PIN_LINK_MISSING', 'settings.link', 'Pinterest: lipseste linkul unde duce pinul.')
+      } else if (!isHttpUrl(link) || link.length > PINTEREST_LINK_MAX) {
+        err('PIN_LINK_INVALID', 'settings.link', `Pinterest: linkul trebuie sa inceapa cu https:// si sa aiba cel mult ${PINTEREST_LINK_MAX} de caractere.`)
+      }
+      break
+    }
+    case 'discord': {
+      const channel = str(settings.channel).trim()
+      if (!channel) {
+        err('DISCORD_CHANNEL_MISSING', 'settings.channel', 'Discord: alege canalul (id numeric).')
+      } else if (!DISCORD_CHANNEL_RE.test(channel)) {
+        err('DISCORD_CHANNEL_INVALID', 'settings.channel', 'Discord: canalul se da prin id-ul numeric (17 pana la 20 de cifre).')
+      }
+      break
+    }
+    case 'lemmy': {
+      const community = str(settings.community).trim()
+      if (!community) {
+        err('LEMMY_COMMUNITY_MISSING', 'settings.community', 'Lemmy: alege comunitatea.')
+      } else if (!LEMMY_COMMUNITY_RE.test(community)) {
+        err('LEMMY_COMMUNITY_INVALID', 'settings.community', 'Lemmy: comunitatea se scrie doar cu numele (litere, cifre si _), fara instanta.')
+      }
+      const id = str(settings.community_id).trim()
+      if (!id) {
+        err('LEMMY_COMMUNITY_ID_MISSING', 'settings.community_id', 'Lemmy: lipseste id-ul numeric al comunitatii.')
+      } else if (!NUMERIC_ID_RE.test(id)) {
+        err('LEMMY_COMMUNITY_ID_INVALID', 'settings.community_id', 'Lemmy: id-ul comunitatii e un numar.')
+      }
+      const title = str(settings.title).trim()
+      if (!title) {
+        err('LEMMY_TITLE_MISSING', 'settings.title', 'Lemmy: lipseste titlul.')
+      } else if (chars(title) < LEMMY_TITLE_MIN || chars(title) > LEMMY_TITLE_MAX || /[\r\n]/.test(title)) {
+        err('LEMMY_TITLE_LENGTH', 'settings.title', `Lemmy: titlul are intre ${LEMMY_TITLE_MIN} si ${LEMMY_TITLE_MAX} de caractere, pe un singur rand.`)
+      }
+      const link = str(settings.link).trim()
+      if (link && (!isHttpUrl(link) || link.length > LEMMY_LINK_MAX)) {
+        err('LEMMY_LINK_INVALID', 'settings.link', `Lemmy: linkul trebuie sa inceapa cu https:// si sa aiba cel mult ${LEMMY_LINK_MAX} de caractere.`)
+      }
+      break
+    }
+    case 'medium': {
+      if (!str(settings.subtitle).trim()) {
+        err('MEDIUM_SUBTITLE_MISSING', 'settings.subtitle', 'Medium: lipseste subtitlul (Postiz il cere).')
+      }
+      tagsOf(settings).forEach((t, i) => {
+        if (chars(t) > MEDIUM_TAG_MAX) {
+          err('TAG_TOO_LONG', `settings.tags.${i}`, `Medium ignora etichetele de peste ${MEDIUM_TAG_MAX} de caractere ("${t}").`)
+        }
+      })
+      if (input.media.length > 0) {
+        warn('MEDIUM_NO_COVER', 'media', 'Medium nu primeste imagini prin Postiz; pune imaginile in text ca markdown.')
+      }
+      break
+    }
+    case 'farcaster': {
+      const channel = str(settings.channel).trim()
+      if (channel && !FARCASTER_CHANNEL_RE.test(channel)) {
+        err('FARCASTER_CHANNEL_INVALID', 'settings.channel', 'Farcaster: canalul se scrie cu litere mici, cifre si cratima (de exemplu founders).')
+      }
+      break
+    }
+    default:
+      break
+  }
 }
 
 export function validateDestination(input: ValidateDestinationInput): DestinationValidation {
@@ -206,7 +407,7 @@ export function validateDestination(input: ValidateDestinationInput): Destinatio
   }
 
   // Length, counted the platform's way.
-  const maxLength = maxLengthFor(platform, input.rules)
+  const maxLength = maxLengthFor(platform, input.rules, input.media.length)
   const length = measureLength(platform, text)
   if (maxLength !== null && length > maxLength) {
     errors.push({
@@ -215,7 +416,18 @@ export function validateDestination(input: ValidateDestinationInput): Destinatio
       message:
         platform === 'x'
           ? `Prea lung pentru X: ${length} din ${maxLength} (cu ponderea X, un link = 23).`
-          : `Prea lung pentru ${label}: ${length} din ${maxLength} caractere.`,
+          : platform === 'mastodon'
+            ? `Prea lung pentru Mastodon: ${length} din ${maxLength} caractere (un link = 23).`
+            : platform === 'telegram' && input.media.length > 0 && maxLength === TELEGRAM_CAPTION_MAX
+              ? `Prea lung pentru Telegram cu imagine: ${length} din ${maxLength} caractere (textul devine descrierea imaginii).`
+              : `Prea lung pentru ${label}: ${length} din ${maxLength} ${lengthUnit(platform)}.`,
+    })
+  }
+  if (platform === 'bluesky' && utf8Length(text) > BLUESKY_MAX_BYTES) {
+    errors.push({
+      code: 'TOO_LONG_BYTES',
+      field: 'text',
+      message: `Prea lung pentru Bluesky: ${utf8Length(text)} din ${BLUESKY_MAX_BYTES} octeti (emoji-urile ocupa mai multi).`,
     })
   }
 
@@ -274,15 +486,30 @@ export function validateDestination(input: ValidateDestinationInput): Destinatio
     })
   }
 
-  if (platform === 'devto' || platform === 'hashnode' || platform === 'substack') {
+  const altMax = ALT_TEXT_MAX[platform]
+  if (altMax !== undefined) {
+    input.media.forEach((m, i) => {
+      if (Array.from(m.altText).length > altMax) {
+        errors.push({
+          code: 'ALT_TEXT_TOO_LONG',
+          field: `media.${i}.alt_text`,
+          message: `Textul alternativ al imaginii ${i + 1} are peste ${altMax} de caractere (limita ${label}).`,
+        })
+      }
+    })
+  }
+
+  if (platform === 'devto' || platform === 'hashnode' || platform === 'substack' || platform === 'medium') {
     if (!str(settings.title).trim()) {
       errors.push({ code: 'TITLE_MISSING', field: 'settings.title', message: `Articolul pentru ${label} nu are titlu.` })
     }
   }
 
-  if (platform === 'devto' || platform === 'hashnode') {
+  validateNewPlatform(input, errors, warnings)
+
+  if (platform === 'devto' || platform === 'hashnode' || platform === 'medium') {
     const tags = tagsOf(settings)
-    const maxTags = platform === 'devto' ? DEVTO_MAX_TAGS : HASHNODE_MAX_TAGS
+    const maxTags = platform === 'devto' ? DEVTO_MAX_TAGS : platform === 'hashnode' ? HASHNODE_MAX_TAGS : MEDIUM_MAX_TAGS
     if (tags.length > maxTags) {
       errors.push({
         code: 'TOO_MANY_TAGS',

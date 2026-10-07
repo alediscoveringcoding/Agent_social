@@ -14,7 +14,7 @@ import { routeFetch } from '../../testing/route-fetch.ts'
 import { adminUser, approvedPost, brandId, createAccount, resetSocial, rows } from '../../testing/social-fixtures.ts'
 import { WorkerApi } from '../fake/worker-api-client.ts'
 import { runFakeGeneratorOnce } from '../fake/fake-generator.ts'
-import { claimRace, runFakeWorkerOnce, syncFakeAccounts } from '../fake/fake-worker.ts'
+import { FAKE_INTEGRATIONS, claimRace, runFakeWorkerOnce, syncFakeAccounts } from '../fake/fake-worker.ts'
 import { DRAFT_FIXTURES } from '../fake/fixtures.ts'
 import { DraftSchema } from '../schemas.ts'
 
@@ -55,7 +55,7 @@ describe('fake generator and fake worker (A3)', () => {
   it('sync registers the fake channels (paused, unassigned) and can flag a reconnect', async () => {
     const r = await syncFakeAccounts(api)
     assert.equal(r.status, 200)
-    assert.equal((await rows(db, `select 1 from social_accounts where paused and brand_id is null`)).length, 6)
+    assert.equal((await rows(db, `select 1 from social_accounts where paused and brand_id is null`)).length, FAKE_INTEGRATIONS.length)
     await syncFakeAccounts(api, { refreshNeeded: ['fake-x'] })
     const [x] = await rows(db, `select status from social_accounts where postiz_integration_id = 'fake-x'`)
     assert.equal(x.status, 'reconnect_required')

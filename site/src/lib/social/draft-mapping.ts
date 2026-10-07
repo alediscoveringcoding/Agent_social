@@ -13,7 +13,7 @@
  *  - The canonical URL of an article defaults to the draft's source article.
  */
 
-import { isPlatform, type Platform } from './constants.ts'
+import { isPlatform, PLATFORM_KIND, type Platform } from './constants.ts'
 import type { DraftInput } from './schemas.ts'
 import { validateDestination, type DestinationValidation } from './validation.ts'
 
@@ -87,7 +87,31 @@ export function settingsFor(platform: Platform, draft: DraftInput, variantSettin
       return clean({ post_type: 'post', ...variantSettings })
     case 'facebook':
     case 'linkedin-page':
+    case 'linkedin':
+    case 'threads':
+    case 'bluesky':
+    case 'mastodon':
+    case 'telegram':
+    case 'nostr':
+    case 'discord':
+    case 'farcaster':
       return clean({ ...variantSettings })
+    case 'reddit':
+      // The generator suggests the title; the subreddit is chosen by a person.
+      return clean({ post_type: 'self', ...variantSettings })
+    case 'pinterest':
+      // The pin links to the source article unless the variant says otherwise.
+      return clean({ link: draft.source_url ?? undefined, ...variantSettings })
+    case 'lemmy':
+      return clean({ ...variantSettings })
+    case 'medium':
+      return clean({
+        title: a?.title,
+        subtitle: a?.subtitle ?? undefined,
+        tags: a?.tags ?? undefined,
+        canonical_url: canonical,
+        ...variantSettings,
+      })
     case 'devto':
       return clean({ title: a?.title, tags: a?.tags ?? undefined, canonical_url: canonical, ...variantSettings })
     case 'hashnode':
@@ -108,7 +132,7 @@ export function settingsFor(platform: Platform, draft: DraftInput, variantSettin
 function textFor(platform: Platform, draft: DraftInput, variantText: string): string {
   if (variantText.trim()) return variantText
   if (platform === 'producthunt') return draft.launch?.description ?? ''
-  if (draft.article && (platform === 'devto' || platform === 'hashnode' || platform === 'substack')) {
+  if (draft.article && PLATFORM_KIND[platform] === 'article') {
     return draft.article.body_markdown
   }
   return ''

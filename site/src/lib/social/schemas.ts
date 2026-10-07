@@ -89,7 +89,7 @@ const settingsSchema = z.record(z.string(), z.unknown())
 
 /**
  * `platform` is a free string here on purpose: a variant for a name outside
- * the contract (say "linkedin" instead of "linkedin-page") is kept on the
+ * the contract (say "twitter" instead of "x") is kept on the
  * revision and named in the reviewer notes, but gets no destination. Refusing
  * it would 422 the whole batch and lose every other draft with it.
  */

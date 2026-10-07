@@ -109,7 +109,7 @@ describe('drafts from the Track B generator are accepted', () => {
     const draft = trackBDraft('1', {
       variants: [
         { platform: 'x', text: 'Termenul este 25 mai.', settings: {} },
-        { platform: 'linkedin', text: 'Varianta cu un nume de platforma gresit.', settings: {} },
+        { platform: 'twitter', text: 'Varianta cu un nume de platforma gresit.', settings: {} },
       ],
     })
     const r = await deliver([draft])
@@ -117,7 +117,7 @@ describe('drafts from the Track B generator are accepted', () => {
     const dests = await rows(db, `select platform from social_destinations`)
     assert.deepEqual(dests.map((d) => d.platform), ['x'])
     const [rev] = await rows(db, `select notes, variants from social_post_revisions`)
-    assert.match(rev.notes, /linkedin/)
+    assert.match(rev.notes, /twitter/)
     assert.equal(rev.variants.length, 2)
   })
 

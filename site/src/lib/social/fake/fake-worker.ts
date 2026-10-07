@@ -175,6 +175,19 @@ export const FAKE_INTEGRATIONS = [
   { postiz_integration_id: 'fake-instagram', provider: 'instagram-standalone', name: 'taxes.support.test (Instagram)', rules: { max_length: 2200 } },
   { postiz_integration_id: 'fake-devto', provider: 'devto', name: 'taxes-support-test (dev.to)', rules: {} },
   { postiz_integration_id: 'fake-hashnode', provider: 'hashnode', name: 'Taxes Support blog (Hashnode, test)', rules: {} },
+  // Amendment 04 (provider identifiers as Postiz v2.25.0 reports them; Farcaster is "wrapcast").
+  { postiz_integration_id: 'fake-threads', provider: 'threads', name: 'taxes.support.test (Threads)', rules: { max_length: 500 } },
+  { postiz_integration_id: 'fake-bluesky', provider: 'bluesky', name: 'taxes-support-test (Bluesky)', rules: {} },
+  { postiz_integration_id: 'fake-mastodon', provider: 'mastodon', name: 'taxes_support_test (Mastodon)', rules: {} },
+  { postiz_integration_id: 'fake-linkedin-profile', provider: 'linkedin', name: 'Taxes Support (LinkedIn profil, test)', rules: { max_length: 3000 } },
+  { postiz_integration_id: 'fake-reddit', provider: 'reddit', name: 'taxes_support_test (Reddit)', rules: {} },
+  { postiz_integration_id: 'fake-pinterest', provider: 'pinterest', name: 'taxes.support.test (Pinterest)', rules: {} },
+  { postiz_integration_id: 'fake-telegram', provider: 'telegram', name: 'Taxes Support (Telegram, test)', rules: {} },
+  { postiz_integration_id: 'fake-discord', provider: 'discord', name: 'Taxes Support (Discord, test)', rules: {} },
+  { postiz_integration_id: 'fake-medium', provider: 'medium', name: 'taxes-support-test (Medium)', rules: {} },
+  { postiz_integration_id: 'fake-farcaster', provider: 'wrapcast', name: 'taxes-support-test (Farcaster)', rules: {} },
+  { postiz_integration_id: 'fake-nostr', provider: 'nostr', name: 'taxes-support-test (Nostr)', rules: {} },
+  { postiz_integration_id: 'fake-lemmy', provider: 'lemmy', name: 'taxes_support_test (Lemmy)', rules: {} },
 ]
 
 export async function syncFakeAccounts(api: WorkerApi, opts: { refreshNeeded?: string[] } = {}) {

@@ -13,6 +13,7 @@
  */
 
 import { PLATFORM_KIND, PLATFORM_LABELS, type Platform, type PostKind } from './constants.ts'
+import { SETTINGS_FIELDS } from './platform-settings.ts'
 
 // ---------------------------------------------------------------------------
 // Markdown subset to HTML / plain text
@@ -248,7 +249,7 @@ export function buildHandoff(input: HandoffInput): Handoff {
     const body = input.text.trim() ? input.text : str(a.body_markdown)
     add('title', 'Titlu', str(s.title) || str(a.title) || input.title || '')
     add('subtitle', 'Subtitlu', str(s.subtitle) || str(a.subtitle))
-    if (input.platform === 'devto' || input.platform === 'hashnode') {
+    if (input.platform === 'devto' || input.platform === 'hashnode' || input.platform === 'medium') {
       add('tags', 'Taguri', str(s.tags) || str(a.tags))
       add('canonical_url', 'Link canonic', str(s.canonical_url) || str(a.canonical_url))
     }
@@ -259,6 +260,13 @@ export function buildHandoff(input: HandoffInput): Handoff {
     }
   }
 
+  // Amendment 04: Reddit, Pinterest, Lemmy and the others have fields the
+  // platform's own editor asks for (subreddit, board, community, title, link).
+  for (const f of SETTINGS_FIELDS[input.platform] ?? []) {
+    let value = str(s[f.key])
+    if (f.kind === 'select') value = f.options?.find((o) => o.value === value)?.label ?? value
+    add(f.key, f.label, value, f.max ? { max: f.max } : {})
+  }
   return {
     fields,
     body: { label: 'Text', plain: input.text, markdown: input.text, html: textToHtml(input.text) },
@@ -292,6 +300,42 @@ export const CHECKLISTS: Record<string, string[]> = {
   instagram: ['Imaginea e incarcata', 'Descrierea e lipita (fara linkuri)', 'Postarea e publicata pe contul corect'],
   x: ['Textul e lipit (cel mult 280 de caractere)', 'Imaginile sunt atasate', 'Postarea e publicata pe contul corect'],
   social: ['Textul e lipit si recitit', 'Imaginea e atasata', 'Postarea e publicata pe pagina corecta'],
+  // Amendment 04.
+  threads: ['Textul e lipit (cel mult 500 de caractere)', 'Imaginile sunt atasate', 'Postarea e publicata pe contul corect'],
+  bluesky: ['Textul e lipit (cel mult 300 de caractere)', 'Imaginile (cel mult 4) au text alternativ', 'Postarea e publicata pe contul corect'],
+  mastodon: ['Textul e lipit (cel mult 500 de caractere, un link = 23)', 'Imaginile (cel mult 4) au text alternativ', 'Postarea e publicata pe contul corect'],
+  linkedin: ['Textul e lipit (cel mult 3000 de caractere)', 'Imaginile sunt atasate', 'Postarea e publicata pe profilul corect'],
+  reddit: [
+    'Subreddit-ul e cel din campurile de mai sus',
+    'Titlul (cel mult 300 de caractere) e copiat',
+    'Regulile subreddit-ului permit postarea si flair-ul e ales, daca se cere',
+    'Textul sau linkul sunt lipite, dupa tipul postarii',
+    'Postarea e publicata si linkul ei e salvat',
+  ],
+  pinterest: [
+    'Imaginea (1000x1500) e incarcata',
+    'Titlul (cel mult 100 de caractere) si descrierea sunt copiate',
+    'Linkul de destinatie e completat',
+    'Board-ul corect e ales',
+    'Pinul e publicat',
+  ],
+  telegram: ['Textul e lipit (cel mult 4096 de caractere, 1024 cu imagine)', 'Imaginea e atasata, daca exista', 'Mesajul e trimis in canalul corect'],
+  discord: ['Textul e lipit (cel mult 2000 de caractere)', 'Imaginile sunt atasate', 'Mesajul e trimis in canalul corect'],
+  medium: [
+    'Titlul, subtitlul si etichetele (cel mult 3) sunt completate',
+    'Linkul canonic din setarile avansate ale povestirii duce la articolul de pe blog',
+    'Corpul articolului e lipit si arata bine in previzualizare',
+    'Imaginile sunt incarcate in text',
+    'Articolul e publicat',
+  ],
+  farcaster: ['Textul e lipit (cel mult 320 de octeti)', 'Cel mult 2 imagini sunt atasate', 'Postarea e publicata pe contul si in canalul corect'],
+  nostr: ['Textul e lipit', 'Imaginile sunt adaugate ca linkuri', 'Nota e publicata pe contul corect'],
+  lemmy: [
+    'Comunitatea e cea din campurile de mai sus',
+    'Titlul (3 pana la 200 de caractere) e copiat',
+    'Textul (si linkul, daca exista) sunt lipite',
+    'Postarea e publicata si linkul ei e salvat',
+  ],
 }
 
 /** "declaratia-unica-substack.md" */
