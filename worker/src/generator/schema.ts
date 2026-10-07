@@ -5,7 +5,7 @@ import { PLATFORMS } from "../platforms.js";
 // Gemini does not accept maxLength; content is checked after parsing.
 const article = z.strictObject({
   title: z.string().describe("Article title, at most 300 characters"),
-  subtitle: z.string().describe("Subtitle; empty string when absent"),
+  subtitle: z.string().describe("Subtitle; empty string when absent; the lead sentence of a press release"),
   body_markdown: z.string().describe("Complete Romanian article in Markdown"),
   tags: z.array(z.string()).describe("At most four short tags; at most three, each at most 25 characters, when medium is a target"),
   canonical_url: z.string().describe("Original article URL on our blog; empty when absent"),
@@ -27,7 +27,7 @@ export const ModelDraftSchema = z.strictObject({
     text: z.string().describe("Social copy; empty string for article and launch destinations"),
     // Optional-looking fields are required strings: Claude structured outputs
     // allow at most 24 optional parameters, so "absent" is an empty string.
-    title: z.string().describe("Post title for reddit (at most 300 characters), pinterest (at most 100), lemmy (3 to 200), dribbble, skool, tiktok (at most 90) and youtube (at most 100); optional for tumblr and whop; empty string for every other platform"),
+    title: z.string().describe("Post title for reddit (at most 300 characters), pinterest (at most 100), lemmy (3 to 200), dribbble, skool, tiktok (at most 90), youtube (at most 100), tradingview (at most 100) and indiehackers (at most 150); optional for tumblr, whop and forum (a new thread); for stackexchange only a question (15 to 150); empty string for every other platform"),
     link: z.string().describe("Destination URL for pinterest, optional link for lemmy and tumblr, normally the source URL; empty string for every other platform"),
   })),
   article: article.nullable(),

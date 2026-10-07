@@ -8,6 +8,8 @@ export const PLATFORMS = [
   "medium", "farcaster", "nostr", "lemmy",
   "slack", "wordpress", "listmonk", "vk", "gmb", "tumblr", "dribbble", "mewe", "skool", "whop",
   "moltbook", "kick", "twitch", "tiktok", "youtube",
+  // Amendment 05: manual-only channels, no Postiz provider.
+  "quora", "linkedin-article", "tradingview", "investing", "indiehackers", "stackexchange", "github", "forum", "press",
 ] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
@@ -26,14 +28,21 @@ export const PLATFORM_KIND: Record<Platform, PostKind> = {
   slack: "social", wordpress: "article", listmonk: "article", vk: "social", gmb: "social", tumblr: "social",
   dribbble: "social", mewe: "social", skool: "social", whop: "social", moltbook: "social", kick: "social",
   twitch: "social", tiktok: "social", youtube: "social",
+  quora: "social", "linkedin-article": "article", tradingview: "social", investing: "social", indiehackers: "social",
+  stackexchange: "social", github: "article", forum: "social", press: "article",
 };
 
 /**
  * Platforms whose account is always manual (the site decides; the worker never
  * receives their jobs and refuses to build a Postiz post for them): no publishing
- * API (Substack, Product Hunt) or video only (YouTube: this app makes text and images).
+ * API (Substack, Product Hunt) or video only (YouTube: this app makes text and images), or a channel the app posts to by hand (amendment 05).
  */
-export const MANUAL_ONLY_PLATFORMS: readonly Platform[] = ["substack", "producthunt", "youtube"];
+export const MANUAL_ONLY_PLATFORMS: readonly Platform[] = [
+  "substack", "producthunt", "youtube",
+  // Amendment 05: no API we use (Quora, TradingView, Investing.com, Indie Hackers), an API we do not automate
+  // (LinkedIn articles, Stack Exchange, GitHub) or one account per forum or outlet (forum, press).
+  "quora", "linkedin-article", "tradingview", "investing", "indiehackers", "stackexchange", "github", "forum", "press",
+];
 
 /**
  * Our platform to the Postiz provider identifier (the `identifier` of

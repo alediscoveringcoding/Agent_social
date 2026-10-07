@@ -30,6 +30,12 @@ export function variantSettings(
     case "youtube": return title ? { title } : {};
     // The site fills privacy_level itself (SELF_ONLY), so a person widens it; only the title comes from the model.
     case "tiktok": return title ? { title } : {};
+    // Amendment 05: manual channels. The question, symbol, instrument and thread are chosen by a person.
+    case "tradingview":
+    case "indiehackers":
+    case "forum": return title ? { title } : {};
+    // A title means a new question; without one the variant is an answer (the site's default).
+    case "stackexchange": return title ? { post_type: "question", title } : {};
     default: return {};
   }
 }

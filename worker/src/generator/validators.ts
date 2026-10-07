@@ -61,6 +61,15 @@ export const LENGTH_LIMITS: Record<string, number> = {
   twitch: 500,
   tiktok: 2000,
   youtube: 5000,
+  quora: 20000,
+  "linkedin-article": 110000,
+  tradingview: 10000,
+  investing: 5000,
+  indiehackers: 20000,
+  stackexchange: 30000,
+  github: 125000,
+  forum: 20000,
+  press: 50000,
 };
 export const TIKTOK_TITLE_MAX = 90;
 export const YOUTUBE_TITLE_MAX = 100;
@@ -69,6 +78,10 @@ export const REDDIT_TITLE_MAX = 300;
 export const PINTEREST_TITLE_MAX = 100;
 export const LEMMY_TITLE_MIN = 3;
 export const LEMMY_TITLE_MAX = 200;
+export const TRADINGVIEW_TITLE_MAX = 100;
+export const INDIEHACKERS_TITLE_MAX = 150;
+export const SE_TITLE_MIN = 15;
+export const SE_TITLE_MAX = 150;
 export const MEDIUM_MAX_TAGS = 3;
 export const MEDIUM_TAG_MAX = 25;
 
@@ -101,6 +114,19 @@ export function validateVariantFields(platform: string, variant: { title?: strin
   if (platform === "youtube") {
     if (!title) add("youtube_title", "YouTube needs a title");
     else if (chars > YOUTUBE_TITLE_MAX) add("youtube_title", `YouTube title exceeds ${YOUTUBE_TITLE_MAX} characters (got ${chars})`);
+  }
+  // Amendment 05 (manual channels): TradingView and Indie Hackers refuse a post without a title; a Stack Exchange
+  // title (a question) is 15 to 150 characters. Forum: a title opens a new thread, none means a reply.
+  if (platform === "tradingview") {
+    if (!title) add("tradingview_title", "TradingView needs a title");
+    else if (chars > TRADINGVIEW_TITLE_MAX) add("tradingview_title", `TradingView title exceeds ${TRADINGVIEW_TITLE_MAX} characters (got ${chars})`);
+  }
+  if (platform === "indiehackers") {
+    if (!title) add("indiehackers_title", "Indie Hackers needs a title");
+    else if (chars > INDIEHACKERS_TITLE_MAX) add("indiehackers_title", `Indie Hackers title exceeds ${INDIEHACKERS_TITLE_MAX} characters (got ${chars})`);
+  }
+  if (platform === "stackexchange" && title && (chars < SE_TITLE_MIN || chars > SE_TITLE_MAX)) {
+    add("stackexchange_title", `Stack Exchange title needs ${SE_TITLE_MIN} to ${SE_TITLE_MAX} characters (got ${chars})`);
   }
   return errors;
 }

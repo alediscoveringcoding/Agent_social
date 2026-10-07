@@ -12,6 +12,8 @@ import { modelDraft, variant } from "../test-support/drafts.js";
 
 const NEW_PLATFORMS = ["threads", "bluesky", "mastodon", "linkedin", "reddit", "pinterest", "telegram", "discord", "medium", "farcaster", "nostr", "lemmy"] as const;
 const BATCH2 = ["slack", "wordpress", "listmonk", "vk", "gmb", "tumblr", "dribbble", "mewe", "skool", "whop", "moltbook", "kick", "twitch", "tiktok", "youtube"] as const;
+const BATCH3 = ["quora", "linkedin-article", "tradingview", "investing", "indiehackers", "stackexchange", "github", "forum", "press"] as const;
+const MANUAL_NO_PROVIDER: readonly string[] = ["substack", "producthunt", ...BATCH3];
 
 /** Claude structured outputs: at most 24 optional parameters and 16 union-type parameters in the whole schema. */
 function schemaStats(node: unknown): { optional: number; unions: number; maxLength: number } {
@@ -35,14 +37,14 @@ test("the generator schema lists every platform, and the worker's tables agree w
   const platformSchema = (draftSchema as any).properties.drafts.items.properties.variants.items.properties.platform;
   assert.deepEqual([...platformSchema.enum].sort(), [...PLATFORMS].sort());
   for (const p of NEW_PLATFORMS) assert.ok((PLATFORMS as readonly string[]).includes(p), p);
-  assert.equal(PLATFORMS.length, 35);
+  assert.equal(PLATFORMS.length, 44);
   for (const p of BATCH2) assert.ok((PLATFORMS as readonly string[]).includes(p), p);
   assert.deepEqual(Object.keys(PLATFORM_KIND).sort(), [...PLATFORMS].sort());
   assert.equal(PLATFORM_KIND.medium, "article");
   for (const p of NEW_PLATFORMS) if (p !== "medium") assert.equal(PLATFORM_KIND[p], "social", p);
   // Every automatic platform has a Postiz provider; the two manual-only ones do not.
-  for (const p of PLATFORMS) assert.equal(POSTIZ_PROVIDER[p] === undefined, p === "substack" || p === "producthunt", p);
-  assert.deepEqual([...MANUAL_ONLY_PLATFORMS], ["substack", "producthunt", "youtube"], "YouTube needs video: manual only");
+  for (const p of PLATFORMS) assert.equal(POSTIZ_PROVIDER[p] === undefined, MANUAL_NO_PROVIDER.includes(p), p);
+  assert.deepEqual([...MANUAL_ONLY_PLATFORMS], ["substack", "producthunt", "youtube", ...BATCH3], "YouTube needs video; amendment 05 adds nine manual channels");
   assert.equal(PLATFORM_KIND.wordpress, "article");
   assert.equal(PLATFORM_KIND.listmonk, "article");
 });
@@ -61,7 +63,7 @@ test("a draft with a variant for every platform parses, and the model's title an
   const model = modelDraft({ variants });
   assert.doesNotThrow(() => ModelDraftSchema.parse(model));
   const parsed = parseModelResponse(JSON.stringify({ drafts: [{ ...model, variants: variants.map((v) => ({ ...v, platform: v.platform.toUpperCase() })) }] }));
-  assert.equal(parsed[0].variants.length, 35);
+  assert.equal(parsed[0].variants.length, 44);
 
   const draft = validateDraft({ ...model, kind: "social", article: null, launch: null }, 0, "taxes-support");
   const by = (platform: string) => draft.variants.find((v: any) => v.platform === platform);
@@ -199,4 +201,53 @@ test("second batch: a draft with titles keeps them as settings; WordPress and Li
   const article = { title: "Titlu", subtitle: "Subtitlu", body_markdown: "Un ghid calm", tags: ["a"], canonical_url: "https://thecrypto.support/ghid/x" };
   const ok = validateDraft(modelDraft({ kind: "article", article, variants: [variant("wordpress", ""), variant("listmonk", "")] }), 0, "taxes-support");
   assert.deepEqual(ok.validation_errors, []);
+});
+
+test("manual channels (amendment 05): kinds, no Postiz post, limits and the title rules", () => {
+  for (const p of BATCH3) {
+    assert.ok(MANUAL_ONLY_PLATFORMS.includes(p), p);
+    assert.equal(POSTIZ_PROVIDER[p], undefined, p);
+    assert.equal(PLATFORM_KIND[p], ["linkedin-article", "github", "press"].includes(p) ? "article" : "social", p);
+  }
+  const over = (platform: string, text: string) => validateContent(text, platform).some((e) => e.rule === "length");
+  for (const [platform, limit] of [["quora", 20000], ["linkedin-article", 110000], ["tradingview", 10000], ["investing", 5000], ["indiehackers", 20000], ["stackexchange", 30000], ["github", 125000], ["forum", 20000], ["press", 50000]] as const) {
+    assert.ok(!over(platform, "a".repeat(limit)), `${platform} at ${limit}`);
+    assert.ok(over(platform, "a".repeat(limit + 1)), `${platform} over ${limit}`);
+  }
+  const rules = (platform: string, title?: string) => validateVariantFields(platform, { title }).map((e) => e.rule);
+  assert.deepEqual(rules("tradingview"), ["tradingview_title"]);
+  assert.deepEqual(rules("tradingview", "a".repeat(100)), []);
+  assert.deepEqual(rules("tradingview", "a".repeat(101)), ["tradingview_title"]);
+  assert.deepEqual(rules("indiehackers"), ["indiehackers_title"]);
+  assert.deepEqual(rules("indiehackers", "a".repeat(151)), ["indiehackers_title"]);
+  assert.deepEqual(rules("stackexchange"), [], "an answer has no title");
+  assert.deepEqual(rules("stackexchange", "prea scurt"), ["stackexchange_title"]);
+  assert.deepEqual(rules("stackexchange", "a".repeat(15)), []);
+  assert.deepEqual(rules("forum"), [], "a reply has no title");
+
+  const variants = [
+    variant("tradingview", "Descriere", { title: "O idee calma" }),
+    variant("stackexchange", "Sunt afiliat cu Taxes Support. Raspunsul explica pasii.", {}),
+    variant("stackexchange", "Sunt afiliat cu Taxes Support. Intrebarea are context.", { title: "Cum declar castigurile din crypto?" }),
+    variant("forum", "Un raspuns", {}),
+    variant("forum", "Un fir nou", { title: "Declaratia Unica 2026" }),
+    variant("quora", "Un raspuns", {}),
+  ];
+  const draft = validateDraft({ ...modelDraft({ variants }), kind: "social", article: null, launch: null }, 0, "taxes-support");
+  const settings = draft.variants.map((v: any) => [v.platform, v.settings]);
+  assert.deepEqual(settings, [
+    ["tradingview", { title: "O idee calma" }],
+    ["stackexchange", {}],
+    ["stackexchange", { post_type: "question", title: "Cum declar castigurile din crypto?" }],
+    ["forum", {}],
+    ["forum", { title: "Declaratia Unica 2026" }],
+    ["quora", {}],
+  ]);
+});
+
+test("the prompt covers the manual channels and requires the Stack Exchange affiliation", () => {
+  const prompt = buildSystemPrompt({ slug: "taxes-support", name: "Taxes Support" }, {});
+  for (const p of BATCH3) assert.ok(prompt.includes(p), p);
+  assert.match(prompt, /MUST disclose the affiliation/);
+  assert.match(prompt, /press release/);
 });
