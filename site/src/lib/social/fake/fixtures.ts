@@ -13,6 +13,8 @@
  *   launch           Product Hunt launch kit
  *   more-platforms   Threads, Bluesky, Mastodon, LinkedIn (profile), Reddit,
  *                    Pinterest, Telegram, Discord, Farcaster, Nostr, Lemmy
+ *   every-platform   Slack, VK, Google Business, Tumblr, Dribbble, MeWe, Skool,
+ *                    Whop, Moltbook, Kick, Twitch, TikTok, YouTube (manual: video)
  *
  * Every entry carries the generator's own `validation_errors` the way the
  * real generator reports a draft it could not repair.
@@ -158,6 +160,8 @@ export const DRAFT_FIXTURES: Fixture[] = [
       { platform: 'hashnode', text: '', settings: {} },
       { platform: 'substack', text: '', settings: {} },
       { platform: 'medium', text: '', settings: {} },
+      { platform: 'wordpress', text: '', settings: {} },
+      { platform: 'listmonk', text: '', settings: {} },
     ],
     article: {
       title: 'Cum calculezi impozitul pe crypto',
@@ -172,7 +176,63 @@ export const DRAFT_FIXTURES: Fixture[] = [
     card: card('Cum calculezi impozitul pe crypto', 'impozitul', null, 'light'),
     figures: [],
     validation_errors: [],
-    notes: 'Fixture: articol pentru dev.to, Hashnode, Substack si Medium.',
+    notes: 'Fixture: articol pentru dev.to, Hashnode, Substack, Medium, WordPress si Listmonk.',
+  },
+  {
+    name: 'every-platform',
+    kind: 'social',
+    title: 'Declaratia Unica, pentru restul platformelor',
+    canonical_text: 'Ai pana pe 25 mai sa depui Declaratia Unica pentru castigurile din 2025.',
+    source_url: 'https://thecrypto.support/ghid/declaratia-unica',
+    variants: [
+      { platform: 'slack', text: 'Reminder pentru echipa: Declaratia Unica se depune pana pe 25 mai. Ghid: https://thecrypto.support/ghid/declaratia-unica', settings: {} },
+      { platform: 'vk', text: 'Declaratia Unica se depune pana pe 25 mai. Ghidul pas cu pas: https://thecrypto.support/ghid/declaratia-unica', settings: {} },
+      { platform: 'gmb', text: 'Ajutor la Declaratia Unica pentru castigurile din crypto. Termenul este 25 mai.', settings: {} },
+      {
+        platform: 'tumblr',
+        text: 'Ai pana pe 25 mai sa depui Declaratia Unica. Am strans pasii intr-un ghid scurt.',
+        settings: { title: 'Declaratia Unica: termenul este 25 mai', link: 'https://thecrypto.support/ghid/declaratia-unica' },
+      },
+      {
+        platform: 'dribbble',
+        text: 'Cardul pentru termenul Declaratiei Unice, in trei variante de culoare.',
+        settings: { title: 'Declaratia Unica, 25 mai' },
+      },
+      { platform: 'mewe', text: 'Declaratia Unica se depune pana pe 25 mai. Iti explicam calm, pas cu pas.', settings: {} },
+      {
+        platform: 'skool',
+        text: 'Termenul pentru Declaratia Unica este 25 mai. Mai jos sunt pasii pentru castigurile din crypto din 2025.',
+        settings: { title: 'Declaratia Unica: ce faci pana pe 25 mai' },
+      },
+      {
+        platform: 'whop',
+        text: 'Termenul pentru Declaratia Unica este 25 mai. Pasii pentru castigurile din crypto din 2025, pe scurt.',
+        settings: { title: 'Declaratia Unica: termenul' },
+      },
+      { platform: 'moltbook', text: 'Declaratia Unica se depune pana pe 25 mai. Iti explicam pasii calm.', settings: {} },
+      { platform: 'kick', text: 'Reminder: Declaratia Unica se depune pana pe 25 mai.', settings: {} },
+      { platform: 'twitch', text: 'Reminder: Declaratia Unica se depune pana pe 25 mai.', settings: {} },
+      {
+        platform: 'tiktok',
+        text: 'Declaratia Unica se depune pana pe 25 mai. Pasii pentru castigurile din crypto, pe scurt.',
+        settings: { title: 'Declaratia Unica: termen 25 mai' },
+      },
+      {
+        platform: 'youtube',
+        text: 'Cum depui Declaratia Unica pentru castigurile din crypto, pas cu pas. Termenul este 25 mai.',
+        settings: { title: 'Declaratia Unica pentru crypto, pas cu pas' },
+      },
+    ],
+    article: null,
+    launch: null,
+    card: card('Declaratia Unica se depune pana pe 25 mai', '25 mai', '25 mai', 'light'),
+    figures: [
+      { value: '25 mai', context: 'termen Declaratia Unica', source: 'facts' },
+      { value: '2025', context: 'anul veniturilor', source: 'facts' },
+    ],
+    validation_errors: [],
+    notes:
+      'Fixture: restul platformelor Postiz. Slack, Skool, Whop, MeWe, Google Business si Dribbble cer inca un camp; Dribbble si TikTok cer imaginea; YouTube cere video, deci merge manual.',
   },
   {
     name: 'more-platforms',

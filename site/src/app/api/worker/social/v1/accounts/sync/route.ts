@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { AccountStatus } from '@/lib/social/constants'
+import { MANUAL_ONLY_PLATFORMS, type AccountStatus } from '@/lib/social/constants'
 import { SyncBody } from '@/lib/social/schemas'
 import { becameReconnectRequired, platformForProvider, syncedStatus } from '@/lib/social/sync-rules'
 import { apiOk, handleWorkerCall, readBody } from '@/lib/social/server/worker-http'
@@ -82,10 +82,14 @@ export async function POST(request: Request) {
         const { error: upError } = await admin.from('social_accounts').update(fields).eq('id', before.id)
         if (upError) throw new Error(`update account: ${upError.message}`)
       } else {
+        // A platform that is always manual (YouTube needs video) syncs as a manual
+        // account: it shows up and takes handoffs, and the worker never gets its jobs.
+        const manualOnly = MANUAL_ONLY_PLATFORMS.includes(platform)
         const { error: insError } = await admin.from('social_accounts').insert({
           ...fields,
+          status: manualOnly ? 'manual' : fields.status,
           platform,
-          mode: 'auto',
+          mode: manualOnly ? 'manual' : 'auto',
           brand_id: null,
           paused: true,
           postiz_integration_id: integration.postiz_integration_id,

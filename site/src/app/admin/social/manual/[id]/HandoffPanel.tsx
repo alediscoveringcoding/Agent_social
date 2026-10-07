@@ -28,7 +28,7 @@ export function HandoffPanel({ detail: d }: { detail: ManualJobDetail }) {
     start(async () => { const r = await markManualPublished(d.job.id, url); if (!r.ok) toast.error(r.error); else toast.success(r.alreadyDone ? 'Publicarea era deja marcata.' : 'Publicare confirmata.'); router.refresh() })
   }
   const done = d.job.status === 'manual_done'
-  return <div className="grid gap-5 lg:grid-cols-[2fr_1fr]"><div className="space-y-5"><Card><h2 className="mb-3 font-bold">Campuri pentru editor</h2>
+  return <div className="grid gap-5 lg:grid-cols-[2fr_1fr]"><div className="space-y-5">{d.handoff.notice && <Card><p className="text-sm font-semibold text-warn" role="note">{d.handoff.notice}</p></Card>}<Card><h2 className="mb-3 font-bold">Campuri pentru editor</h2>
     {!d.handoff.fields.length && <p className="text-sm text-ink-soft">Textul de mai jos este gata de copiat.</p>}
     {d.handoff.fields.map((f) => <div className="mb-4" key={f.key}><div className="mb-1 flex justify-between gap-2"><strong className="text-sm">{f.label}{f.max ? ` (${f.value.length}/${f.max})` : ''}</strong><Button tone="ghost" onClick={() => copy(f.value)}>Copiaza</Button></div><textarea aria-label={f.label} readOnly rows={f.multiline ? 4 : 2} className={inputClass} value={f.value} /></div>)}
     <h2 className="mb-2 font-bold">{d.handoff.body.label}</h2><div className="mb-3 flex flex-wrap gap-2"><Button tone="secondary" onClick={() => copy(d.handoff.body.plain)}>Copiaza text</Button><Button tone="secondary" onClick={() => copy(d.handoff.body.markdown)}>Copiaza markdown</Button><Button tone="secondary" onClick={() => copy(d.handoff.body.html)}>Copiaza HTML</Button></div>

@@ -188,6 +188,22 @@ export const FAKE_INTEGRATIONS = [
   { postiz_integration_id: 'fake-farcaster', provider: 'wrapcast', name: 'taxes-support-test (Farcaster)', rules: {} },
   { postiz_integration_id: 'fake-nostr', provider: 'nostr', name: 'taxes-support-test (Nostr)', rules: {} },
   { postiz_integration_id: 'fake-lemmy', provider: 'lemmy', name: 'taxes_support_test (Lemmy)', rules: {} },
+  // Amendment 04, second batch (the YouTube channel syncs as a manual account: it needs video).
+  { postiz_integration_id: 'fake-slack', provider: 'slack', name: 'Taxes Support (Slack, test)', rules: {} },
+  { postiz_integration_id: 'fake-wordpress', provider: 'wordpress', name: 'Taxes Support blog (WordPress, test)', rules: {} },
+  { postiz_integration_id: 'fake-listmonk', provider: 'listmonk', name: 'Taxes Support (Listmonk, test)', rules: {} },
+  { postiz_integration_id: 'fake-vk', provider: 'vk', name: 'Taxes Support (VK, test)', rules: {} },
+  { postiz_integration_id: 'fake-gmb', provider: 'gmb', name: 'Taxes Support (Google Business, test)', rules: {} },
+  { postiz_integration_id: 'fake-tumblr', provider: 'tumblr', name: 'taxes-support-test (Tumblr)', rules: {} },
+  { postiz_integration_id: 'fake-dribbble', provider: 'dribbble', name: 'taxes-support-test (Dribbble)', rules: {} },
+  { postiz_integration_id: 'fake-mewe', provider: 'mewe', name: 'Taxes Support (MeWe, test)', rules: {} },
+  { postiz_integration_id: 'fake-skool', provider: 'skool', name: 'Taxes Support (Skool, test)', rules: {} },
+  { postiz_integration_id: 'fake-whop', provider: 'whop', name: 'Taxes Support (Whop, test)', rules: {} },
+  { postiz_integration_id: 'fake-moltbook', provider: 'moltbook', name: 'taxes-support-test (Moltbook)', rules: {} },
+  { postiz_integration_id: 'fake-kick', provider: 'kick', name: 'taxes-support-test (Kick)', rules: {} },
+  { postiz_integration_id: 'fake-twitch', provider: 'twitch', name: 'taxes_support_test (Twitch)', rules: {} },
+  { postiz_integration_id: 'fake-tiktok', provider: 'tiktok', name: 'taxes.support.test (TikTok)', rules: {} },
+  { postiz_integration_id: 'fake-youtube', provider: 'youtube', name: 'Taxes Support (YouTube, test)', rules: {} },
 ]
 
 export async function syncFakeAccounts(api: WorkerApi, opts: { refreshNeeded?: string[] } = {}) {

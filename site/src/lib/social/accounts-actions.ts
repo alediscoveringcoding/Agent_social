@@ -33,7 +33,7 @@ const MESSAGES: SqlMessages = {
   SOCIAL_ACCOUNT_NO_BRAND: 'Alege intai brandul; un cont fara brand ramane pe pauza.',
   SOCIAL_SYNCED_FIELD: 'Numele si profilul unui cont din Postiz vin de la sincronizare.',
   SOCIAL_AUTO_NEEDS_POSTIZ: 'Publicarea automata are nevoie de un canal Postiz. Contul acesta poate fi doar manual.',
-  SOCIAL_MANUAL_ONLY_PLATFORM: 'Substack si Product Hunt nu au API de publicare: raman manuale.',
+  SOCIAL_MANUAL_ONLY_PLATFORM: 'Substack, Product Hunt si YouTube nu se publica automat (nu au API sau cer video): raman manuale.',
   SOCIAL_STATUS_FOR_MODE: 'Starea nu se potriveste cu modul. Un cont manual e "Manual" sau "Asteapta aprobarea platformei".',
   SOCIAL_ACCOUNT_HAS_OPEN_JOBS: (d) =>
     `Contul are ${Number(d?.jobs ?? 0) || 'cateva'} postari programate care nu au plecat. Anuleaza-le sau asteapta sa plece, apoi reincearca.`,

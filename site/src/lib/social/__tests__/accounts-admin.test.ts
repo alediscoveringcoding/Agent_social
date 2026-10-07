@@ -75,7 +75,7 @@ describe('accounts screen: actions and queries (W3)', () => {
     assert.equal((await syncFakeAccounts(api)).status, 200)
     const listed = await listAdminAccounts()
     assert.equal(listed.length, FAKE_INTEGRATIONS.length)
-    assert.ok(listed.every((a) => a.brand_id === null && a.paused && a.mode === 'auto' && a.status === 'connected'))
+    assert.ok(listed.every((a) => a.brand_id === null && a.paused && (a.platform === 'youtube' ? a.mode === 'manual' && a.status === 'manual' : a.mode === 'auto' && a.status === 'connected')), 'YouTube syncs as a manual account (needs video); every other channel is automatic')
     assert.ok(listed.every((a) => publishBlockers(a).includes('fara brand')))
 
     const x = await synced('fake-x')

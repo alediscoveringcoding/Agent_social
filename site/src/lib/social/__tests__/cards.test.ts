@@ -117,10 +117,11 @@ describe('card renderer', () => {
 })
 
 describe('card formats after amendment 04', () => {
-  it('has 7 formats, so 63 format/template/brand combinations, and Pinterest pins are 1000x1500', () => {
-    assert.equal(CARD_FORMAT_NAMES.length, 7)
-    assert.equal(CARD_FORMAT_NAMES.length * CARD_TEMPLATES.length * CARD_BRAND_SLUGS.length, 63)
+  it('has 8 formats, so 72 format/template/brand combinations; Pinterest pins are 1000x1500 and Dribbble shots 800x600', () => {
+    assert.equal(CARD_FORMAT_NAMES.length, 8)
+    assert.equal(CARD_FORMAT_NAMES.length * CARD_TEMPLATES.length * CARD_BRAND_SLUGS.length, 72)
     assert.deepEqual(CARD_FORMATS.pinterest, { width: 1000, height: 1500 })
+    assert.deepEqual(CARD_FORMATS.dribbble, { width: 800, height: 600 })
   })
 
   it('every platform gets a format the renderer has, and each format is used or documented', () => {

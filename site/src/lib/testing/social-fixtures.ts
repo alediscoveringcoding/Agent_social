@@ -5,6 +5,7 @@
 
 import type { PGlite } from '@electric-sql/pglite'
 import { approvalHash, destinationHash } from '../social/hash.ts'
+import { MANUAL_ONLY_PLATFORMS } from '../social/constants.ts'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Row = Record<string, any>
@@ -44,7 +45,7 @@ export async function createAccount(
   extra: { mode?: 'auto' | 'manual'; status?: string; paused?: boolean; cap?: number } = {}
 ): Promise<string> {
   seq += 1
-  const mode = extra.mode ?? (platform === 'substack' || platform === 'producthunt' ? 'manual' : 'auto')
+  const mode = extra.mode ?? ((MANUAL_ONLY_PLATFORMS as readonly string[]).includes(platform) ? 'manual' : 'auto')
   return (
     await rows(
       db,

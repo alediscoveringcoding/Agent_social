@@ -8,6 +8,7 @@
 import {
   CARD_TEMPLATES,
   MEDIA_MIME_TYPES,
+  PLATFORM_KIND,
   PLATFORM_LABELS,
   type Platform,
   type PostKind,
@@ -24,7 +25,16 @@ import {
 } from './content-rules.ts'
 import { detectFigures, unlistedFigures, unverifiedFigures, type DraftFigure, type FigureMatch } from './figures.ts'
 import { lengthUnit, measurePlatformLength, utf8Length } from './text-length.ts'
-import { REDDIT_POST_TYPES } from './platform-settings.ts'
+import {
+  GMB_CTA_NEEDS_URL,
+  GMB_CTA_TYPES,
+  MEWE_POST_TYPES,
+  REDDIT_POST_TYPES,
+  TIKTOK_PRIVACY_LEVELS,
+  TWITCH_ANNOUNCEMENT_COLORS,
+  TWITCH_MESSAGE_TYPES,
+  WORDPRESS_STATUSES,
+} from './platform-settings.ts'
 import { X_MAX_WEIGHTED_LENGTH } from './x-length.ts'
 
 export interface ValidationIssue {
@@ -91,6 +101,21 @@ export const PLATFORM_MAX_LENGTH: Partial<Record<Platform, number>> = {
   farcaster: 320, // UTF-8 bytes; a long cast (Farcaster Pro) holds 1,024
   nostr: 100000,
   lemmy: 10000, // body; Lemmy itself allows 50,000
+  // Amendment 04, second batch.
+  slack: 40000, // Slack truncates above 40,000 (it advises 4,000); Postiz allows 400,000
+  wordpress: 100000,
+  vk: 2048,
+  gmb: 1500,
+  tumblr: 32768,
+  dribbble: 40000,
+  mewe: 63206,
+  skool: 5000,
+  whop: 50000,
+  moltbook: 300,
+  kick: 500, // chat message
+  twitch: 500, // chat message
+  tiktok: 2000, // description; TikTok's photo posts allow 4,000
+  youtube: 5000, // description
 }
 
 export const MAX_IMAGES: Partial<Record<Platform, number>> = {
@@ -111,7 +136,15 @@ export const MAX_IMAGES: Partial<Record<Platform, number>> = {
   medium: 1,
   farcaster: 2, // embeds per cast
   lemmy: 1, // the post's thumbnail
+  wordpress: 1, // the featured image
+  gmb: 1,
+  tumblr: 30,
+  dribbble: 1,
+  tiktok: 35, // a photo post
 }
+
+/** Platforms whose Postiz provider publishes text only (chat messages, Moltbook). */
+export const TEXT_ONLY_PLATFORMS: readonly Platform[] = ['moltbook', 'kick', 'twitch']
 
 export const COVER_SIZES: Partial<Record<Platform, { width: number; height: number }>> = {
   devto: { width: 1000, height: 420 },
@@ -134,6 +167,20 @@ export const LEMMY_LINK_MAX = 2000
 export const MEDIUM_MAX_TAGS = 3
 export const MEDIUM_TAG_MAX = 25
 export const THREADS_TOPIC_TAGS = 1
+export const TUMBLR_TITLE_MAX = 4096
+export const TUMBLR_TAGS_MAX = 4096
+export const TIKTOK_TITLE_MAX = 90
+export const TIKTOK_MAX_SHORT_SIDE = 1080
+export const YOUTUBE_TITLE_MAX = 100
+export const YOUTUBE_TAGS_MAX = 500
+/** Dribbble accepts exactly these two shot sizes (Postiz checks them). */
+export const DRIBBBLE_SIZES: ReadonlyArray<{ width: number; height: number }> = [
+  { width: 400, height: 300 },
+  { width: 800, height: 600 },
+]
+
+const SLACK_CHANNEL_RE = /^[A-Z0-9]{6,}$/
+const WORDPRESS_TYPE_RE = /^[a-z0-9_-]{1,40}$/
 
 const SUBREDDIT_RE = /^(?:\/?r\/)?[A-Za-z0-9_]{2,21}$/
 const DISCORD_CHANNEL_RE = /^\d{17,20}$/
@@ -356,6 +403,150 @@ function validateNewPlatform(input: ValidateDestinationInput, errors: Validation
       }
       break
     }
+    case 'slack': {
+      const channel = str(settings.channel).trim()
+      if (!channel) {
+        err('SLACK_CHANNEL_MISSING', 'settings.channel', 'Slack: alege canalul (id, de forma C0123ABCD).')
+      } else if (!SLACK_CHANNEL_RE.test(channel)) {
+        err('SLACK_CHANNEL_INVALID', 'settings.channel', 'Slack: canalul se da prin id (litere mari si cifre, de forma C0123ABCD), nu prin nume.')
+      }
+      break
+    }
+    case 'wordpress': {
+      const status = str(settings.status).trim()
+      if (status && !(WORDPRESS_STATUSES as readonly string[]).includes(status)) {
+        err('WORDPRESS_STATUS_INVALID', 'settings.status', 'WordPress: starea e publicat, ciorna, in asteptare sau privat.')
+      }
+      const type = str(settings.post_type).trim()
+      if (type && !WORDPRESS_TYPE_RE.test(type)) {
+        err('WORDPRESS_TYPE_INVALID', 'settings.post_type', 'WordPress: tipul de continut se scrie cu litere mici (post sau page).')
+      }
+      break
+    }
+    case 'listmonk': {
+      const list = str(settings.list).trim()
+      if (!list) {
+        err('LISTMONK_LIST_MISSING', 'settings.list', 'Listmonk: alege lista de abonati (id numeric).')
+      } else if (!NUMERIC_ID_RE.test(list)) {
+        err('LISTMONK_LIST_INVALID', 'settings.list', 'Listmonk: lista se da prin id-ul numeric.')
+      }
+      const template = str(settings.template).trim()
+      if (template && !NUMERIC_ID_RE.test(template)) {
+        err('LISTMONK_TEMPLATE_INVALID', 'settings.template', 'Listmonk: sablonul se da prin id-ul numeric.')
+      }
+      break
+    }
+    case 'gmb': {
+      const type = str(settings.cta_type).trim() || 'NONE'
+      if (!(GMB_CTA_TYPES as readonly string[]).includes(type)) {
+        err('GMB_CTA_INVALID', 'settings.cta_type', 'Google Business: butonul nu e unul dintre cele permise.')
+      } else if ((GMB_CTA_NEEDS_URL as readonly string[]).includes(type)) {
+        const url = str(settings.cta_url).trim()
+        if (!url) err('GMB_CTA_URL_MISSING', 'settings.cta_url', 'Google Business: butonul are nevoie de un link.')
+        else if (!isHttpUrl(url)) err('GMB_CTA_URL_INVALID', 'settings.cta_url', 'Google Business: linkul butonului trebuie sa inceapa cu https://.')
+      }
+      break
+    }
+    case 'tumblr': {
+      const title = str(settings.title)
+      if (chars(title) > TUMBLR_TITLE_MAX) {
+        err('TUMBLR_TITLE_TOO_LONG', 'settings.title', `Tumblr: titlul are ${chars(title)} din ${TUMBLR_TITLE_MAX} caractere.`)
+      }
+      for (const key of ['link', 'source_url'] as const) {
+        const url = str(settings[key]).trim()
+        if (url && !isHttpUrl(url)) {
+          err('TUMBLR_LINK_INVALID', `settings.${key}`, `Tumblr: ${key === 'link' ? 'linkul' : 'sursa'} trebuie sa inceapa cu https://.`)
+        }
+      }
+      const tags = tagsOf(settings).join(',')
+      if (chars(tags) > TUMBLR_TAGS_MAX) {
+        err('TUMBLR_TAGS_TOO_LONG', 'settings.tags', `Tumblr: etichetele au ${chars(tags)} din ${TUMBLR_TAGS_MAX} caractere.`)
+      }
+      break
+    }
+    case 'dribbble': {
+      if (!str(settings.title).trim()) {
+        err('DRIBBBLE_TITLE_MISSING', 'settings.title', 'Dribbble: lipseste titlul.')
+      }
+      if (input.media.length === 0) {
+        err('DRIBBBLE_NO_IMAGE', 'media', 'Dribbble are nevoie de o imagine de 400x300 sau 800x600.')
+      }
+      input.media.forEach((m, i) => {
+        if (m.width && m.height && !DRIBBBLE_SIZES.some((s) => s.width === m.width && s.height === m.height)) {
+          err('DRIBBBLE_IMAGE_SIZE', `media.${i}`, `Dribbble primeste doar 400x300 sau 800x600; imaginea ${i + 1} are ${m.width}x${m.height}.`)
+        }
+      })
+      const team = str(settings.team).trim()
+      if (team && !isHttpUrl(team)) {
+        err('DRIBBBLE_TEAM_INVALID', 'settings.team', 'Dribbble: echipa e un link (https://...).')
+      }
+      break
+    }
+    case 'mewe': {
+      const type = str(settings.post_type).trim() || 'timeline'
+      if (!(MEWE_POST_TYPES as readonly string[]).includes(type)) {
+        err('MEWE_TYPE_INVALID', 'settings.post_type', 'MeWe: postarea merge pe profil sau intr-un grup.')
+      } else if (type === 'group' && !str(settings.group).trim()) {
+        err('MEWE_GROUP_MISSING', 'settings.group', 'MeWe: alege grupul.')
+      }
+      break
+    }
+    case 'skool': {
+      if (!str(settings.group).trim()) err('SKOOL_GROUP_MISSING', 'settings.group', 'Skool: alege grupul.')
+      if (!str(settings.label).trim()) err('SKOOL_LABEL_MISSING', 'settings.label', 'Skool: alege categoria (id).')
+      if (!str(settings.title).trim()) err('SKOOL_TITLE_MISSING', 'settings.title', 'Skool: lipseste titlul.')
+      break
+    }
+    case 'whop': {
+      if (!str(settings.company).trim()) err('WHOP_COMPANY_MISSING', 'settings.company', 'Whop: alege compania (id).')
+      if (!str(settings.experience).trim()) err('WHOP_EXPERIENCE_MISSING', 'settings.experience', 'Whop: alege forumul (id).')
+      break
+    }
+    case 'twitch': {
+      const type = str(settings.message_type).trim()
+      if (type && !(TWITCH_MESSAGE_TYPES as readonly string[]).includes(type)) {
+        err('TWITCH_TYPE_INVALID', 'settings.message_type', 'Twitch: tipul e mesaj in chat sau anunt.')
+      }
+      const color = str(settings.announcement_color).trim()
+      if (color && !(TWITCH_ANNOUNCEMENT_COLORS as readonly string[]).includes(color)) {
+        err('TWITCH_COLOR_INVALID', 'settings.announcement_color', 'Twitch: culoarea anuntului nu e permisa.')
+      }
+      break
+    }
+    case 'tiktok': {
+      if (input.media.length === 0) {
+        err('TIKTOK_NO_IMAGE', 'media', 'TikTok are nevoie de cel putin o imagine (postare cu poze, fara video).')
+      }
+      input.media.forEach((m, i) => {
+        if (m.width && m.height && Math.min(m.width, m.height) > TIKTOK_MAX_SHORT_SIDE) {
+          err('TIKTOK_IMAGE_SIZE', `media.${i}`, `TikTok accepta cel mult ${TIKTOK_MAX_SHORT_SIDE}px pe latura mica; imaginea ${i + 1} are ${m.width}x${m.height}.`)
+        }
+      })
+      const title = str(settings.title)
+      if (chars(title) > TIKTOK_TITLE_MAX) {
+        err('TIKTOK_TITLE_TOO_LONG', 'settings.title', `TikTok: titlul are ${chars(title)} din ${TIKTOK_TITLE_MAX} caractere.`)
+      }
+      const privacy = str(settings.privacy_level).trim()
+      if (privacy && !(TIKTOK_PRIVACY_LEVELS as readonly string[]).includes(privacy)) {
+        err('TIKTOK_PRIVACY_INVALID', 'settings.privacy_level', 'TikTok: vizibilitatea nu e una dintre cele permise.')
+      }
+      break
+    }
+    case 'youtube': {
+      const title = str(settings.title).trim()
+      if (!title) {
+        err('YOUTUBE_TITLE_MISSING', 'settings.title', 'YouTube: lipseste titlul videoclipului.')
+      } else if (chars(title) > YOUTUBE_TITLE_MAX) {
+        err('YOUTUBE_TITLE_TOO_LONG', 'settings.title', `YouTube: titlul are ${chars(title)} din ${YOUTUBE_TITLE_MAX} caractere.`)
+      }
+      // YouTube counts all tags together; a tag with a space is quoted, which adds two.
+      const total = tagsOf(settings).reduce((n, t) => n + chars(t) + (/\s/.test(t) ? 2 : 0), 0)
+      if (total > YOUTUBE_TAGS_MAX) {
+        err('YOUTUBE_TAGS_TOO_LONG', 'settings.tags', `YouTube: etichetele au ${total} din ${YOUTUBE_TAGS_MAX} caractere la un loc.`)
+      }
+      warn('YOUTUBE_NEEDS_VIDEO', 'text', 'YouTube cere video: aplicatia nu face filme, deci se publica manual (titlul si descrierea se copiaza de pe pagina de predare).')
+      break
+    }
     default:
       break
   }
@@ -499,10 +690,18 @@ export function validateDestination(input: ValidateDestinationInput): Destinatio
     })
   }
 
-  if (platform === 'devto' || platform === 'hashnode' || platform === 'substack' || platform === 'medium') {
+  if (PLATFORM_KIND[platform] === 'article') {
     if (!str(settings.title).trim()) {
-      errors.push({ code: 'TITLE_MISSING', field: 'settings.title', message: `Articolul pentru ${label} nu are titlu.` })
+      errors.push({
+        code: 'TITLE_MISSING',
+        field: 'settings.title',
+        message: platform === 'listmonk' ? 'Newsletterul nu are subiect.' : `Articolul pentru ${label} nu are titlu.`,
+      })
     }
+  }
+
+  if (TEXT_ONLY_PLATFORMS.includes(platform) && input.media.length > 0) {
+    warnings.push({ code: 'TEXT_ONLY', field: 'media', message: `${label} publica doar text prin Postiz; imaginea nu apare.` })
   }
 
   validateNewPlatform(input, errors, warnings)

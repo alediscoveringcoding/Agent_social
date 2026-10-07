@@ -12,7 +12,7 @@
  * only ever point to http(s) or mailto.
  */
 
-import { PLATFORM_KIND, PLATFORM_LABELS, type Platform, type PostKind } from './constants.ts'
+import { MANUAL_ONLY_REASONS, PLATFORM_KIND, PLATFORM_LABELS, type Platform, type PostKind } from './constants.ts'
 import { SETTINGS_FIELDS } from './platform-settings.ts'
 
 // ---------------------------------------------------------------------------
@@ -215,6 +215,8 @@ export interface Handoff {
   fields: HandoffField[]
   body: HandoffBody
   checklist: string[]
+  /** A reason the person must know before starting (YouTube needs a video). */
+  notice?: string
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : Array.isArray(v) ? v.map(String).join(', ') : '')
@@ -247,15 +249,25 @@ export function buildHandoff(input: HandoffInput): Handoff {
 
   if (articleLike(input.platform, input.kind)) {
     const body = input.text.trim() ? input.text : str(a.body_markdown)
-    add('title', 'Titlu', str(s.title) || str(a.title) || input.title || '')
-    add('subtitle', 'Subtitlu', str(s.subtitle) || str(a.subtitle))
-    if (input.platform === 'devto' || input.platform === 'hashnode' || input.platform === 'medium') {
-      add('tags', 'Taguri', str(s.tags) || str(a.tags))
-      add('canonical_url', 'Link canonic', str(s.canonical_url) || str(a.canonical_url))
+    if (input.platform === 'wordpress' || input.platform === 'listmonk') {
+      // Fields as the platform's own editor names them (the e-mail subject, the preview line, the list).
+      for (const f of SETTINGS_FIELDS[input.platform] ?? []) {
+        const fallback = f.key === 'title' ? str(a.title) || input.title || '' : f.key === 'subtitle' ? str(a.subtitle) : ''
+        let value = str(s[f.key])
+        if (f.kind === 'select') value = f.options?.find((o) => o.value === value)?.label ?? value
+        add(f.key, f.label, value || fallback)
+      }
+    } else {
+      add('title', 'Titlu', str(s.title) || str(a.title) || input.title || '')
+      add('subtitle', 'Subtitlu', str(s.subtitle) || str(a.subtitle))
+      if (input.platform === 'devto' || input.platform === 'hashnode' || input.platform === 'medium') {
+        add('tags', 'Taguri', str(s.tags) || str(a.tags))
+        add('canonical_url', 'Link canonic', str(s.canonical_url) || str(a.canonical_url))
+      }
     }
     return {
       fields,
-      body: { label: 'Articol', plain: markdownToPlain(body), markdown: body, html: markdownToHtml(body) },
+      body: { label: input.platform === 'listmonk' ? 'Newsletter' : 'Articol', plain: markdownToPlain(body), markdown: body, html: markdownToHtml(body) },
       checklist: CHECKLISTS[input.platform] ?? CHECKLISTS.article,
     }
   }
@@ -269,8 +281,9 @@ export function buildHandoff(input: HandoffInput): Handoff {
   }
   return {
     fields,
-    body: { label: 'Text', plain: input.text, markdown: input.text, html: textToHtml(input.text) },
+    body: { label: input.platform === 'youtube' ? 'Descriere' : 'Text', plain: input.text, markdown: input.text, html: textToHtml(input.text) },
     checklist: CHECKLISTS[input.platform] ?? CHECKLISTS.social,
+    ...(input.platform === 'youtube' ? { notice: MANUAL_ONLY_REASONS.youtube } : {}),
   }
 }
 
@@ -335,6 +348,50 @@ export const CHECKLISTS: Record<string, string[]> = {
     'Titlul (3 pana la 200 de caractere) e copiat',
     'Textul (si linkul, daca exista) sunt lipite',
     'Postarea e publicata si linkul ei e salvat',
+  ],
+  // Amendment 04, second batch.
+  slack: ['Textul e lipit (cel mult 40000 de caractere)', 'Imaginile sunt atasate', 'Mesajul e trimis in canalul corect'],
+  wordpress: [
+    'Titlul e copiat si tipul de continut (post sau page) e ales',
+    'Corpul articolului e lipit in editorul de blocuri sau in cel clasic',
+    'Imaginea reprezentativa e incarcata',
+    'Starea (publicat, ciorna, privat) e cea din campurile de mai sus',
+    'Articolul e publicat',
+  ],
+  listmonk: [
+    'Subiectul si textul de previzualizare sunt copiate',
+    'Lista de abonati si sablonul sunt cele din campurile de mai sus',
+    'Corpul e lipit ca HTML in campania noua',
+    'Campania a fost trimisa de un test inainte',
+    'Campania e programata sau trimisa',
+  ],
+  vk: ['Textul e lipit (cel mult 2048 de caractere)', 'Imaginile sunt atasate', 'Postarea e publicata pe pagina corecta'],
+  gmb: [
+    'Textul e lipit (cel mult 1500 de caractere)',
+    'O singura imagine e atasata (4:3)',
+    'Butonul si linkul lui sunt cele din campurile de mai sus',
+    'Postarea e publicata pe locatia corecta',
+  ],
+  tumblr: ['Titlul, textul si etichetele sunt completate', 'Imaginile (cel mult 30) sunt atasate', 'Postarea e publicata pe blogul corect'],
+  dribbble: ['Imaginea (400x300 sau 800x600) e incarcata', 'Titlul si descrierea sunt copiate', 'Shot-ul e publicat pe contul sau echipa corecta'],
+  mewe: ['Textul e lipit', 'Imaginile sunt atasate', 'Postarea e publicata pe profil sau in grupul din campurile de mai sus'],
+  skool: ['Grupul si categoria sunt cele din campurile de mai sus', 'Titlul si textul (cel mult 5000 de caractere) sunt copiate', 'Postarea e publicata'],
+  whop: ['Compania si forumul sunt cele din campurile de mai sus', 'Titlul si textul sunt copiate', 'Postarea e publicata in forum'],
+  moltbook: ['Textul e lipit (cel mult 300 de caractere)', 'Submolt-ul e cel din campurile de mai sus', 'Postarea e publicata'],
+  kick: ['Mesajul (cel mult 500 de caractere) e trimis in chatul canalului', 'Doar text: imaginile nu se trimit in chat'],
+  twitch: ['Mesajul (cel mult 500 de caractere) e trimis in chat sau ca anunt', 'Doar text: imaginile nu se trimit in chat'],
+  tiktok: [
+    'Imaginile (cel mult 35, latura mica cel mult 1080) sunt incarcate ca postare cu poze',
+    'Titlul (cel mult 90 de caractere) si descrierea sunt copiate',
+    'Vizibilitatea e cea din campurile de mai sus',
+    'Postarea e publicata',
+  ],
+  youtube: [
+    'Videoclipul este incarcat (aplicatia nu face filme)',
+    'Titlul (cel mult 100 de caractere) si descrierea sunt copiate',
+    'Etichetele sunt adaugate',
+    'Imaginea de coperta (miniatura) e incarcata, daca exista',
+    'Videoclipul e publicat sau programat',
   ],
 }
 

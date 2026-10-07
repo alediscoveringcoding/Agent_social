@@ -371,7 +371,7 @@ describe('worker API (PRD 10.3)', () => {
     it('adds new channels paused and unassigned, and records the sync time', async () => {
       await call(claimRoute.POST, '/deliveries/claim', {})
       const r = await call(syncRoute.POST, '/accounts/sync', {
-        integrations: [integration('li-1'), integration('tt-1', { provider: 'tiktok' })],
+        integrations: [integration('li-1'), integration('tt-1', { provider: 'vimeo' })],
         postiz_recent_posts: [],
       })
       assert.equal(r.status, 200)

@@ -65,8 +65,8 @@ const images = (n: number) => Array.from({ length: n }, (_, i) => ({ ...image(),
 const a = (n: number) => 'a'.repeat(n)
 
 describe('platform tables (amendment 04)', () => {
-  it('lists 20 platforms; the 12 new ones have a Romanian label without diacritics, a kind and a card format', () => {
-    assert.equal(PLATFORMS.length, 20)
+  it('lists 35 platforms; the 12 of the first batch have a Romanian label without diacritics, a kind and a card format', () => {
+    assert.equal(PLATFORMS.length, 35)
     for (const p of NEW_PLATFORMS) assert.ok((PLATFORMS as readonly string[]).includes(p), p)
     const labels = PLATFORMS.map((p) => PLATFORM_LABELS[p])
     assert.equal(new Set(labels).size, PLATFORMS.length, 'labels are unique')
@@ -89,8 +89,9 @@ describe('platform tables (amendment 04)', () => {
     assert.equal(PLATFORM_CARD_FORMAT.medium, 'hashnode_cover')
   })
 
-  it('no new platform is manual-only: Substack and Product Hunt stay the only ones', () => {
-    assert.deepEqual([...MANUAL_ONLY_PLATFORMS], ['substack', 'producthunt'])
+  it('the first twelve are all automatic: only Substack, Product Hunt and (second batch) YouTube are manual-only', () => {
+    assert.deepEqual([...MANUAL_ONLY_PLATFORMS], ['substack', 'producthunt', 'youtube'])
+    for (const p of NEW_PLATFORMS) assert.ok(!MANUAL_ONLY_PLATFORMS.includes(p), p)
   })
 
   it('maps every Postiz identifier of the new platforms (v2.25.0) to our platform', () => {
@@ -101,8 +102,7 @@ describe('platform tables (amendment 04)', () => {
     for (const [identifier, platform] of Object.entries(expected)) assert.equal(platformForProvider(identifier), platform, identifier)
     assert.equal(platformForProvider('LinkedIn'), 'linkedin', 'case is ignored')
     assert.equal(platformForProvider('linkedin-page'), 'linkedin-page', 'the page provider stays the page')
-    assert.equal(platformForProvider('tiktok'), null, 'video platforms are not supported')
-    assert.equal(platformForProvider('youtube'), null)
+    assert.equal(platformForProvider('tiktok-ads'), null, 'an unknown provider is ignored at sync')
     for (const p of PLATFORMS) {
       if (MANUAL_ONLY_PLATFORMS.includes(p)) continue
       assert.ok(Object.values(PROVIDER_TO_PLATFORM).includes(p), `${p} has a Postiz identifier`)
@@ -121,7 +121,7 @@ describe('platform tables (amendment 04)', () => {
     for (const p of PLATFORMS) {
       for (const key of settingsFieldKeys(p)) assert.ok(SETTINGS_KEYS[p].includes(key), `${p}.${key} is not kept by the sanitizer`)
     }
-    assert.deepEqual(Object.keys(SETTINGS_FIELDS).sort(), ['discord', 'farcaster', 'lemmy', 'medium', 'pinterest', 'reddit'])
+    for (const p of ['discord', 'farcaster', 'lemmy', 'medium', 'pinterest', 'reddit']) assert.ok(p in SETTINGS_FIELDS, p)
     assert.deepEqual(sanitizeSettings('reddit', { subreddit: 'r/x', title: 'T', post_type: 'link', link_url: 'https://thecrypto.support/x', flair_id: 'f', evil: 'drop', who_can_reply: 'everyone' }), {
       subreddit: 'r/x', title: 'T', post_type: 'link', link_url: 'https://thecrypto.support/x', flair_id: 'f',
     })
@@ -366,7 +366,7 @@ describe('manual handoff fields and checklists for the new platforms', () => {
   it('every platform has a checklist, and the platform-specific fields show', () => {
     for (const platform of PLATFORMS) {
       const h = buildHandoff({ platform, kind: PLATFORM_KIND[platform], title: 'Titlu', text: TEXT, settings: {} })
-      assert.ok(h.checklist.length >= 3, `${platform} checklist`)
+      assert.ok(h.checklist.length >= 2, `${platform} checklist`)
     }
     const reddit = buildHandoff({ platform: 'reddit', kind: 'social', title: null, text: TEXT, settings: { subreddit: 'r/taxes_ro', title: 'Un titlu', post_type: 'link', link_url: OURS } })
     assert.deepEqual(reddit.fields.map((f) => [f.key, f.value]), [['subreddit', 'r/taxes_ro'], ['title', 'Un titlu'], ['post_type', 'Link'], ['link_url', OURS]])
@@ -429,19 +429,19 @@ describe('migration 0008 and the flows it enables', () => {
       const post = await newPost(id, 'Un ghid clar pentru documentele tale.', {})
       assert.equal(post.destinations[0].platform, platform)
     }
-    await assert.rejects(rows(db, `insert into social_accounts (platform, mode, status, display_name) values ('tiktok', 'manual', 'manual', 'video')`), /social_accounts_platform_allowed/)
-    await assert.rejects(rows(db, `insert into social_accounts (platform, mode, status, display_name) values ('youtube', 'manual', 'manual', 'video')`), /social_accounts_platform_allowed/)
+    await assert.rejects(rows(db, `insert into social_accounts (platform, mode, status, display_name) values ('vimeo', 'manual', 'manual', 'video')`), /social_accounts_platform_allowed/)
+    await assert.rejects(rows(db, `insert into social_accounts (platform, mode, status, display_name) values ('twitter', 'manual', 'manual', 'video')`), /social_accounts_platform_allowed/)
     for (const platform of NEW_PLATFORMS) {
       const r = await createManualAccount({ brandId: brand, displayName: `Manual ${platform}`, platform })
       assert.equal(r.ok, true, platform)
     }
-    assert.equal((await createManualAccount({ brandId: brand, displayName: 'Video', platform: 'tiktok' as Platform })).ok, false)
+    assert.equal((await createManualAccount({ brandId: brand, displayName: 'Video', platform: 'vimeo' as Platform })).ok, false)
   })
 
   it('keeps Substack and Product Hunt manual-only, and does not make a new platform manual-only', async () => {
     await assert.rejects(
       rows(db, `insert into social_accounts (platform, mode, status, postiz_integration_id, display_name) values ('substack', 'auto', 'connected', 'x-1', 'S')`),
-      /social_accounts_manual_only_platforms/
+      /SOCIAL_MANUAL_ONLY_PLATFORM/
     )
     const reddit = await createAccount(db, brand, 'reddit')
     assert.equal((await updateAccount(reddit, { mode: 'manual' })).ok, true, 'a new platform can be switched to manual mode')

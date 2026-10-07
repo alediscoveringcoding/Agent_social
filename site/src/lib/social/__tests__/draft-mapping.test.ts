@@ -116,7 +116,8 @@ describe('account sync rules', () => {
     assert.equal(platformForProvider('instagram-standalone'), 'instagram')
     assert.equal(platformForProvider('linkedin.page'), 'linkedin-page')
     assert.equal(platformForProvider('dev.to'), 'devto')
-    assert.equal(platformForProvider('tiktok'), null)
+    assert.equal(platformForProvider('vimeo'), null, 'a provider the app does not publish to is ignored')
+    assert.equal(platformForProvider('tiktok-business'), 'tiktok')
   })
 
   it('lets Postiz decide reconnects, and nothing else', () => {

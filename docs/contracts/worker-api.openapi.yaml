@@ -332,8 +332,10 @@ paths:
                           Postiz provider identifier, the `identifier` field of Postiz's GET /public/v1/integrations
                           (v2.25.0): x, facebook, instagram, instagram-standalone (or instagram.standalone), linkedin-page
                           (or linkedin.page), devto (or dev.to), hashnode, threads, bluesky, mastodon (or mastodon-custom),
-                          linkedin, reddit, pinterest, telegram, discord, medium, wrapcast (Farcaster), nostr, lemmy.
-                          Any other identifier (tiktok, youtube, ...) is ignored and listed in the answer.
+                          linkedin, reddit, pinterest, telegram, discord, medium, wrapcast (Farcaster), nostr, lemmy,
+                          slack, wordpress, listmonk, vk, gmb, tumblr, dribbble, mewe, skool, whop, moltbook, kick,
+                          twitch, tiktok (or tiktok-business), youtube. A youtube channel is created as a manual
+                          account (it needs video). Any other identifier is ignored and listed in the answer.
                       name: { type: string }
                       picture_url: { type: [string, 'null'] }
                       profile_url: { type: [string, 'null'] }
@@ -448,12 +450,16 @@ components:
       description: PRD 10.7 codes (RATE_LIMITED, TRANSIENT, MEDIA_FETCH_FAILED, AUTH_EXPIRED, PERMISSION_DENIED, VALIDATION_REJECTED, HASH_MISMATCH, UNKNOWN_RESULT, STALE, RECONCILE_MISS); any UPPER_SNAKE_CASE code is stored.
     Platform:
       type: string
-      enum: [facebook, instagram, linkedin-page, x, devto, hashnode, substack, producthunt, threads, bluesky, mastodon, linkedin, reddit, pinterest, telegram, discord, medium, farcaster, nostr, lemmy]
+      enum: [facebook, instagram, linkedin-page, x, devto, hashnode, substack, producthunt, threads, bluesky, mastodon, linkedin, reddit, pinterest, telegram, discord, medium, farcaster, nostr, lemmy, slack, wordpress, listmonk, vk, gmb, tumblr, dribbble, mewe, skool, whop, moltbook, kick, twitch, tiktok, youtube]
       description: |
-        Amendment 04 added threads, bluesky, mastodon, linkedin (a personal profile; `linkedin-page` is the
-        company page), reddit, pinterest, telegram, discord, medium, farcaster, nostr and lemmy. All are Postiz
-        providers (v2.25.0); only substack and producthunt are manual-only. `kind` per platform: article for
-        devto, hashnode, substack and medium; launch for producthunt; social for the rest.
+        Amendment 04 added every Postiz provider (v2.25.0): threads, bluesky, mastodon, linkedin (a personal
+        profile; `linkedin-page` is the company page), reddit, pinterest, telegram, discord, medium, farcaster,
+        nostr, lemmy, slack, wordpress, listmonk, vk, gmb (Google Business), tumblr, dribbble, mewe, skool, whop,
+        moltbook, kick, twitch, tiktok and youtube. Aliases are one platform each (instagram-standalone is
+        instagram, mastodon-custom is mastodon, tiktok-business is tiktok, wrapcast is farcaster). Manual-only:
+        substack and producthunt (no publishing API) and youtube (video only); the worker never receives their
+        jobs. `kind` per platform: article for devto, hashnode, substack, medium, wordpress and listmonk; launch
+        for producthunt; social for the rest.
 
         Neutral `settings` per platform (PRD 10.5; the worker maps them to Postiz's provider settings):
 
@@ -470,7 +476,20 @@ components:
         | discord | `channel` (numeric id) |
         | farcaster | `channel` (optional) |
         | lemmy | `community`, `community_id`, `title`, `link` |
-        | facebook, linkedin-page, linkedin, threads, bluesky, mastodon, telegram, nostr | none |
+        | slack | `channel` (id) |
+        | wordpress | `title`, `post_type` (default `post`), `status` (default `publish`) |
+        | listmonk | `title` (the subject), `subtitle` (the preview line), `list` (id), `template` (id) |
+        | gmb | `cta_type`, `cta_url` |
+        | tumblr | `title`, `link`, `source_url`, `tags` |
+        | dribbble | `title`, `team` (a link) |
+        | mewe | `post_type` (`timeline` or `group`), `group` |
+        | skool | `group`, `label`, `title` |
+        | whop | `company`, `experience`, `title` |
+        | moltbook | `submolt` |
+        | twitch | `message_type`, `announcement_color` |
+        | tiktok | `title`, `privacy_level` (default `SELF_ONLY`) |
+        | youtube | `title`, `tags` (manual handoff only) |
+        | facebook, linkedin-page, linkedin, threads, bluesky, mastodon, telegram, nostr, vk, kick | none |
     DeliveryJob:
       type: object
       required: [job_id, kind, attempt_no, lease_expires_at, run_at, account, destination, media, postiz, attempt_started_at]

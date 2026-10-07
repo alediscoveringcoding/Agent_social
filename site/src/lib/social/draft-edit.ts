@@ -42,6 +42,22 @@ export const SETTINGS_KEYS: Record<Platform, readonly string[]> = {
   farcaster: ['channel'],
   nostr: [],
   lemmy: ['community', 'community_id', 'title', 'link'],
+  // Amendment 04, second batch.
+  slack: ['channel'],
+  wordpress: ['title', 'post_type', 'status'],
+  listmonk: ['title', 'subtitle', 'list', 'template'],
+  vk: [],
+  gmb: ['cta_type', 'cta_url'],
+  tumblr: ['title', 'link', 'source_url', 'tags'],
+  dribbble: ['title', 'team'],
+  mewe: ['post_type', 'group'],
+  skool: ['group', 'label', 'title'],
+  whop: ['company', 'experience', 'title'],
+  moltbook: ['submolt'],
+  kick: [],
+  twitch: ['message_type', 'announcement_color'],
+  tiktok: ['title', 'privacy_level'],
+  youtube: ['title', 'tags'],
 }
 
 export const FIGURE_SOURCES = ['article', 'facts', 'unverified', 'confirmed'] as const

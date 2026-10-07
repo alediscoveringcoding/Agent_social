@@ -26,6 +26,22 @@ export const PLATFORMS = [
   'farcaster',
   'nostr',
   'lemmy',
+  // Amendment 04, second batch: every other Postiz provider (v2.25.0).
+  'slack',
+  'wordpress',
+  'listmonk',
+  'vk',
+  'gmb',
+  'tumblr',
+  'dribbble',
+  'mewe',
+  'skool',
+  'whop',
+  'moltbook',
+  'kick',
+  'twitch',
+  'tiktok',
+  'youtube',
 ] as const
 export type Platform = (typeof PLATFORMS)[number]
 
@@ -54,14 +70,38 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   farcaster: 'Farcaster',
   nostr: 'Nostr',
   lemmy: 'Lemmy',
+  slack: 'Slack',
+  wordpress: 'WordPress',
+  listmonk: 'Listmonk',
+  vk: 'VK',
+  gmb: 'Google Business',
+  tumblr: 'Tumblr',
+  dribbble: 'Dribbble',
+  mewe: 'MeWe',
+  skool: 'Skool',
+  whop: 'Whop',
+  moltbook: 'Moltbook',
+  kick: 'Kick',
+  twitch: 'Twitch',
+  tiktok: 'TikTok',
+  youtube: 'YouTube',
 }
 
 /**
- * No publishing API (PRD section 5): always a manual handoff. Amendment 04
- * adds none: every new platform has a Postiz provider. Any account can still
- * be switched to manual mode (a channel waiting for a platform's approval).
+ * Always a manual handoff, whatever the account says (PRD section 5).
+ * Substack and Product Hunt have no publishing API; YouTube's Postiz provider
+ * only publishes video, and this app makes text and images (amendment 04).
+ * Every other platform can still be switched to manual mode account by
+ * account (a channel waiting for a platform's approval).
  */
-export const MANUAL_ONLY_PLATFORMS: readonly Platform[] = ['substack', 'producthunt']
+export const MANUAL_ONLY_PLATFORMS: readonly Platform[] = ['substack', 'producthunt', 'youtube']
+
+/** Why a platform is manual-only, for the handoff page and the accounts screen. */
+export const MANUAL_ONLY_REASONS: Partial<Record<Platform, string>> = {
+  substack: 'Substack nu are API de publicare.',
+  producthunt: 'Product Hunt nu are API pentru lansari.',
+  youtube: 'YouTube cere video, iar aplicatia face doar text si imagini: filmul se incarca manual, textul de mai jos e pentru titlu si descriere.',
+}
 
 /** Content kind per platform (PRD section 5). */
 export const PLATFORM_KIND: Record<Platform, PostKind> = {
@@ -85,6 +125,21 @@ export const PLATFORM_KIND: Record<Platform, PostKind> = {
   farcaster: 'social',
   nostr: 'social',
   lemmy: 'social',
+  slack: 'social',
+  wordpress: 'article',
+  listmonk: 'article',
+  vk: 'social',
+  gmb: 'social',
+  tumblr: 'social',
+  dribbble: 'social',
+  mewe: 'social',
+  skool: 'social',
+  whop: 'social',
+  moltbook: 'social',
+  kick: 'social',
+  twitch: 'social',
+  tiktok: 'social',
+  youtube: 'social',
 }
 
 export const POST_KINDS = ['social', 'article', 'launch'] as const
@@ -220,6 +275,8 @@ export const CARD_FORMATS = {
   ph_gallery: { width: 1270, height: 760 },
   // Amendment 04: Pinterest pins are 2:3.
   pinterest: { width: 1000, height: 1500 },
+  // Dribbble shots must be 400x300 or 800x600 (4:3); Google Business uses the same shape.
+  dribbble: { width: 800, height: 600 },
 } as const
 export type CardFormat = keyof typeof CARD_FORMATS
 export const CARD_FORMAT_NAMES = Object.keys(CARD_FORMATS) as CardFormat[]
@@ -250,6 +307,21 @@ export const PLATFORM_CARD_FORMAT: Record<Platform, CardFormat> = {
   farcaster: 'x',
   nostr: 'x',
   lemmy: 'square',
+  slack: 'x',
+  wordpress: 'hashnode_cover',
+  listmonk: 'hashnode_cover',
+  vk: 'x',
+  gmb: 'dribbble',
+  tumblr: 'x',
+  dribbble: 'dribbble',
+  mewe: 'square',
+  skool: 'x',
+  whop: 'x',
+  moltbook: 'x',
+  kick: 'x',
+  twitch: 'x',
+  tiktok: 'portrait',
+  youtube: 'x',
 }
 
 /**
@@ -322,6 +394,22 @@ export const PROVIDER_TO_PLATFORM: Record<string, Platform> = {
   farcaster: 'farcaster',
   nostr: 'nostr',
   lemmy: 'lemmy',
+  slack: 'slack',
+  wordpress: 'wordpress',
+  listmonk: 'listmonk',
+  vk: 'vk',
+  gmb: 'gmb',
+  tumblr: 'tumblr',
+  dribbble: 'dribbble',
+  mewe: 'mewe',
+  skool: 'skool',
+  whop: 'whop',
+  moltbook: 'moltbook',
+  kick: 'kick',
+  twitch: 'twitch',
+  tiktok: 'tiktok',
+  'tiktok-business': 'tiktok',
+  youtube: 'youtube',
 }
 
 /** Where the "Open editor" link of a manual destination points by default. */
@@ -345,4 +433,19 @@ export const DEFAULT_OPEN_EDITOR_URLS: Partial<Record<Platform, string>> = {
   farcaster: 'https://warpcast.com/',
   nostr: 'https://nostrudel.ninja/',
   lemmy: 'https://join-lemmy.org/instances',
+  slack: 'https://app.slack.com/',
+  wordpress: 'https://wordpress.com/post',
+  listmonk: 'https://listmonk.app/',
+  vk: 'https://vk.com/feed',
+  gmb: 'https://business.google.com/',
+  tumblr: 'https://www.tumblr.com/new/text',
+  dribbble: 'https://dribbble.com/uploads/new',
+  mewe: 'https://mewe.com/',
+  skool: 'https://www.skool.com/',
+  whop: 'https://whop.com/',
+  moltbook: 'https://www.moltbook.com/',
+  kick: 'https://kick.com/',
+  twitch: 'https://www.twitch.tv/',
+  tiktok: 'https://www.tiktok.com/creator-center/upload',
+  youtube: 'https://studio.youtube.com/',
 }

@@ -31,6 +31,8 @@ export const CARD_METRICS: Record<CardFormat, Metrics> = {
   devto_cover: { pad: 44, headline: 44, subline: 22, stat: 76, mark: 48, brand: 24, gap: 14, wide: true },
   hashnode_cover: { pad: 88, headline: 70, subline: 32, stat: 128, mark: 56, brand: 28, gap: 26, wide: true },
   ph_gallery: { pad: 72, headline: 60, subline: 28, stat: 110, mark: 52, brand: 26, gap: 22, wide: true },
+  // 800x600 (4:3), the size Dribbble shots must have.
+  dribbble: { pad: 56, headline: 54, subline: 25, stat: 92, mark: 44, brand: 22, gap: 20, wide: false },
   // 1000x1500 (2:3), stacked like the portrait card.
   pinterest: { pad: 88, headline: 82, subline: 36, stat: 132, mark: 60, brand: 30, gap: 36, wide: false },
 }

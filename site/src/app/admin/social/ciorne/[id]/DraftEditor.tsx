@@ -10,7 +10,7 @@ import { SETTINGS_FIELDS } from '@/lib/social/platform-settings'
 import type { DraftDetail } from '@/lib/social/queries'
 import { lengthUnit } from '@/lib/social/text-length'
 import { formatBucharest } from '@/lib/social/time'
-import { MEDIUM_MAX_TAGS, measureLength, validateDestination, type DestinationValidation } from '@/lib/social/validation'
+import { measureLength, validateDestination, type DestinationValidation } from '@/lib/social/validation'
 import { Badge, Button, Card, Field, cn, inputClass } from '@/components/ui'
 // W2: revision-bound media controls and destination preview.
 import type { MediaItem } from '@/lib/social/media-queries'
@@ -45,6 +45,9 @@ function initialFor(platform: Platform, draft: DraftDetail): DestState['settings
     substack: { title: a.title, subtitle: a.subtitle },
     producthunt: { name: l.name, tagline: l.tagline, maker_comment: l.maker_comment },
     medium: { title: a.title, subtitle: a.subtitle, tags: a.tags, canonical_url: canonical },
+    wordpress: { title: a.title, post_type: 'post', status: 'publish' },
+    listmonk: { title: a.title, subtitle: a.subtitle },
+    tiktok: { privacy_level: 'SELF_ONLY' },
     reddit: { post_type: 'self' },
     pinterest: { link: draft.source_url ?? '' },
   }
@@ -78,8 +81,8 @@ function SettingsFields({
       />
     </Field>
   )
-  const tags = (max: number) => (
-    <Field label="Etichete" hint={`Separate prin virgula, cel mult ${max}.`} key="tags">
+  const tags = (max: number, hint?: string) => (
+    <Field label="Etichete" hint={hint ?? `Separate prin virgula, cel mult ${max}.`} key="tags">
       <input
         value={Array.isArray(settings.tags) ? (settings.tags as string[]).join(', ') : ((settings.tags as string) ?? '')}
         disabled={disabled}
@@ -144,7 +147,7 @@ function SettingsFields({
         <div className="grid gap-3 sm:grid-cols-2">
           {fields.map((f) => {
             const label = f.required ? `${f.label} *` : f.label
-            if (f.kind === 'tags') return tags(MEDIUM_MAX_TAGS)
+            if (f.kind === 'tags') return tags(f.maxItems ?? 20, f.hint)
             if (f.kind === 'select') {
               return (
                 <Field label={label} hint={f.hint} key={f.key}>

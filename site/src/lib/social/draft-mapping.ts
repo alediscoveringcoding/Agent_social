@@ -103,7 +103,29 @@ export function settingsFor(platform: Platform, draft: DraftInput, variantSettin
       // The pin links to the source article unless the variant says otherwise.
       return clean({ link: draft.source_url ?? undefined, ...variantSettings })
     case 'lemmy':
+    case 'slack':
+    case 'vk':
+    case 'kick':
+    case 'moltbook':
+    case 'gmb':
+    case 'tumblr':
+    case 'dribbble':
+    case 'skool':
+    case 'whop':
+    case 'youtube':
       return clean({ ...variantSettings })
+    case 'wordpress':
+      return clean({ title: a?.title, post_type: 'post', status: 'publish', ...variantSettings })
+    case 'listmonk':
+      // The e-mail subject is the article title, the preview line its subtitle.
+      return clean({ title: a?.title, subtitle: a?.subtitle ?? undefined, ...variantSettings })
+    case 'mewe':
+      return clean({ post_type: 'timeline', ...variantSettings })
+    case 'twitch':
+      return clean({ message_type: 'message', ...variantSettings })
+    case 'tiktok':
+      // Unaudited TikTok apps can only post privately; a person widens it.
+      return clean({ privacy_level: 'SELF_ONLY', ...variantSettings })
     case 'medium':
       return clean({
         title: a?.title,
