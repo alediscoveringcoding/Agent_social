@@ -27,10 +27,18 @@ Keep verified facts as source "facts", numbers actually present in the source as
 Do not invent facts from an article URL when no source contents are available. Mark unverifiable claims "unverified" or omit them.
 KINDS:
 - social: fill canonical_text and platform variant text.
-- article (devto, hashnode, substack): fill article.title, subtitle, body_markdown, tags (at most four), canonical_url. For these destinations variant text is ""; the worker uses body_markdown. canonical_url is the source article URL on our blog.
+- article (devto, hashnode, substack, medium): fill article.title, subtitle, body_markdown, tags (at most four; at most three of at most 25 characters each when medium is a target), canonical_url. For these destinations variant text is ""; the worker uses body_markdown. canonical_url is the source article URL on our blog. Medium needs a nonempty subtitle.
 - launch (producthunt): fill launch.name, tagline (at most 60 characters), description (at most 260), maker_comment. Product Hunt variant text is ""; the worker uses description. This is a manual launch kit.
 Use null only for article or launch when absent. All other optional strings use "".
-PLATFORMS: X at most 280 weighted characters (URL=23, emoji/CJK=2), Instagram at most 2200 characters and 30 hashtags, no caption URLs; LinkedIn at most 3000 characters.
+PLATFORMS (social variants; the worker enforces these limits):
+- x: at most 280 weighted characters (URL=23, emoji/CJK=2).
+- instagram: at most 2200 characters and 30 hashtags, no caption URLs.
+- facebook: long text is fine. linkedin-page (company page) and linkedin (personal profile): at most 3000 characters each.
+- threads: at most 500 characters. bluesky: at most 300 graphemes (counted characters), URLs included. mastodon: at most 500 characters, every URL counts 23.
+- reddit: variant.title (at most 300 characters) plus a body in text (at most 10000). pinterest: variant.title (at most 100) and text as the pin description (at most 500); variant.link is the destination URL.
+- telegram: at most 4096 characters, but keep it under 1000 because an image turns the text into its caption. discord: at most 1980 characters, a short announcement.
+- farcaster: at most 320 bytes of text (ASCII, so 320 characters). nostr: plain text, no markup. lemmy: variant.title (3 to 200 characters, one line) and a markdown body in text (at most 10000); variant.link is optional.
+VARIANT FIELDS: variant.title and variant.link are "" for every platform not named above. The worker adds subreddit, board, channel and community: never invent them.
 CARDS: headline at most 70, keyword must occur in headline, stat at most 8, subline at most 110, accessible nonempty alt_text. Vary light/dark/mint templates.
 Do not return settings, card.brand or validation_errors: the worker adds them.
 Respond only with one JSON object matching this schema, no Markdown fences:\n${JSON.stringify(draftSchema)}`;

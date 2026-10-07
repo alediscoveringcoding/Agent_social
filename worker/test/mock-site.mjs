@@ -61,12 +61,12 @@ function seedAccount({ platform, display_name, postiz_integration_id }) {
   return id;
 }
 
-function seedDeliveryJob({ accountId, text, scheduledAt }) {
+function seedDeliveryJob({ accountId, text, scheduledAt, settings = {} }) {
   const destination_id = randomUUID();
   const destination = {
     id: destination_id,
     text,
-    settings: {},
+    settings,
     // The real site always sends this pre-normalized ("Already in hash form").
     scheduled_at: toHashTimestamp(scheduledAt),
     destination_hash: "",
@@ -122,6 +122,30 @@ function seed() {
     accountId: devtoAccount,
     text: "Declaratia Unica se depune pana pe 25 mai. The Crypto Support te ajuta sa calculezi impozitul pe tranzactiile crypto.",
     scheduledAt: new Date().toISOString(),
+  });
+
+  // Amendment 04: two of the newer platforms, so the worker's per-provider
+  // Postiz settings can be tried (a Bluesky text post and a Reddit text post).
+  const blueskyAccount = seedAccount({
+    platform: "bluesky",
+    display_name: "Bluesky (throwaway)",
+    postiz_integration_id: "mock-bluesky-1",
+  });
+  seedDeliveryJob({
+    accountId: blueskyAccount,
+    text: "Ai pana pe 25 mai sa depui Declaratia Unica. Iti explicam calm, pas cu pas.",
+    scheduledAt: new Date().toISOString(),
+  });
+  const redditAccount = seedAccount({
+    platform: "reddit",
+    display_name: "Reddit (throwaway)",
+    postiz_integration_id: "mock-reddit-1",
+  });
+  seedDeliveryJob({
+    accountId: redditAccount,
+    text: "Termenul pentru Declaratia Unica este 25 mai. Am adunat pasii intr-un ghid.",
+    scheduledAt: new Date().toISOString(),
+    settings: { subreddit: "r/test", title: "Declaratia Unica: termenul este 25 mai", post_type: "self" },
   });
 
   seedGenerationRequest({
@@ -519,8 +543,14 @@ const server = createServer(async (req, res) => {
 
   // --- Account sync ---
   if (route === "/accounts/sync" && req.method === "POST") {
+    // The real site maps each provider identifier to a platform and ignores the
+    // ones it does not know; the mock only logs what it received.
     console.log(
-      JSON.stringify({ msg: "accounts synced", count: (body.integrations || []).length }),
+      JSON.stringify({
+        msg: "accounts synced",
+        count: (body.integrations || []).length,
+        providers: (body.integrations || []).map((i) => i.provider),
+      }),
     );
     return send(res, 200, {});
   }

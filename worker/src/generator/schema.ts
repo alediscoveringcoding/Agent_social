@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PLATFORMS } from "../platforms.js";
 
 // Both providers use this closed schema. Length limits are in descriptions:
 // Gemini does not accept maxLength; content is checked after parsing.
@@ -6,7 +7,7 @@ const article = z.strictObject({
   title: z.string().describe("Article title, at most 300 characters"),
   subtitle: z.string().describe("Subtitle; empty string when absent"),
   body_markdown: z.string().describe("Complete Romanian article in Markdown"),
-  tags: z.array(z.string()).describe("At most four short tags"),
+  tags: z.array(z.string()).describe("At most four short tags; at most three, each at most 25 characters, when medium is a target"),
   canonical_url: z.string().describe("Original article URL on our blog; empty when absent"),
 });
 const launch = z.strictObject({
@@ -22,8 +23,12 @@ export const ModelDraftSchema = z.strictObject({
   canonical_text: z.string(),
   source_url: z.string().describe("Source URL; empty string when absent"),
   variants: z.array(z.strictObject({
-    platform: z.enum(["x", "facebook", "instagram", "linkedin-page", "devto", "hashnode", "substack", "producthunt"]),
+    platform: z.enum(PLATFORMS),
     text: z.string().describe("Social copy; empty string for article and launch destinations"),
+    // Optional-looking fields are required strings: Claude structured outputs
+    // allow at most 24 optional parameters, so "absent" is an empty string.
+    title: z.string().describe("Post title for reddit (at most 300 characters), pinterest (at most 100) and lemmy (3 to 200); empty string for every other platform"),
+    link: z.string().describe("Destination URL for pinterest and optional link for lemmy, normally the source URL; empty string for every other platform"),
   })),
   article: article.nullable(),
   launch: launch.nullable(),

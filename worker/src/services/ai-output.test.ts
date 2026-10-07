@@ -84,7 +84,7 @@ test("Gemini retries 5xx twice, a short 429 once, never a daily quota", async ()
 });
 test("provider casing normalizes and invented worker-owned properties are refused", () => {
   const draft = modelDraft();
-  const upper = { ...draft, kind: "SOCIAL", card: { ...draft.card, template: "LIGHT" }, variants: [{ platform: "X", text: "Text" }] };
+  const upper = { ...draft, kind: "SOCIAL", card: { ...draft.card, template: "LIGHT" }, variants: [{ platform: "X", text: "Text", title: "", link: "" }] };
   assert.equal(parseModelResponse(JSON.stringify({ drafts: [upper] }))[0].kind, "social");
   assert.throws(() => parseModelResponse(JSON.stringify({ drafts: [{ ...draft, settings: {} }] })));
 });

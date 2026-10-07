@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findBareDomains } from "./content-rules.js";
-import { xWeightedLength } from "./x-length.js";
+import { measurePlatformLength, utf8Length } from "./text-length.js";
 import { detectFigures } from "./figures.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,6 +28,58 @@ export interface ValidationError {
 
 // Check for Romanian diacritics
 const DIACRITICS = /[ăâîșşțţĂÂÎȘŞȚŢ]/;
+
+/** Text limits per platform, in the unit measurePlatformLength counts (PRD section 5). */
+export const LENGTH_LIMITS: Record<string, number> = {
+  x: 280,
+  facebook: 63206,
+  "linkedin-page": 3000,
+  instagram: 2200,
+  threads: 500,
+  bluesky: 300,
+  mastodon: 500,
+  linkedin: 3000,
+  reddit: 10000,
+  pinterest: 500,
+  telegram: 4096,
+  discord: 1980,
+  medium: 100000,
+  farcaster: 320,
+  nostr: 100000,
+  lemmy: 10000,
+};
+export const BLUESKY_MAX_BYTES = 3000;
+export const REDDIT_TITLE_MAX = 300;
+export const PINTEREST_TITLE_MAX = 100;
+export const LEMMY_TITLE_MIN = 3;
+export const LEMMY_TITLE_MAX = 200;
+export const MEDIUM_MAX_TAGS = 3;
+export const MEDIUM_TAG_MAX = 25;
+
+/** Titles and links the platforms need next to the text (reddit, pinterest, lemmy). */
+export function validateVariantFields(platform: string, variant: { title?: string; link?: string }): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const field = `variants.${platform}`;
+  const title = (variant.title ?? "").trim();
+  const link = (variant.link ?? "").trim();
+  const chars = Array.from(title).length;
+  const add = (rule: string, message: string) => errors.push({ rule, message, field });
+  if (platform === "reddit") {
+    if (!title) add("reddit_title", "Reddit needs a title");
+    else if (chars > REDDIT_TITLE_MAX) add("reddit_title", `Reddit title exceeds ${REDDIT_TITLE_MAX} characters (got ${chars})`);
+  }
+  if (platform === "pinterest") {
+    if (!title) add("pinterest_title", "Pinterest needs a title");
+    else if (chars > PINTEREST_TITLE_MAX) add("pinterest_title", `Pinterest title exceeds ${PINTEREST_TITLE_MAX} characters (got ${chars})`);
+  }
+  if (platform === "lemmy") {
+    if (!title) add("lemmy_title", "Lemmy needs a title");
+    else if (chars < LEMMY_TITLE_MIN || chars > LEMMY_TITLE_MAX || /[\r\n]/.test(title)) {
+      add("lemmy_title", `Lemmy title needs ${LEMMY_TITLE_MIN} to ${LEMMY_TITLE_MAX} characters on one line (got ${chars})`);
+    }
+  }
+  return errors;
+}
 
 export function validateContent(text: string, platform: string): ValidationError[] {
   const errors: ValidationError[] = [];
@@ -60,19 +112,16 @@ export function validateContent(text: string, platform: string): ValidationError
     });
   }
 
-  // Platform-specific length limits
-  const limits: Record<string, number> = {
-    x: 280,
-    facebook: 63206,
-    "linkedin-page": 3000,
-    instagram: 2200,
-  };
-  const length = platform === "x" ? xWeightedLength(text) : Array.from(text).length;
-  if (limits[platform] && length > limits[platform]) {
+  // Platform-specific length limits (the same as the site's PLATFORM_MAX_LENGTH)
+  const length = measurePlatformLength(platform, text);
+  if (LENGTH_LIMITS[platform] && length > LENGTH_LIMITS[platform]) {
     errors.push({
       rule: "length",
-      message: `Text exceeds ${platform} limit of ${limits[platform]} chars (got ${length})`,
+      message: `Text exceeds ${platform} limit of ${LENGTH_LIMITS[platform]} ${platform === "farcaster" ? "bytes" : "chars"} (got ${length})`,
     });
+  }
+  if (platform === "bluesky" && utf8Length(text) > BLUESKY_MAX_BYTES) {
+    errors.push({ rule: "length_bytes", message: `Text exceeds bluesky limit of ${BLUESKY_MAX_BYTES} bytes (got ${utf8Length(text)})` });
   }
 
   // Instagram: no URLs in caption

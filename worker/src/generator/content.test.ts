@@ -6,7 +6,7 @@ import { validateDraft } from "../loops/generator.js";
 import { buildRepairPrompt, mergeRepairs } from "./repair.js";
 import { buildSystemPrompt, buildUserPrompt } from "./prompts.js";
 import { detectFigures, unlistedFigures } from "./figures.js";
-import { modelDraft } from "../test-support/drafts.js";
+import { modelDraft, variant } from "../test-support/drafts.js";
 
 test("URLs without paths are allowed; standalone brand domains fail", () => {
   for (const text of ["https://taxes.support", "https://thecrypto.support.", "www.taxes.support", "https://taxes.support/2026"]) {
@@ -36,12 +36,12 @@ test("figure provenance survives detection; URL digits and single digits do not 
   assert.equal(unlistedFigures("2 pasi", []).length, 0);
 });
 test("article and launch fields fill destination content and canonical URL", () => {
-  const article = validateDraft(modelDraft({ kind: "article", article: { title: "Declaratia", subtitle: "", body_markdown: "Un ghid calm", tags: ["taxe"], canonical_url: "" }, variants: [{ platform: "devto", text: "" }] }), 0, "taxes-support", { source: { type: "article", url: "https://taxes.support/blog/ghid" } });
+  const article = validateDraft(modelDraft({ kind: "article", article: { title: "Declaratia", subtitle: "", body_markdown: "Un ghid calm", tags: ["taxe"], canonical_url: "" }, variants: [variant("devto", "")] }), 0, "taxes-support", { source: { type: "article", url: "https://taxes.support/blog/ghid" } });
   assert.equal(article.article.canonical_url, "https://taxes.support/blog/ghid");
   assert.equal(article.article.subtitle, null);
   assert.equal(article.validation_errors.length, 0);
   assert.equal(article.card.brand, "taxes-support");
-  const launch = validateDraft(modelDraft({ kind: "launch", launch: { name: "Taxes Support", tagline: "Calculezi simplu", description: "Pregatesti declaratia", maker_comment: "" }, variants: [{ platform: "producthunt", text: "" }] }), 0, "taxes-support");
+  const launch = validateDraft(modelDraft({ kind: "launch", launch: { name: "Taxes Support", tagline: "Calculezi simplu", description: "Pregatesti declaratia", maker_comment: "" }, variants: [variant("producthunt", "")] }), 0, "taxes-support");
   assert.equal(launch.validation_errors.length, 0);
   assert.equal(launch.launch.maker_comment, null);
   const system = buildSystemPrompt({ slug: "taxes-support", name: "Taxes Support" }, {});
@@ -62,7 +62,7 @@ test("provider wire overflows remain reviewable instead of losing the draft batc
   const draft = validateDraft(modelDraft({
     notes: 'n'.repeat(4100),
     article: { title: 'Article', subtitle: 's'.repeat(510), body_markdown: 'Text', tags: [], canonical_url: '' },
-    variants: Array.from({ length: 21 }, () => ({ platform: 'x' as const, text: 'Text' })),
+    variants: Array.from({ length: 21 }, () => variant("x", "Text")),
     figures: [{ value: '', context: '', source: 'unverified' }, { value: '16%', context: 'c'.repeat(510), source: 'facts' }],
   }), 0, 'taxes-support');
   assert.equal(draft.notes.length, 4000);

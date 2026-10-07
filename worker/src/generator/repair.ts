@@ -16,7 +16,8 @@ export function buildRepairPrompt(drafts: any[]): string {
   const originals = failing.map(({ validation_errors, variants, card, ...draft }) => ({
     ...draft,
     title: draft.title ?? "", source_url: draft.source_url ?? "", notes: draft.notes ?? "",
-    variants: variants.map(({ settings: _settings, ...variant }: any) => variant),
+    // The model's schema has title and link per variant; the worker kept them as settings.
+    variants: variants.map(({ settings, ...variant }: any) => ({ ...variant, title: settings?.title ?? "", link: settings?.link ?? "" })),
     card: { ...card, brand: undefined, stat: card.stat ?? "" },
     article: draft.article ? { ...draft.article, subtitle: draft.article.subtitle ?? "", canonical_url: draft.article.canonical_url ?? "" } : null,
     launch: draft.launch ? { ...draft.launch, maker_comment: draft.launch.maker_comment ?? "" } : null,

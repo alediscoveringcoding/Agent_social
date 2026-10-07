@@ -18,7 +18,11 @@ export function boundDraftForSite(input: any, errors: ValidationError[]): any {
   };
   for (const [key, max] of [['title', 300], ['canonical_text', 100000], ['source_url', 2048], ['notes', 4000]] as const) text(draft, key, max, key);
   list(draft, 'variants', 20, 'variants');
-  for (const variant of draft.variants ?? []) text(variant, 'text', 100000, `variants.${variant.platform}`);
+  for (const variant of draft.variants ?? []) {
+    text(variant, 'text', 100000, `variants.${variant.platform}`);
+    text(variant, 'title', 300, `variants.${variant.platform}.title`);
+    text(variant, 'link', 2048, `variants.${variant.platform}.link`);
+  }
   if (draft.article) {
     for (const [key, max] of [['title', 300], ['subtitle', 500], ['body_markdown', 200000], ['canonical_url', 2048]] as const) text(draft.article, key, max, `article.${key}`);
     list(draft.article, 'tags', 20, 'article.tags');

@@ -7,6 +7,7 @@ import { logger } from "../logger.js";
 import { siteApi } from "../services/site-api.js";
 import { postizApi } from "../services/postiz-api.js";
 import { destinationHash } from "../delivery/hash.js";
+import { buildPostizPost, postIdFromCreate, type PostizCreatePost, type UploadedMedia } from "../delivery/postiz-payload.js";
 
 export function startDeliveryLoop() {
   async function tick() {
@@ -77,7 +78,7 @@ async function handlePublish(job: any) {
   }
 
   // 2. Download media and upload to Postiz
-  const postizMedia: Array<{ id: string; path: string }> = [];
+  const postizMedia: UploadedMedia[] = [];
   if (media && media.length > 0) {
     for (const m of media) {
       // Windows has no /tmp; use the OS temp dir.
@@ -94,7 +95,7 @@ async function handlePublish(job: any) {
         if (!config.WORKER_DRY_RUN) {
           await writeFile(tmpPath, buffer);
           const uploaded = await postizApi.uploadMedia(tmpPath, m.mime);
-          postizMedia.push({ id: uploaded.id, path: uploaded.path });
+          postizMedia.push({ media_id: m.media_id, id: uploaded.id, path: uploaded.path, alt_text: m.alt_text || "" });
         }
       } catch (err) {
         logger.error("Media transfer failed", { jobId: job_id, mediaId: m.media_id });
@@ -140,25 +141,33 @@ async function handlePublish(job: any) {
     return;
   }
 
+  let postizPayload: PostizCreatePost;
   try {
-    const postizPayload = {
-      type: "now" as const,
-      posts: [
-        {
-          content: destination.text,
-          integration: account.postiz_integration_id,
-          settings: destination.settings || {},
-          media: postizMedia.length > 0 ? postizMedia : undefined,
-        },
-      ],
-    };
+    postizPayload = buildPostizPost({
+      platform: account.platform,
+      integrationId: account.postiz_integration_id,
+      text: destination.text,
+      settings: destination.settings || {},
+      media: postizMedia,
+    });
+  } catch (err) {
+    // A platform with no Postiz provider cannot be delivered: retrying would not help.
+    logger.error("Cannot build the Postiz post", { jobId: job_id, platform: account.platform, error: String(err) });
+    await siteApi.result(job_id, {
+      attempt_no,
+      outcome: "failed",
+      error_code: "VALIDATION_REJECTED",
+      error_message: String(err),
+    });
+    return;
+  }
 
+  try {
     const postizResult = await postizApi.createPost(postizPayload);
-    const postId = postizResult?.id || postizResult?.posts?.[0]?.id;
-    const group = postizResult?.group || postizResult?.id;
+    const { postId, group } = postIdFromCreate(postizResult);
 
     if (postId) {
-      await siteApi.submitted(job_id, attempt_no, postId, group);
+      await siteApi.submitted(job_id, attempt_no, postId, group || postId);
       logger.info("Submitted to Postiz", { jobId: job_id, postizPostId: postId });
     } else {
       logger.warn("No post ID in Postiz response", { jobId: job_id });
@@ -223,7 +232,8 @@ async function handleReconcile(job: any) {
   try {
     const posts = await postizApi.listPosts();
     const candidates = (posts || []).filter(
-      (p: any) => p.integration === account.postiz_integration_id,
+      // GET /posts lists `integration: {id, ...}`; older mocks put the id there directly.
+      (p: any) => (p.integration?.id ?? p.integration) === account.postiz_integration_id,
     );
 
     if (candidates.length > 0) {

@@ -3,7 +3,9 @@ import { logger } from "../logger.js";
 import { LeaseLostError, siteApi } from "../services/site-api.js";
 import { AiNotConfiguredError, generateDrafts, resolveChoice } from "../services/llm.js";
 import { AiOutputError } from "../services/ai-errors.js";
-import { validateContent, type ValidationError } from "../generator/validators.js";
+import { MEDIUM_MAX_TAGS, MEDIUM_TAG_MAX, validateContent, validateVariantFields, type ValidationError } from "../generator/validators.js";
+import { variantSettings } from "../generator/variant-settings.js";
+import { kindOf } from "../platforms.js";
 import { normalizeFigure, unlistedFigures, type DraftFigure } from "../generator/figures.js";
 import { buildSystemPrompt, buildUserPrompt, brandFromSlug } from "../generator/prompts.js";
 import { buildRepairPrompt, mergeRepairs } from "../generator/repair.js";
@@ -31,10 +33,13 @@ export function validateDraft(draft: any, i: number, brandSlug: string, input: a
 } {
   const errors: ValidationError[] = [];
   draft = boundDraftForSite(draft, errors);
-  const variants = (draft.variants ?? []).map((v: any) => ({
-    ...v, platform: String(v.platform).toLowerCase(),
-    settings: v.platform === "instagram" ? { post_type: "post" } : v.platform === "x" ? { who_can_reply: "everyone" } : {},
-  }));
+  const sourceUrl = draft.source_url || (input.source?.type === "article" ? input.source.url : null);
+  // title and link are model-side helpers; the site gets them as settings.
+  const variants = (draft.variants ?? []).map(({ title, link, ...v }: any) => {
+    const platform = String(v.platform).toLowerCase();
+    return { ...v, platform, settings: variantSettings(platform, { title, link }, sourceUrl) };
+  });
+  const variantFields = (draft.variants ?? []).map((v: any) => ({ platform: String(v.platform).toLowerCase(), title: v.title, link: v.link }));
   const article = draft.article ? {
     ...draft.article,
     subtitle: draft.article.subtitle || null,
@@ -45,9 +50,25 @@ export function validateDraft(draft: any, i: number, brandSlug: string, input: a
   const texts = [draft.title, draft.canonical_text, article?.title, article?.subtitle, article?.body_markdown, ...(article?.tags ?? []), launch?.name, launch?.tagline, launch?.description, launch?.maker_comment, card.headline, card.keyword, card.stat, card.subline, card.alt_text].filter(Boolean);
   for (const text of texts) errors.push(...validateContent(text, "generic"));
   for (const v of variants) {
-    const actual = v.text || (v.platform === "producthunt" ? launch?.description : ["devto", "hashnode", "substack"].includes(v.platform) ? article?.body_markdown : "") || "";
+    const actual = v.text || (v.platform === "producthunt" ? launch?.description : kindOf(v.platform) === "article" ? article?.body_markdown : "") || "";
     texts.push(actual);
     errors.push(...validateContent(actual, v.platform).map(e => ({ ...e, field: `variants.${v.platform}` })));
+  }
+  for (const v of variantFields) {
+    errors.push(...validateVariantFields(v.platform, v));
+    for (const extra of [v.title, v.link]) {
+      if (typeof extra === "string" && extra.trim()) {
+        texts.push(extra);
+        errors.push(...validateContent(extra, "generic").map(e => ({ ...e, field: `variants.${v.platform}` })));
+      }
+    }
+  }
+  if (variants.some((v: any) => v.platform === "medium")) {
+    if (!article?.subtitle?.trim()) errors.push({ rule: "medium_subtitle", message: "Medium needs a subtitle", field: "article.subtitle" });
+    const tags: string[] = article?.tags ?? [];
+    if (tags.length > MEDIUM_MAX_TAGS || tags.some(t => Array.from(t).length > MEDIUM_TAG_MAX)) {
+      errors.push({ rule: "article_tags_medium", message: `Medium takes at most ${MEDIUM_MAX_TAGS} tags of at most ${MEDIUM_TAG_MAX} characters`, field: "article.tags" });
+    }
   }
   const add = (rule: string, message: string, field: string) => errors.push({ rule, message, field });
   if (draft.kind === "article" && (!article?.title?.trim() || !article?.body_markdown?.trim())) add("article_missing", "Article needs title and body_markdown", "article");

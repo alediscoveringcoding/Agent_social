@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import type { PostizCreatePost } from "../delivery/postiz-payload.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -35,26 +36,21 @@ export const postizApi = {
   // List connected integrations (channels)
   listIntegrations: () => get("/integrations"),
 
-  // List posts in a date range
-  listPosts: (from?: string, to?: string) => {
+  // List posts in a date range. GET /posts needs startDate and endDate (GetPostsDto,
+  // v2.25.0) and answers {posts: [...]}; the default window is the last 7 days
+  // plus tomorrow. Returns the array.
+  listPosts: async (from?: string, to?: string): Promise<any[]> => {
     const params = new URLSearchParams();
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    const qs = params.toString();
-    return get(`/posts${qs ? `?${qs}` : ""}`);
+    params.set("startDate", from ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+    params.set("endDate", to ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+    const res = await get(`/posts?${params.toString()}`);
+    return Array.isArray(res) ? res : Array.isArray(res?.posts) ? res.posts : [];
   },
 
-  // Create a post (type: "now" for immediate publish)
-  createPost: (payload: {
-    type: "now" | "draft" | "schedule";
-    date?: string;
-    posts: Array<{
-      content: string;
-      integration: string; // Postiz integration ID
-      settings?: Record<string, unknown>;
-      media?: Array<{ id?: string; path?: string }>;
-    }>;
-  }) => post("/posts", payload),
+  // Create a post (type "now" publishes immediately). The body is Postiz's
+  // CreatePostDto, built by delivery/postiz-payload.ts. The answer is a list of
+  // {postId, integration}.
+  createPost: (payload: PostizCreatePost) => post("/posts", payload),
 
   // Upload media file (multipart). Node 20's global FormData/Blob are used,
   // no extra dependency needed.
