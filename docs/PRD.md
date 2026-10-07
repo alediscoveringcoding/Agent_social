@@ -3,10 +3,10 @@
 | | |
 | --- | --- |
 | Status | Local v1 complete on main; offline acceptance passed; external setup and go-live pending |
-| Last updated | 2026-10-06 |
+| Last updated | 2026-10-07 |
 | Tracks | **A: Site** (proposed owner: Raul) · **B: Infra, worker, generator** (proposed owner: Ale) |
 | Related | [README](../README.md) (infra overview; this PRD wins where they differ) |
-| Amendments | [01: Localhost MVP](amendment-01-localhost-mvp.md) (no VPS, everything on localhost) · [02: Standalone site](amendment-02-standalone-site.md) · [03: Finishing the site locally](amendment-03-finish-the-site.md) (local mode and W1–W4 implemented) |
+| Amendments | [01: Localhost MVP](amendment-01-localhost-mvp.md) (no VPS, everything on localhost) · [02: Standalone site](amendment-02-standalone-site.md) · [03: Finishing the site locally](amendment-03-finish-the-site.md) (local mode and W1–W4 implemented) · [04: More platforms](amendment-04-more-platforms.md) (12 more Postiz platforms, a Pinterest card format) |
 
 > This repository is **public**. Never commit secrets, real `.env` files, account handles that are not public, or internal notes from the site repository.
 
@@ -36,6 +36,8 @@ The original two-track plan remains below. Amendments 01–03 define the current
 Acceptance passed in WSL: **276 site tests and 27 worker tests**, type checks, lint, migration application and the production build. Production HTTP smoke covered 16 authenticated pages, login redirects, both DST weeks, manual handoffs, card previews and signed downloads. Cross-stream acceptance used fresh local data and real HTTP to verify fake generation → edit/card → figures check and approval → downloaded media → published URL in overview/calendar, manual publication, and the production worker's dry run. Real AI and platform APIs were not called for acceptance.
 
 Final review added migration `0007_media_metadata_immutable.sql`, checked the copy/figures on each attached immutable card, prevented competing text/media edits, and aligned keyword validation. See [completed handoff](handoff-codex.md) and [site setup](../site/README.md). The local milestone is complete; live publishing and production go-live are still pending.
+
+Amendment 04 (2026-10-07) added twelve more platforms, all automatic through Postiz, and a Pinterest card format (migration `0008_more_platforms.sql`): see section 5 and [amendment 04](amendment-04-more-platforms.md). No platform connection exists yet.
 
 ## 2. Goals, non-goals, success
 
@@ -116,6 +118,29 @@ Seed three brands: **Taxes Support** (umbrella, taxes.support), **The Crypto Sup
 
 The Postiz provider list was checked against the `v2.25.0` source on 2026-10-04: it includes `x`, `facebook`, `instagram`, `instagram.standalone`, `linkedin.page`, `dev.to` and `hashnode` (dev.to and Hashnode support a `canonical` setting); it has no Substack or Product Hunt provider. Exact provider identifiers and limits are re-checked in task B3 against Postiz's `GET /integrations/{id}/settings`, which returns each channel's max length and settings schema.
 
+### Platforms added by amendment 04
+
+Twelve platforms, all with a Postiz provider in the pinned `v2.25.0` source, so all are **automatic**; none is manual-only. Any account can still be switched to manual mode (a channel waiting for a platform's approval), and then the manual handoff of 6.2 applies with the fields below. Decisions and the platforms left out: [amendment 04](amendment-04-more-platforms.md). Limits come from the sources named in the last column (checked 2026-10-07); "flagged" means the source could not be re-read that day and the value is the commonly documented one.
+
+| Platform | Kind | Postiz provider | Text limit | Images | Required fields, tags, titles | Sources |
+| --- | --- | --- | --- | --- | --- | --- |
+| Threads | social | `threads` | ≤ 500 characters | ≤ 20 (carousel) | One topic tag per post: a second hashtag only warns | Postiz `threads.provider.ts` (`maxLength` 500, error "Post text exceeds 500 characters limit"). Meta Threads API docs for the carousel size and the topic tag (flagged: the docs need a browser) |
+| Bluesky | social | `bluesky` | ≤ 300 **graphemes** and ≤ 3,000 UTF-8 bytes | ≤ 4, with alt text | No limit on hashtags in the text | atproto lexicons `app.bsky.feed.post` (`maxGraphemes` 300, `maxLength` 3000) and `app.bsky.embed.images` (`maxLength` 4); Postiz `bluesky.provider.ts` (300, "maximum 4 pictures") |
+| Mastodon | social | `mastodon` (`mastodon-custom` for an instance of your choice) | ≤ 500 characters, **every link counts 23** | ≤ 4; alt text ≤ 1,500 | none | Mastodon docs, `Instance` entity: `statuses.max_characters` 500, `max_media_attachments` 4, `characters_reserved_per_url` 23, `media_attachments.description_limit` 1500 (defaults; an instance may differ); Postiz `mastodon.provider.ts` (500) |
+| LinkedIn (profile) | social | `linkedin` | ≤ 3,000 | ≤ 9 | none (the page is `linkedin-page`, a separate platform) | Postiz `linkedin.provider.ts` (`maxLength` 3000). Image count carried over from `linkedin-page` (flagged) |
+| Reddit | social | `reddit` | body ≤ 10,000 | a media post holds exactly 1 | **subreddit**, **title ≤ 300**, post type `self` / `link` / `media`, link URL for `link`, optional flair id | Postiz `reddit.provider.ts` (`maxLength` 10000, `checkValidity`: one media file) and `reddit.dto.ts`; Reddit's published source, `VTitle` (`max_length = 300`). Reddit allows longer bodies; Postiz's lower limit is the one that is enforced |
+| Pinterest | social | `pinterest` | description ≤ 500; alt text ≤ 500 | **at least 1**, ≤ 5; 1000×1500 recommended | **board (numeric id)**, **title ≤ 100**, **link ≤ 2,048 characters** | Postiz `pinterest.provider.ts` (`maxLength` 500, "Requires at least one media", "up to 5 media items") and `pinterest.dto.ts` (title 100, numeric board id); Pinterest API v5, create pin: title 100, description 800, link 2048, alt text 500 |
+| Telegram | social | `telegram` | ≤ 4,096; **≤ 1,024 when an image is attached** (it becomes the caption) | ≤ 10 (one media group) | none (the chat is the Postiz channel's bot) | Postiz `telegram.provider.ts` (`maxLength` 4096; one image is sent with the text as caption); Telegram Bot API: `sendMessage` text 1–4096, caption 0–1024, `sendMediaGroup` 2–10 items |
+| Discord | social | `discord` | ≤ 1,980 | ≤ 10 (flagged) | **channel (numeric id)** | Postiz `discord.provider.ts` (`maxLength` 1980) and `discord.dto.ts`; Discord API reference, Create Message: content up to 2,000 characters |
+| Medium | **article** | `medium` | body ≤ 100,000 | the API takes no cover; images go in the markdown | **title**, **subtitle** (Postiz requires it), tags ≤ 3 of ≤ 25 characters, canonical URL to our blog | Postiz `medium.provider.ts` and `medium.settings.dto.ts` (title, subtitle, canonical, ≤ 4 tags); Medium API docs: "only the first three" tags, tags over 25 characters ignored, `canonicalUrl`, the title is metadata only |
+| Farcaster | social | `wrapcast` | ≤ 320 **UTF-8 bytes** | ≤ 2 embeds | channel optional | Farcaster protocol specification (`CastAddBody`: `CAST` ≤ 320 bytes, `LONG_CAST` ≤ 1,024 bytes, ≤ 2 embeds); Postiz `farcaster.provider.ts` (`maxLength` 800; needs Neynar credentials on the Postiz server) |
+| Nostr | social | `nostr` | ≤ 100,000 | no documented limit (Postiz appends image links to the note) | none | NIP-01 sets no content limit (relays do); Postiz `nostr.provider.ts` (`maxLength` 100000) |
+| Lemmy | social | `lemmy` | body ≤ 10,000 | ≤ 1 (the post thumbnail) | **community name**, **community id (numeric)**, **title 3–200 on one line**, optional link ≤ 2,000 | Postiz `lemmy.provider.ts` (`maxLength` 10000, one picture) and `lemmy.dto.ts`; Lemmy `validation.rs` (title 3–200, post body 50,000, URL 2,000, alt text 1,500) |
+
+Counting is platform-specific, like X's weighted length: Bluesky counts graphemes, Mastodon counts a link as 23, Farcaster counts bytes, every other platform counts code points (`site/src/lib/social/text-length.ts`, copied to the worker).
+
+Not added: **TikTok and YouTube** (video only; this app makes text and images) and the other Postiz providers outside the list (Slack, Twitch, Kick, Tumblr, Dribbble, WordPress, Listmonk, Skool, MeWe, VK, Whop, Google Business, Moltbook).
+
 ### Daily cap
 
 - Default and maximum: 5 posts per account per Bucharest calendar day. An admin can lower it per account.
@@ -136,7 +161,7 @@ The Postiz provider list was checked against the `v2.25.0` source on 2026-10-04:
 8. The worker polls Postiz until the post is published or failed, and reports the public URL or the error.
 9. **Overview** shows each destination's state; a failed destination can be retried alone.
 
-### 6.2 Manual handoff (Substack, Product Hunt, LinkedIn before approval)
+### 6.2 Manual handoff (Substack, Product Hunt, LinkedIn before approval, any account switched to manual mode)
 
 1. Same generate/edit/approve flow. At the slot time the job becomes `manual_pending` and a notification goes out.
 2. The destination page shows: copy buttons (plain, markdown, HTML), image downloads, an "Open editor" link to the platform, and a checklist (for Product Hunt).
@@ -250,10 +275,12 @@ Both tracks implement these: the generator (B) validates before delivering draft
 | Banned phrases | list kept in `worker/prompts/banned.txt` and mirrored in the site's config (a change goes to both): starts with "to the moon", "garantat", "profit sigur", "pretul va", "investeste acum" |
 | Legal name | operator company name not present |
 | Bare domain | `taxes.support` / `thecrypto.support` only as part of a URL |
-| Length | per platform (section 5), X counted with its weighting |
+| Length | per platform (section 5), counted the platform's way: X weighted, Bluesky graphemes (and 3,000 bytes), Mastodon links as 23, Farcaster bytes, Telegram 1,024 with an image |
 | Instagram | at least one image, no URLs in caption |
+| Required fields (amendment 04) | Reddit: subreddit and title (≤ 300), a `link` post needs a URL, a `media` post exactly one image. Pinterest: at least one image, numeric board id, title (≤ 100), link. Discord: channel id. Lemmy: community name, community id, title (3–200). Medium: title, subtitle. Farcaster: a channel, if given, is a valid channel id |
+| Tags (amendment 04) | Medium at most 3 tags of at most 25 characters (dev.to 4, Hashnode 5, Instagram 30 hashtags as before); Threads warns past one hashtag |
 | Figures | any digit, `%`, `lei`, `RON`, `EUR` or date triggers `contains_figures`; approval needs "figures checked"; any `unverified` figure blocks approval until resolved |
-| Article canonical | dev.to and Hashnode posts must have `canonical` set to our blog URL |
+| Article canonical | dev.to, Hashnode and Medium posts must have `canonical` set to our blog URL |
 
 ### 8.3 Brand cards
 
@@ -437,7 +464,7 @@ n8n polls the site, so **n8n needs no public webhook** and its UI can stay behin
 
 ### 10.5 Draft and card spec (B produces, A consumes)
 
-`platform` values used everywhere in the contracts: `facebook`, `instagram`, `linkedin-page`, `x`, `devto`, `hashnode`, `substack`, `producthunt`. The worker maps them to Postiz provider identifiers.
+`platform` values used everywhere in the contracts: `facebook`, `instagram`, `linkedin-page`, `x`, `devto`, `hashnode`, `substack`, `producthunt`, and (amendment 04) `threads`, `bluesky`, `mastodon`, `linkedin` (a personal profile; `linkedin-page` is the company page), `reddit`, `pinterest`, `telegram`, `discord`, `medium`, `farcaster`, `nostr`, `lemmy`. The worker maps them to Postiz provider identifiers (section 5; Farcaster is `wrapcast`).
 
 Generation `input`:
 
@@ -485,7 +512,7 @@ Generation `input`:
 }
 ```
 
-For `kind: "article"`, `article` is `{ "title", "subtitle", "body_markdown", "tags": [], "canonical_url" }` and `variants` holds the dev.to / Hashnode / Substack entries. For `kind: "launch"`, `article` is replaced by `launch: { "name", "tagline", "description", "maker_comment" }`.
+For `kind: "article"`, `article` is `{ "title", "subtitle", "body_markdown", "tags": [], "canonical_url" }` and `variants` holds the dev.to / Hashnode / Substack / Medium entries. For `kind: "launch"`, `article` is replaced by `launch: { "name", "tagline", "description", "maker_comment" }`.
 
 Card spec limits: `headline` ≤ 70 chars, `keyword` a substring of `headline`, `stat` ≤ 8 chars and optional (it is the single gold element), `subline` ≤ 110 chars, `template` one of `light` / `dark` / `mint`.
 
@@ -493,12 +520,13 @@ Card formats the renderer (A) produces per destination:
 
 | Format | Size | Used for |
 | --- | --- | --- |
-| `square` | 1080×1080 | Facebook, LinkedIn |
+| `square` | 1080×1080 | Facebook, LinkedIn (page and profile), Threads, Lemmy |
 | `portrait` | 1080×1350 | Instagram |
-| `x` | 1600×900 | X |
+| `x` | 1600×900 | X, Bluesky, Mastodon, Reddit, Telegram, Discord, Farcaster, Nostr |
 | `devto_cover` | 1000×420 | dev.to |
-| `hashnode_cover` | 1600×840 | Hashnode, Substack |
+| `hashnode_cover` | 1600×840 | Hashnode, Substack, Medium |
 | `ph_gallery` | 1270×760 | Product Hunt |
+| `pinterest` | 1000×1500 | Pinterest (2:3 pins; amendment 04) |
 
 Neutral `settings` per platform (B maps them to Postiz provider settings):
 
@@ -508,6 +536,14 @@ Neutral `settings` per platform (B maps them to Postiz provider settings):
 | `instagram` | `post_type`: `post` |
 | `facebook`, `linkedin-page` | none in v1 |
 | `devto`, `hashnode` | `title`, `subtitle` (Hashnode), `tags`, `canonical_url`, `cover_media_id` |
+| `medium` | `title`, `subtitle`, `tags` (≤ 3), `canonical_url` |
+| `reddit` | `subreddit`, `title`, `post_type` (`self`, `link`, `media`), `link_url`, `flair_id` |
+| `pinterest` | `board` (numeric id), `title`, `link` |
+| `discord`, `farcaster` | `channel` (a numeric id for Discord; optional for Farcaster) |
+| `lemmy` | `community`, `community_id`, `title`, `link` |
+| `linkedin`, `threads`, `bluesky`, `mastodon`, `telegram`, `nostr` | none |
+
+The generator never invents `subreddit`, `board`, `channel`, `community` or `community_id`: a person fills them in the composer, and approval stays blocked until they are set. It does supply `title` (Reddit, Pinterest, Lemmy) and the Pinterest `link` (the source article).
 
 ### 10.6 Content hash
 
