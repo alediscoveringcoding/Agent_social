@@ -221,6 +221,15 @@ export interface Handoff {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : Array.isArray(v) ? v.map(String).join(', ') : '')
 
+/** Article platforms whose fields come from the settings table (not the dev.to-style title/tags set). */
+const FIELD_TABLE_ARTICLES: readonly Platform[] = ['wordpress', 'listmonk', 'linkedin-article', 'github', 'press']
+
+const ARTICLE_BODY_LABELS: Partial<Record<Platform, string>> = {
+  listmonk: 'Newsletter',
+  press: 'Comunicat',
+  github: 'Descriere',
+}
+
 function articleLike(platform: Platform, kind: PostKind): boolean {
   return PLATFORM_KIND[platform] === 'article' || (kind === 'article' && platform !== 'producthunt')
 }
@@ -249,7 +258,7 @@ export function buildHandoff(input: HandoffInput): Handoff {
 
   if (articleLike(input.platform, input.kind)) {
     const body = input.text.trim() ? input.text : str(a.body_markdown)
-    if (input.platform === 'wordpress' || input.platform === 'listmonk') {
+    if (FIELD_TABLE_ARTICLES.includes(input.platform)) {
       // Fields as the platform's own editor names them (the e-mail subject, the preview line, the list).
       for (const f of SETTINGS_FIELDS[input.platform] ?? []) {
         const fallback = f.key === 'title' ? str(a.title) || input.title || '' : f.key === 'subtitle' ? str(a.subtitle) : ''
@@ -267,7 +276,7 @@ export function buildHandoff(input: HandoffInput): Handoff {
     }
     return {
       fields,
-      body: { label: input.platform === 'listmonk' ? 'Newsletter' : 'Articol', plain: markdownToPlain(body), markdown: body, html: markdownToHtml(body) },
+      body: { label: ARTICLE_BODY_LABELS[input.platform] ?? 'Articol', plain: markdownToPlain(body), markdown: body, html: markdownToHtml(body) },
       checklist: CHECKLISTS[input.platform] ?? CHECKLISTS.article,
     }
   }
@@ -392,6 +401,62 @@ export const CHECKLISTS: Record<string, string[]> = {
     'Etichetele sunt adaugate',
     'Imaginea de coperta (miniatura) e incarcata, daca exista',
     'Videoclipul e publicat sau programat',
+  ],
+  // Amendment 05: manual-only channels.
+  quora: [
+    'Intrebarea sau Space-ul sunt cele din campurile de mai sus',
+    'Raspunsul raspunde intrebarii si nu e doar o reclama',
+    'Textul e lipit si recitit; imaginea e atasata, daca exista',
+    'Raspunsul e publicat si linkul lui e salvat',
+  ],
+  'linkedin-article': [
+    'Titlul (cel mult 100 de caractere) si subtitlul sunt copiate',
+    'Corpul articolului e lipit si arata bine in previzualizare',
+    'Coperta e incarcata',
+    'Articolul sau numarul de newsletter e publicat pe profilul sau pagina corecta',
+    'Linkul articolului e salvat',
+  ],
+  tradingview: [
+    'Simbolul din campurile de mai sus e deschis in grafic',
+    'Graficul e desenat sau imaginea cardului e atasata',
+    'Titlul ideii si descrierea sunt copiate',
+    'Ideea e publicata (sau Mind-ul trimis) si linkul ei e salvat',
+  ],
+  investing: [
+    'Pagina instrumentului este cea din campurile de mai sus',
+    'Textul e lipit si recitit; comentariul respecta regulile comunitatii',
+    'Postarea e publicata si linkul ei e salvat',
+  ],
+  indiehackers: [
+    'Titlul e copiat si grupul e ales, daca exista',
+    'Textul e lipit si arata bine in previzualizare',
+    'Postarea e publicata si linkul ei e salvat',
+  ],
+  stackexchange: [
+    'Site-ul si tipul (raspuns sau intrebare) sunt cele din campurile de mai sus',
+    'Afilierea este declarata in raspuns (regula de autopromovare Stack Exchange)',
+    'Raspunsul raspunde intrebarii; linkurile spre noi sunt doar completari, nu raspunsul',
+    'Pentru o intrebare: titlul (15 pana la 150 de caractere) si cel mult 5 etichete sunt completate',
+    'Postarea e publicata si linkul ei e salvat',
+  ],
+  github: [
+    'Repository-ul si tipul (release sau discutie) sunt cele din campurile de mai sus',
+    'Pentru release: tag-ul exista sau e creat, iar titlul e copiat',
+    'Pentru discutie: categoria e aleasa',
+    'Descrierea e lipita si arata bine in previzualizare',
+    'Release-ul sau discutia e publicat si linkul e salvat',
+  ],
+  forum: [
+    'Forumul este cel al contului si regulile lui permit postarea',
+    'Firul (raspuns) sau titlul (fir nou) sunt cele din campurile de mai sus',
+    'Textul e lipit si recitit',
+    'Postarea e publicata si linkul ei e salvat',
+  ],
+  press: [
+    'Comunicatul e trimis redactiei, pe pagina de contact a publicatiei',
+    'Titlul, leadul si paragraful "Despre" sunt incluse',
+    'Urmarirea: redactia a confirmat primirea sau am revenit dupa cateva zile',
+    'Linkul articolului aparut e salvat',
   ],
 }
 

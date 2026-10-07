@@ -42,6 +42,16 @@ export const PLATFORMS = [
   'twitch',
   'tiktok',
   'youtube',
+  // Amendment 05: manual-only channels (no API we use). Never in Postiz.
+  'quora',
+  'linkedin-article',
+  'tradingview',
+  'investing',
+  'indiehackers',
+  'stackexchange',
+  'github',
+  'forum',
+  'press',
 ] as const
 export type Platform = (typeof PLATFORMS)[number]
 
@@ -85,6 +95,15 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   twitch: 'Twitch',
   tiktok: 'TikTok',
   youtube: 'YouTube',
+  quora: 'Quora',
+  'linkedin-article': 'LinkedIn (articol)',
+  tradingview: 'TradingView',
+  investing: 'Investing.com',
+  indiehackers: 'Indie Hackers',
+  stackexchange: 'Stack Exchange',
+  github: 'GitHub',
+  forum: 'Forum',
+  press: 'Presa (comunicat)',
 }
 
 /**
@@ -94,13 +113,47 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
  * Every other platform can still be switched to manual mode account by
  * account (a channel waiting for a platform's approval).
  */
-export const MANUAL_ONLY_PLATFORMS: readonly Platform[] = ['substack', 'producthunt', 'youtube']
+export const MANUAL_ONLY_PLATFORMS: readonly Platform[] = [
+  'substack',
+  'producthunt',
+  'youtube',
+  // Amendment 05.
+  'quora',
+  'linkedin-article',
+  'tradingview',
+  'investing',
+  'indiehackers',
+  'stackexchange',
+  'github',
+  'forum',
+  'press',
+]
+
+/** Reddit communities the owner posts in, offered as suggestions on the subreddit field (never forced). */
+export const REDDIT_SUBREDDIT_SUGGESTIONS: readonly string[] = [
+  'r/Romania',
+  'r/RoInvestitii',
+  'r/eupersonalfinance',
+  'r/Trading212',
+  'r/interactivebrokers',
+  'r/eToro',
+]
 
 /** Why a platform is manual-only, for the handoff page and the accounts screen. */
 export const MANUAL_ONLY_REASONS: Partial<Record<Platform, string>> = {
   substack: 'Substack nu are API de publicare.',
   producthunt: 'Product Hunt nu are API pentru lansari.',
   youtube: 'YouTube cere video, iar aplicatia face doar text si imagini: filmul se incarca manual, textul de mai jos e pentru titlu si descriere.',
+  quora: 'Quora nu are API de publicare.',
+  'linkedin-article': 'API-ul LinkedIn nu poate crea articole sau newslettere: se publica din editorul LinkedIn.',
+  tradingview: 'TradingView nu are API de publicare pentru idei.',
+  investing: 'Investing.com nu are API de publicare pentru comunitate.',
+  indiehackers: 'Indie Hackers nu are API de publicare.',
+  stackexchange:
+    'Stack Exchange are API de scriere, dar regulile de autopromovare cer sa spui ca esti afiliat: raspunsul se verifica si se publica de o persoana.',
+  github: 'Integrarea directa cu GitHub (release si Discussions) vine mai tarziu: deocamdata se publica manual.',
+  forum: 'Forumurile nu au un API comun: fiecare cont este un forum si se posteaza manual.',
+  press: 'Comunicatele se trimit redactiilor: fiecare cont este o publicatie si se trimite manual.',
 }
 
 /** Content kind per platform (PRD section 5). */
@@ -140,6 +193,15 @@ export const PLATFORM_KIND: Record<Platform, PostKind> = {
   twitch: 'social',
   tiktok: 'social',
   youtube: 'social',
+  quora: 'social',
+  'linkedin-article': 'article',
+  tradingview: 'social',
+  investing: 'social',
+  indiehackers: 'social',
+  stackexchange: 'social',
+  github: 'article',
+  forum: 'social',
+  press: 'article',
 }
 
 export const POST_KINDS = ['social', 'article', 'launch'] as const
@@ -322,6 +384,15 @@ export const PLATFORM_CARD_FORMAT: Record<Platform, CardFormat> = {
   twitch: 'x',
   tiktok: 'portrait',
   youtube: 'x',
+  quora: 'x',
+  'linkedin-article': 'hashnode_cover',
+  tradingview: 'x',
+  investing: 'x',
+  indiehackers: 'x',
+  stackexchange: 'x',
+  github: 'hashnode_cover',
+  forum: 'x',
+  press: 'x',
 }
 
 /**
@@ -448,4 +519,12 @@ export const DEFAULT_OPEN_EDITOR_URLS: Partial<Record<Platform, string>> = {
   twitch: 'https://www.twitch.tv/',
   tiktok: 'https://www.tiktok.com/creator-center/upload',
   youtube: 'https://studio.youtube.com/',
+  // Amendment 05. `forum` and `press` have none: each account brings its own link.
+  quora: 'https://www.quora.com/',
+  'linkedin-article': 'https://www.linkedin.com/article/new/',
+  tradingview: 'https://www.tradingview.com/chart/',
+  investing: 'https://www.investing.com/',
+  indiehackers: 'https://www.indiehackers.com/new-post',
+  stackexchange: 'https://stackexchange.com/sites',
+  github: 'https://github.com/',
 }

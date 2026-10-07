@@ -9,7 +9,7 @@
  * draft-edit.ts.
  */
 
-import type { Platform } from './constants.ts'
+import { REDDIT_SUBREDDIT_SUGGESTIONS, type Platform } from './constants.ts'
 
 export interface SettingsField {
   key: string
@@ -25,7 +25,16 @@ export interface SettingsField {
   maxItems?: number
   /** Spans both columns of the editor grid. */
   wide?: boolean
+  /** Values offered by the editor (a datalist); the field still takes anything. */
+  suggestions?: readonly string[]
 }
+
+export const STACKEXCHANGE_POST_TYPES = ['answer', 'question'] as const
+export const STACKEXCHANGE_POST_TYPE_LABELS = { answer: 'Raspuns', question: 'Intrebare' } as const
+export const STACKEXCHANGE_DEFAULT_SITE = 'money.stackexchange.com'
+
+export const GITHUB_POST_TYPES = ['release', 'discussion'] as const
+export const GITHUB_POST_TYPE_LABELS = { release: 'Release', discussion: 'Discutie (Discussion)' } as const
 
 export const REDDIT_POST_TYPES = ['self', 'link', 'media'] as const
 export type RedditPostType = (typeof REDDIT_POST_TYPES)[number]
@@ -74,6 +83,43 @@ export const WORDPRESS_STATUS_LABELS = { publish: 'Publicat', draft: 'Ciorna', p
 const options = <T extends string>(values: readonly T[], labels: Record<T, string>) => values.map((value) => ({ value, label: labels[value] }))
 
 export const SETTINGS_FIELDS: Partial<Record<Platform, readonly SettingsField[]>> = {
+  // Amendment 05: manual-only channels.
+  quora: [{ key: 'target_url', label: 'Intrebarea sau Space-ul', required: true, hint: 'Linkul intrebarii la care raspunzi sau al Space-ului (https://...).', wide: true }],
+  'linkedin-article': [
+    { key: 'title', label: 'Titlu', required: true, max: 100, hint: 'Cel mult 100 de caractere.' },
+    { key: 'subtitle', label: 'Subtitlu', hint: 'Optional.' },
+  ],
+  tradingview: [
+    { key: 'symbol', label: 'Simbol', required: true, hint: 'De exemplu BINANCE:BTCUSDT.' },
+    { key: 'title', label: 'Titlul ideii', required: true, max: 100, hint: 'Cel mult 100 de caractere.' },
+  ],
+  investing: [{ key: 'instrument_url', label: 'Pagina instrumentului', required: true, hint: 'Linkul paginii instrumentului (https://...).', wide: true }],
+  indiehackers: [
+    { key: 'title', label: 'Titlu', required: true, max: 150 },
+    { key: 'group', label: 'Grup', hint: 'Optional.' },
+  ],
+  stackexchange: [
+    { key: 'site', label: 'Site', hint: `Implicit ${STACKEXCHANGE_DEFAULT_SITE}.` },
+    { key: 'post_type', label: 'Tip', kind: 'select', options: options(STACKEXCHANGE_POST_TYPES, STACKEXCHANGE_POST_TYPE_LABELS) },
+    { key: 'question_url', label: 'Intrebarea (pentru raspuns)', hint: 'Cerut la raspuns (https://...).', wide: true },
+    { key: 'title', label: 'Titlul intrebarii', max: 150, hint: 'Doar la intrebare: 15 pana la 150 de caractere.' },
+    { key: 'tags', label: 'Etichete', kind: 'tags', maxItems: 5, hint: 'Cerute la intrebare, cel mult 5, separate prin virgula.' },
+  ],
+  github: [
+    { key: 'repo', label: 'Repository', required: true, hint: 'owner/nume.' },
+    { key: 'post_type', label: 'Tip', kind: 'select', options: options(GITHUB_POST_TYPES, GITHUB_POST_TYPE_LABELS) },
+    { key: 'title', label: 'Titlu', required: true },
+    { key: 'tag', label: 'Tag (pentru release)', hint: 'Cerut la release, de exemplu v1.2.0.' },
+    { key: 'category', label: 'Categorie (pentru discutie)', hint: 'Cerut la discutie, de exemplu Announcements.' },
+  ],
+  forum: [
+    { key: 'thread_url', label: 'Firul de discutie (pentru raspuns)', hint: 'Linkul firului la care raspunzi. Completeaza fie acesta, fie titlul.', wide: true },
+    { key: 'title', label: 'Titlul firului nou', hint: 'Pentru un fir nou. Completeaza fie acesta, fie linkul firului.' },
+  ],
+  press: [
+    { key: 'title', label: 'Titlul comunicatului', required: true },
+    { key: 'subtitle', label: 'Lead', hint: 'Prima fraza care rezuma stirea.' },
+  ],
   slack: [{ key: 'channel', label: 'Canal (id)', required: true, hint: 'Id-ul canalului Slack, de forma C0123ABCD.' }],
   wordpress: [
     { key: 'title', label: 'Titlu', required: true },
@@ -133,7 +179,13 @@ export const SETTINGS_FIELDS: Partial<Record<Platform, readonly SettingsField[]>
     { key: 'tags', label: 'Etichete', kind: 'tags', maxItems: 15, hint: 'Separate prin virgula; impreuna cel mult 500 de caractere.' },
   ],
   reddit: [
-    { key: 'subreddit', label: 'Subreddit', required: true, hint: 'De exemplu r/numele_comunitatii.' },
+    {
+      key: 'subreddit',
+      label: 'Subreddit',
+      required: true,
+      hint: 'De exemplu r/numele_comunitatii; lista de sugestii nu te obliga.',
+      suggestions: REDDIT_SUBREDDIT_SUGGESTIONS,
+    },
     { key: 'title', label: 'Titlu', required: true, max: 300, hint: 'Cel mult 300 de caractere.' },
     {
       key: 'post_type',

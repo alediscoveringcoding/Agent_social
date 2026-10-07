@@ -450,8 +450,14 @@ components:
       description: PRD 10.7 codes (RATE_LIMITED, TRANSIENT, MEDIA_FETCH_FAILED, AUTH_EXPIRED, PERMISSION_DENIED, VALIDATION_REJECTED, HASH_MISMATCH, UNKNOWN_RESULT, STALE, RECONCILE_MISS); any UPPER_SNAKE_CASE code is stored.
     Platform:
       type: string
-      enum: [facebook, instagram, linkedin-page, x, devto, hashnode, substack, producthunt, threads, bluesky, mastodon, linkedin, reddit, pinterest, telegram, discord, medium, farcaster, nostr, lemmy, slack, wordpress, listmonk, vk, gmb, tumblr, dribbble, mewe, skool, whop, moltbook, kick, twitch, tiktok, youtube]
+      enum: [facebook, instagram, linkedin-page, x, devto, hashnode, substack, producthunt, threads, bluesky, mastodon, linkedin, reddit, pinterest, telegram, discord, medium, farcaster, nostr, lemmy, slack, wordpress, listmonk, vk, gmb, tumblr, dribbble, mewe, skool, whop, moltbook, kick, twitch, tiktok, youtube, quora, linkedin-article, tradingview, investing, indiehackers, stackexchange, github, forum, press]
       description: |
+        Amendment 05 added nine manual-only channels with no Postiz provider: quora, linkedin-article,
+        tradingview, investing, indiehackers, stackexchange, github, forum (one account per forum) and press
+        (one account per outlet). The worker never receives their jobs; they appear here because drafts
+        (`variants[].platform`) and generation requests name them. `kind`: article for linkedin-article, github
+        and press; social for the rest.
+
         Amendment 04 added every Postiz provider (v2.25.0): threads, bluesky, mastodon, linkedin (a personal
         profile; `linkedin-page` is the company page), reddit, pinterest, telegram, discord, medium, farcaster,
         nostr, lemmy, slack, wordpress, listmonk, vk, gmb (Google Business), tumblr, dribbble, mewe, skool, whop,
@@ -489,6 +495,14 @@ components:
         | twitch | `message_type`, `announcement_color` |
         | tiktok | `title`, `privacy_level` (default `SELF_ONLY`) |
         | youtube | `title`, `tags` (manual handoff only) |
+        | quora | `target_url` (manual handoff only) |
+        | linkedin-article, press | `title`, `subtitle` (the lead of a press release) (manual handoff only) |
+        | tradingview | `symbol`, `title` (manual handoff only) |
+        | investing | `instrument_url` (manual handoff only) |
+        | indiehackers | `title`, `group` (manual handoff only) |
+        | stackexchange | `site`, `post_type` (`answer` or `question`), `question_url`, `title`, `tags` (at most 5) (manual handoff only) |
+        | github | `repo`, `post_type` (`release` or `discussion`), `title`, `tag`, `category` (manual handoff only) |
+        | forum | `thread_url` or `title`, exactly one (manual handoff only) |
         | facebook, linkedin-page, linkedin, threads, bluesky, mastodon, telegram, nostr, vk, kick | none |
     DeliveryJob:
       type: object

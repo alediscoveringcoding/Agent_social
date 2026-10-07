@@ -26,8 +26,11 @@ import {
 import { detectFigures, unlistedFigures, unverifiedFigures, type DraftFigure, type FigureMatch } from './figures.ts'
 import { lengthUnit, measurePlatformLength, utf8Length } from './text-length.ts'
 import {
+  GITHUB_POST_TYPES,
   GMB_CTA_NEEDS_URL,
   GMB_CTA_TYPES,
+  STACKEXCHANGE_DEFAULT_SITE,
+  STACKEXCHANGE_POST_TYPES,
   MEWE_POST_TYPES,
   REDDIT_POST_TYPES,
   TIKTOK_PRIVACY_LEVELS,
@@ -116,6 +119,16 @@ export const PLATFORM_MAX_LENGTH: Partial<Record<Platform, number>> = {
   twitch: 500, // chat message
   tiktok: 2000, // description; TikTok's photo posts allow 4,000
   youtube: 5000, // description
+  // Amendment 05 (sources in docs/amendment-05-manual-channels.md; "flagged" ones are our own choice).
+  quora: 20000, // flagged: no documented limit
+  'linkedin-article': 110000, // flagged: third-party reference, LinkedIn does not publish it
+  tradingview: 10000, // flagged
+  investing: 5000, // flagged
+  indiehackers: 20000, // flagged
+  stackexchange: 30000, // body of a question or answer
+  github: 125000, // release body
+  forum: 20000, // flagged: differs per forum
+  press: 50000, // flagged
 }
 
 export const MAX_IMAGES: Partial<Record<Platform, number>> = {
@@ -141,6 +154,7 @@ export const MAX_IMAGES: Partial<Record<Platform, number>> = {
   tumblr: 30,
   dribbble: 1,
   tiktok: 35, // a photo post
+  'linkedin-article': 1, // the cover
 }
 
 /** Platforms whose Postiz provider publishes text only (chat messages, Moltbook). */
@@ -173,6 +187,17 @@ export const TIKTOK_TITLE_MAX = 90
 export const TIKTOK_MAX_SHORT_SIDE = 1080
 export const YOUTUBE_TITLE_MAX = 100
 export const YOUTUBE_TAGS_MAX = 500
+export const LINKEDIN_ARTICLE_TITLE_MAX = 100
+export const TRADINGVIEW_TITLE_MAX = 100 // flagged
+export const INDIEHACKERS_TITLE_MAX = 150 // flagged
+export const SE_TITLE_MIN = 15
+export const SE_TITLE_MAX = 150
+export const SE_BODY_MIN = 30
+export const SE_MAX_TAGS = 5
+export const SE_TAG_MAX = 35
+const SE_SITE_RE = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/
+const GITHUB_REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
+const TV_SYMBOL_RE = /^[A-Za-z0-9_.!&-]+(?::[A-Za-z0-9_.!&/-]+)?$/
 /** Dribbble accepts exactly these two shot sizes (Postiz checks them). */
 export const DRIBBBLE_SIZES: ReadonlyArray<{ width: number; height: number }> = [
   { width: 400, height: 300 },
@@ -545,6 +570,104 @@ function validateNewPlatform(input: ValidateDestinationInput, errors: Validation
         err('YOUTUBE_TAGS_TOO_LONG', 'settings.tags', `YouTube: etichetele au ${total} din ${YOUTUBE_TAGS_MAX} caractere la un loc.`)
       }
       warn('YOUTUBE_NEEDS_VIDEO', 'text', 'YouTube cere video: aplicatia nu face filme, deci se publica manual (titlul si descrierea se copiaza de pe pagina de predare).')
+      break
+    }
+    case 'quora': {
+      const url = str(settings.target_url).trim()
+      if (!url) err('QUORA_TARGET_MISSING', 'settings.target_url', 'Quora: lipseste linkul intrebarii sau al Space-ului.')
+      else if (!isHttpUrl(url)) err('QUORA_TARGET_INVALID', 'settings.target_url', 'Quora: linkul trebuie sa inceapa cu https://.')
+      break
+    }
+    case 'linkedin-article': {
+      const title = str(settings.title).trim()
+      if (title && chars(title) > LINKEDIN_ARTICLE_TITLE_MAX) {
+        err('LINKEDIN_ARTICLE_TITLE_TOO_LONG', 'settings.title', `LinkedIn: titlul are ${chars(title)} din ${LINKEDIN_ARTICLE_TITLE_MAX} caractere.`)
+      }
+      break
+    }
+    case 'tradingview': {
+      const symbol = str(settings.symbol).trim()
+      if (!symbol) err('TRADINGVIEW_SYMBOL_MISSING', 'settings.symbol', 'TradingView: lipseste simbolul (de exemplu BINANCE:BTCUSDT).')
+      else if (!TV_SYMBOL_RE.test(symbol) || chars(symbol) > 60) {
+        err('TRADINGVIEW_SYMBOL_INVALID', 'settings.symbol', 'TradingView: simbolul arata ca BURSA:SIMBOL, fara spatii.')
+      }
+      const title = str(settings.title).trim()
+      if (!title) err('TRADINGVIEW_TITLE_MISSING', 'settings.title', 'TradingView: lipseste titlul ideii.')
+      else if (chars(title) > TRADINGVIEW_TITLE_MAX) {
+        err('TRADINGVIEW_TITLE_TOO_LONG', 'settings.title', `TradingView: titlul are ${chars(title)} din ${TRADINGVIEW_TITLE_MAX} caractere.`)
+      }
+      break
+    }
+    case 'investing': {
+      const url = str(settings.instrument_url).trim()
+      if (!url) err('INVESTING_INSTRUMENT_MISSING', 'settings.instrument_url', 'Investing.com: lipseste linkul paginii instrumentului.')
+      else if (!isHttpUrl(url)) err('INVESTING_INSTRUMENT_INVALID', 'settings.instrument_url', 'Investing.com: linkul trebuie sa inceapa cu https://.')
+      break
+    }
+    case 'indiehackers': {
+      const title = str(settings.title).trim()
+      if (!title) err('INDIEHACKERS_TITLE_MISSING', 'settings.title', 'Indie Hackers: lipseste titlul.')
+      else if (chars(title) > INDIEHACKERS_TITLE_MAX) {
+        err('INDIEHACKERS_TITLE_TOO_LONG', 'settings.title', `Indie Hackers: titlul are ${chars(title)} din ${INDIEHACKERS_TITLE_MAX} caractere.`)
+      }
+      break
+    }
+    case 'stackexchange': {
+      const site = str(settings.site).trim() || STACKEXCHANGE_DEFAULT_SITE
+      if (!SE_SITE_RE.test(site)) err('SE_SITE_INVALID', 'settings.site', 'Stack Exchange: site-ul se scrie ca money.stackexchange.com.')
+      const type = str(settings.post_type).trim() || 'answer'
+      if (!(STACKEXCHANGE_POST_TYPES as readonly string[]).includes(type)) {
+        err('SE_TYPE_INVALID', 'settings.post_type', 'Stack Exchange: tipul e raspuns sau intrebare.')
+      }
+      if (chars(input.text.trim()) > 0 && chars(input.text.trim()) < SE_BODY_MIN) {
+        err('SE_BODY_TOO_SHORT', 'text', `Stack Exchange: textul are ${chars(input.text.trim())} din minimum ${SE_BODY_MIN} de caractere.`)
+      }
+      if (type === 'answer') {
+        const url = str(settings.question_url).trim()
+        if (!url) err('SE_QUESTION_MISSING', 'settings.question_url', 'Stack Exchange: un raspuns are nevoie de linkul intrebarii.')
+        else if (!isHttpUrl(url)) err('SE_QUESTION_INVALID', 'settings.question_url', 'Stack Exchange: linkul intrebarii trebuie sa inceapa cu https://.')
+      } else if (type === 'question') {
+        const title = str(settings.title).trim()
+        if (!title) err('SE_TITLE_MISSING', 'settings.title', 'Stack Exchange: lipseste titlul intrebarii.')
+        else if (chars(title) < SE_TITLE_MIN || chars(title) > SE_TITLE_MAX) {
+          err('SE_TITLE_LENGTH', 'settings.title', `Stack Exchange: titlul are ${chars(title)} caractere; trebuie intre ${SE_TITLE_MIN} si ${SE_TITLE_MAX}.`)
+        }
+        const tags = tagsOf(settings)
+        if (tags.length === 0) err('SE_TAGS_MISSING', 'settings.tags', 'Stack Exchange: o intrebare are nevoie de cel putin o eticheta.')
+        else if (tags.length > SE_MAX_TAGS) err('TOO_MANY_TAGS', 'settings.tags', `Stack Exchange accepta cel mult ${SE_MAX_TAGS} etichete (ai ${tags.length}).`)
+        tags.forEach((t, i) => {
+          if (chars(t) > SE_TAG_MAX) err('TAG_TOO_LONG', `settings.tags.${i}`, `Stack Exchange: eticheta "${t}" depaseste ${SE_TAG_MAX} de caractere.`)
+        })
+      }
+      if (!/afili|lucrez (?:la|pentru|cu)|sunt fondator|facem parte/i.test(input.text)) warn('SE_AFFILIATION', 'text', 'Stack Exchange: spune in text ca esti afiliat cu produsul sau site-ul mentionat (regula de autopromovare).')
+      break
+    }
+    case 'github': {
+      const repo = str(settings.repo).trim()
+      if (!repo) err('GITHUB_REPO_MISSING', 'settings.repo', 'GitHub: lipseste repository-ul (owner/nume).')
+      else if (!GITHUB_REPO_RE.test(repo)) err('GITHUB_REPO_INVALID', 'settings.repo', 'GitHub: repository-ul se scrie owner/nume.')
+      const type = str(settings.post_type).trim() || 'release'
+      if (!(GITHUB_POST_TYPES as readonly string[]).includes(type)) {
+        err('GITHUB_TYPE_INVALID', 'settings.post_type', 'GitHub: tipul e release sau discutie.')
+      } else if (type === 'release') {
+        const tag = str(settings.tag).trim()
+        if (!tag) err('GITHUB_TAG_MISSING', 'settings.tag', 'GitHub: un release are nevoie de tag (de exemplu v1.2.0).')
+        else if (/\s/.test(tag)) err('GITHUB_TAG_INVALID', 'settings.tag', 'GitHub: tag-ul nu contine spatii.')
+      } else if (!str(settings.category).trim()) {
+        err('GITHUB_CATEGORY_MISSING', 'settings.category', 'GitHub: o discutie are nevoie de categorie.')
+      }
+      break
+    }
+    case 'forum': {
+      const thread = str(settings.thread_url).trim()
+      const title = str(settings.title).trim()
+      if (!thread && !title) {
+        err('FORUM_TARGET_MISSING', 'settings.thread_url', 'Forum: completeaza linkul firului (raspuns) sau titlul (fir nou).')
+      } else if (thread && title) {
+        err('FORUM_TARGET_BOTH', 'settings.thread_url', 'Forum: alege una singura: raspuns intr-un fir (link) sau fir nou (titlu).')
+      } else if (thread && !isHttpUrl(thread)) {
+        err('FORUM_THREAD_INVALID', 'settings.thread_url', 'Forum: linkul firului trebuie sa inceapa cu https://.')
+      }
       break
     }
     default:

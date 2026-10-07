@@ -67,8 +67,8 @@ export function AccountsPanel({ accounts, brands, now }: { accounts: AdminAccoun
   return <div className="space-y-5"><Card><h2 className="mb-3 font-bold">Cont nou pentru publicare manuala</h2><form onSubmit={create}><fieldset disabled={pending} className="grid gap-3 md:grid-cols-3">
     <Field label="Platforma"><select className={inputClass} name="platform" defaultValue="substack">{PLATFORMS.map((p) => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}</select></Field>
     <Field label="Brand"><select className={inputClass} name="brand" required defaultValue=""><option value="" disabled>Alege brandul</option>{brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
-    <Field label="Nume"><input className={inputClass} name="name" required maxLength={120} /></Field>
-    <Field label="Link editor" hint="Gol: editorul implicit al platformei."><input className={inputClass} name="editor" type="url" maxLength={2048} /></Field>
+    <Field label="Nume" hint="Pentru Forum si Presa: numele forumului sau al publicatiei (un cont pe forum sau redactie)."><input className={inputClass} name="name" required maxLength={120} /></Field>
+    <Field label="Link editor" hint="Gol: editorul implicit al platformei. La Forum si Presa: pagina forumului sau de contact a redactiei (https)."><input className={inputClass} name="editor" type="url" maxLength={2048} /></Field>
     <Field label="Profil"><input className={inputClass} name="profile" type="url" maxLength={2048} /></Field>
     <Field label="Limita zilnica"><input className={inputClass} name="cap" type="number" min={1} max={5} defaultValue={5} required /></Field>
     <Button type="submit" disabled={!brands.length}>Creeaza cont manual</Button></fieldset></form></Card>

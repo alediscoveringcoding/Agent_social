@@ -77,9 +77,9 @@ describe('every Postiz provider (amendment 04, second batch)', () => {
     assert.equal(platformForProvider('mastodon-custom'), 'mastodon')
     assert.equal(platformForProvider('tiktok-business'), 'tiktok')
     assert.equal(platformForProvider('wrapcast'), 'farcaster')
-    // Substack and Product Hunt have no Postiz provider: 33 + 2 = 35 platforms.
-    assert.equal(PLATFORMS.length, 35)
-    assert.deepEqual(PLATFORMS.filter((p) => !platforms.has(p)).sort(), ['producthunt', 'substack'])
+    // Substack, Product Hunt and the nine manual channels of amendment 05 have no Postiz provider: 33 + 11 = 44 platforms.
+    assert.equal(PLATFORMS.length, 44)
+    assert.deepEqual(PLATFORMS.filter((p) => !platforms.has(p)).sort(), ['forum', 'github', 'indiehackers', 'investing', 'linkedin-article', 'press', 'producthunt', 'quora', 'stackexchange', 'substack', 'tradingview'])
     for (const target of Object.values(PROVIDER_TO_PLATFORM)) assert.ok((PLATFORMS as readonly string[]).includes(target), target)
   })
 
@@ -95,7 +95,7 @@ describe('every Postiz provider (amendment 04, second batch)', () => {
     assert.equal(PLATFORM_CARD_FORMAT.dribbble, 'dribbble')
     assert.equal(PLATFORM_CARD_FORMAT.gmb, 'dribbble')
     assert.equal(PLATFORM_CARD_FORMAT.tiktok, 'portrait')
-    assert.deepEqual([...MANUAL_ONLY_PLATFORMS], ['substack', 'producthunt', 'youtube'])
+    assert.deepEqual([...MANUAL_ONLY_PLATFORMS].slice(0, 3), ['substack', 'producthunt', 'youtube'])
     assert.match(MANUAL_ONLY_REASONS.youtube ?? '', /video/)
     for (const p of BATCH2) if (p !== 'youtube') assert.ok(!MANUAL_ONLY_PLATFORMS.includes(p), `${p} is automatic`)
     for (const p of ['slack', 'wordpress', 'listmonk', 'gmb', 'tumblr', 'dribbble', 'mewe', 'skool', 'whop', 'moltbook', 'twitch', 'tiktok', 'youtube'] as const) {

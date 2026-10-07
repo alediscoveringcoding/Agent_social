@@ -58,6 +58,16 @@ export const SETTINGS_KEYS: Record<Platform, readonly string[]> = {
   twitch: ['message_type', 'announcement_color'],
   tiktok: ['title', 'privacy_level'],
   youtube: ['title', 'tags'],
+  // Amendment 05: manual-only channels.
+  quora: ['target_url'],
+  'linkedin-article': ['title', 'subtitle'],
+  tradingview: ['symbol', 'title'],
+  investing: ['instrument_url'],
+  indiehackers: ['title', 'group'],
+  stackexchange: ['site', 'post_type', 'question_url', 'title', 'tags'],
+  github: ['repo', 'post_type', 'title', 'tag', 'category'],
+  forum: ['thread_url', 'title'],
+  press: ['title', 'subtitle'],
 }
 
 export const FIGURE_SOURCES = ['article', 'facts', 'unverified', 'confirmed'] as const

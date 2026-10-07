@@ -71,14 +71,24 @@ function SettingsFields({
   onChange: (s: Record<string, unknown>) => void
   disabled: boolean
 }) {
-  const text = (key: string, label: string, hint?: string) => (
+  const text = (key: string, label: string, hint?: string, suggestions?: readonly string[]) => (
     <Field label={label} hint={hint} key={key}>
-      <input
-        value={(settings[key] as string) ?? ''}
-        disabled={disabled}
-        onChange={(e) => onChange({ ...settings, [key]: e.target.value })}
-        className={inputClass}
-      />
+      <>
+        <input
+          value={(settings[key] as string) ?? ''}
+          disabled={disabled}
+          list={suggestions ? `suggestions-${platform}-${key}` : undefined}
+          onChange={(e) => onChange({ ...settings, [key]: e.target.value })}
+          className={inputClass}
+        />
+        {suggestions && (
+          <datalist id={`suggestions-${platform}-${key}`}>
+            {suggestions.map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
+        )}
+      </>
     </Field>
   )
   const tags = (max: number, hint?: string) => (
@@ -168,7 +178,7 @@ function SettingsFields({
             }
             return (
               <div key={f.key} className={f.wide ? 'sm:col-span-2' : undefined}>
-                {text(f.key, label, f.hint)}
+                {text(f.key, label, f.hint, f.suggestions)}
               </div>
             )
           })}

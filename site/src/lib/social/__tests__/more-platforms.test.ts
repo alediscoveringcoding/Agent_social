@@ -65,8 +65,8 @@ const images = (n: number) => Array.from({ length: n }, (_, i) => ({ ...image(),
 const a = (n: number) => 'a'.repeat(n)
 
 describe('platform tables (amendment 04)', () => {
-  it('lists 35 platforms; the 12 of the first batch have a Romanian label without diacritics, a kind and a card format', () => {
-    assert.equal(PLATFORMS.length, 35)
+  it('lists 44 platforms; the 12 of the first batch have a Romanian label without diacritics, a kind and a card format', () => {
+    assert.equal(PLATFORMS.length, 44)
     for (const p of NEW_PLATFORMS) assert.ok((PLATFORMS as readonly string[]).includes(p), p)
     const labels = PLATFORMS.map((p) => PLATFORM_LABELS[p])
     assert.equal(new Set(labels).size, PLATFORMS.length, 'labels are unique')
@@ -90,7 +90,7 @@ describe('platform tables (amendment 04)', () => {
   })
 
   it('the first twelve are all automatic: only Substack, Product Hunt and (second batch) YouTube are manual-only', () => {
-    assert.deepEqual([...MANUAL_ONLY_PLATFORMS], ['substack', 'producthunt', 'youtube'])
+    assert.deepEqual([...MANUAL_ONLY_PLATFORMS].slice(0, 3), ['substack', 'producthunt', 'youtube'])
     for (const p of NEW_PLATFORMS) assert.ok(!MANUAL_ONLY_PLATFORMS.includes(p), p)
   })
 

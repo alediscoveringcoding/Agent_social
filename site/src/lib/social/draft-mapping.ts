@@ -114,6 +114,21 @@ export function settingsFor(platform: Platform, draft: DraftInput, variantSettin
     case 'whop':
     case 'youtube':
       return clean({ ...variantSettings })
+    case 'quora':
+    case 'tradingview':
+    case 'investing':
+    case 'indiehackers':
+    case 'forum':
+      // Targets (question, symbol, instrument, thread) are chosen by a person; the model only suggests a title.
+      return clean({ ...variantSettings })
+    case 'stackexchange':
+      return clean({ site: 'money.stackexchange.com', post_type: 'answer', ...variantSettings })
+    case 'linkedin-article':
+    case 'press':
+      // The press release's lead is the article subtitle.
+      return clean({ title: a?.title, subtitle: a?.subtitle ?? undefined, ...variantSettings })
+    case 'github':
+      return clean({ post_type: 'release', title: a?.title, ...variantSettings })
     case 'wordpress':
       return clean({ title: a?.title, post_type: 'post', status: 'publish', ...variantSettings })
     case 'listmonk':
