@@ -36,3 +36,5 @@ desktop.ini
 
 # Private post archives and style material (real posts, people's names): local only
 posts_framework/
+# Private style packs for the generator (brand voice, real example posts): local only
+prompts/private/
