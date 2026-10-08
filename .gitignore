@@ -33,3 +33,6 @@ desktop.ini
 .idea/
 # Claude Code worktrees for parallel workstreams
 .claude/worktrees/
+
+# Private post archives and style material (real posts, people's names): local only
+posts_framework/
