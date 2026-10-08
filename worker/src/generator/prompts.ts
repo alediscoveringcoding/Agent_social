@@ -141,7 +141,7 @@ export function buildSystemPrompt(brand: { slug: string; name: string }, input: 
     : "";
 
   const sections = [
-    `Write for "${name}", ${b.summary ?? GENERIC_SUMMARY}.${b.audience ? `\nAudience: ${b.audience}` : ""}`,
+    `Write for "${name}", ${(b.summary ?? GENERIC_SUMMARY).trim().replace(/\.$/, "")}.${b.audience ? `\nAudience: ${b.audience}` : ""}`,
     languageSection(b, platforms),
     `BRAND VOICE:\n${brandSection(b, platforms)}\nUse the exact brand name. Domains only inside http(s) URLs, never in running text.`,
     `UNIVERSAL WRITING RULES:\n${universal}`,
