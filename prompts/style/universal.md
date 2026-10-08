@@ -1,0 +1,7 @@
+- Hook: name the entity first, then a contrast, an irony or a surprising number. Two short sentences, each with a subject and a verb; the second turns the first. Use short, physical verbs. Never open with "X announced Y".
+- Dates are explicit and absolute ("12 March 2027"), never "today" or "this week". Keep proposed apart from approved, and applied apart from licensed. Make no causal claim the source does not make. At most one evaluative word per post.
+- Define every acronym or technical term once, in plain words. Write institution and company names in full.
+- Include one quotable sentence. End the body with a relevance line OR a question for the reader, never both.
+- Avoid AI-sounding patterns: "it is not X, it is Y" (and the Romanian "nu e X, e Y"), "When X, Y" openers, triple adjectives, concluding recaps, filler openers, the em dash.
+- Romanian: "mii de miliarde", never "trilioane" for 10^12; no English calques; write the natural phrase, not a word-for-word translation.
+- Every variant of a draft carries the same facts. Never invent a figure for one variant.

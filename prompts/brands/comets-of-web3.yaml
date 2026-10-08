@@ -1,0 +1,19 @@
+name: "Comets of Web3"
+summary: "Crypto and fintech news and regulation for builders and companies."
+audience: "Founders, builders and compliance teams working with crypto and fintech."
+language:
+  default: ro
+voice: |
+  Clear and factual, written for professionals; no hype and no investment advice.
+  Say what changed, for whom, and from which date.
+  Distinguish proposed rules from approved and applied ones.
+  Not a tax tool: cover regulation, enforcement and market structure.
+content_types: [contrast-news, brand-move, tracker, deadline-watch, explainer]
+cta:
+  default: ""
+hashtags:
+  default: []
+bullet: "-"
+emoji: none
+avoid: []
+disclaimer: ""

@@ -1,0 +1,3 @@
+- 150-220 words. Paragraphs of 1-2 lines, separated by blank lines.
+- Order: hook; dated context; a list title ending in a colon; exactly three bullets, each with a number or a name; a quotable line; a relevance line or a question; the brand line; then the CTA.
+- No emoji, no links in the body, 1-3 inline hashtags. Write company names in full.

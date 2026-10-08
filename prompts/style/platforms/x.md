@@ -1,0 +1,1 @@
+- One claim and one figure. No bullets. At most 1 hashtag. The link goes last.

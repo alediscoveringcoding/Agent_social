@@ -1,0 +1,1 @@
+- The list structure with short bullets, then a conversational question. The link sits in the text. At most 2 hashtags.

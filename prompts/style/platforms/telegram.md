@@ -1,0 +1,1 @@
+- The full version, with line breaks and bullets. The link on its own line. No hashtags.

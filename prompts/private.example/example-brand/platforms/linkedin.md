@@ -1,0 +1,2 @@
+- [Brand-specific LinkedIn rule, appended after the public playbook]
+- [Brand line] goes before the CTA.

@@ -1,0 +1,21 @@
+# Same keys as prompts/brands/<slug>.yaml. Values here replace the public ones.
+name: "[Brand name]"
+summary: "[One line: what the brand is]"
+audience: "[Who reads the posts]"
+language:
+  default: ro
+  platforms: { linkedin: en }
+voice: |
+  [Brand line]
+  [Three to ten lines of voice instructions]
+content_types: [contrast-news, explainer]
+cta:
+  default: "[Default CTA]"
+  instagram: "[Instagram CTA]"
+hashtags:
+  default: []
+  instagram: ["#[tag]"]
+bullet: "-"
+emoji: none
+avoid: ["[Overused phrase]"]
+disclaimer: ""

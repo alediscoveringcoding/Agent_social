@@ -1,0 +1,1 @@
+- Community tone, no marketing voice. Lead with the value. Mention the brand only if relevant, and disclose the affiliation.

@@ -1,0 +1,4 @@
+- Line 1 is the hook and equals the card headline; it must be clear without context and free of acronyms.
+- Then context, a line like "Ce se intampla de fapt:" followed by three bullets, one "so what" line, and a question about the reader's own money or app.
+- Then the brand CTA, then the hashtags at the very end.
+- 1,200-1,500 characters. No URLs in the caption.

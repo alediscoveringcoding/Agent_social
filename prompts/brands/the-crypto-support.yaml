@@ -1,0 +1,20 @@
+name: "The Crypto Support"
+summary: "Legacy name of Taxes Support: plain-language explanations of how crypto is taxed in Romania and the EU."
+audience: "Retail crypto holders in Romania who want to declare correctly without a tax background."
+language:
+  default: ro
+voice: |
+  Calm, direct and reassuring. Explain, do not scare.
+  Informal "tu". Plain words; define every tax term once.
+  Facts with dates and sources; never hype, price predictions or investment advice.
+  At least 40% of topics are Romanian or EU rules.
+content_types: [tax-consequence, contrast-news, deadline-watch, myth-vs-fact]
+cta:
+  # handle de confirmat: the new handle is not known yet, so the brand name is used.
+  default: "Afli mai multe de la The Crypto Support."
+hashtags:
+  default: []
+bullet: "-"
+emoji: none
+avoid: []
+disclaimer: ""
