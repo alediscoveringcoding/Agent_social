@@ -8,6 +8,7 @@ import { variantSettings } from "../generator/variant-settings.js";
 import { kindOf } from "../platforms.js";
 import { normalizeFigure, unlistedFigures, type DraftFigure } from "../generator/figures.js";
 import { buildSystemPrompt, buildUserPrompt, brandFromSlug } from "../generator/prompts.js";
+import { DEFAULT_STYLE_PACK_DIR, loadStylePack } from "../generator/style-pack.js";
 import { buildRepairPrompt, mergeRepairs } from "../generator/repair.js";
 import { boundDraftForSite } from "../generator/wire-bounds.js";
 
@@ -153,7 +154,7 @@ export async function processGenerationRequest(req: GenerationRequest, deps: {
     armExpiry();
     schedule();
     const choice = resolveChoice(input?.ai);
-    const system = buildSystemPrompt(brand, input);
+    const system = buildSystemPrompt(brand, input, loadStylePack(brandSlug, config.STYLE_PACK_DIR ?? DEFAULT_STYLE_PACK_DIR));
     const { drafts } = await generate(system, buildUserPrompt(input), choice, { signal: controller.signal });
     checkLease();
     const validated = drafts.map((d, i) => validateDraft(d, i, brandSlug, input));

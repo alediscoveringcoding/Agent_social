@@ -33,6 +33,8 @@ const schema = z.object({
   GEMINI_API_KEY: z.preprocess(blankToUndefined, z.string().optional()),
   GEMINI_MODEL: z.preprocess(blankToUndefined, z.string().default("gemini-3.8-flash")),
 
+  // Private style pack for the generator (amendment 06). Blank means <repo>/prompts/private.
+  STYLE_PACK_DIR: z.preprocess(blankToUndefined, z.string().optional()),
   WORKER_DRY_RUN: envBool(true),
   DELIVERY_LOOP_INTERVAL_MS: envInt(30_000),
   GENERATION_LOOP_INTERVAL_MS: envInt(15_000),

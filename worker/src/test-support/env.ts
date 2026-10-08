@@ -16,4 +16,7 @@ process.env.SITE_BASE_URL = "http://127.0.0.1:9";
 process.env.GENERATOR_EFFORT = "medium";
 process.env.GENERATION_HEARTBEAT_MS = "120000";
 
+// Never read a developer's real private style pack in tests.
+process.env.STYLE_PACK_DIR = "/nonexistent/style-pack-for-tests";
+
 export {};
