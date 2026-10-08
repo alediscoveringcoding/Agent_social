@@ -1,19 +1,24 @@
 # System prompt (reference)
 
-This is a human-readable copy of the system prompt the worker builds in
-`worker/src/generator/prompts.ts` (`buildSystemPrompt`). The code is the
-source of truth — it assembles this text at runtime with the brand name,
-`facts.yaml` and `banned.txt` interpolated in. Edit the code, not this file,
-to change behavior; edit this file when you want a readable reference for
-reviewers who don't want to read TypeScript.
+This is a human-readable summary of the system prompt the worker builds in
+`worker/src/generator/prompts.ts` (`buildSystemPrompt`). The code is the source
+of truth. Edit the code and the files under `prompts/style/` and
+`prompts/brands/` to change behavior; edit this file as a readable reference.
 
-## Voice
+## Assembly (per request)
 
-- Romanian, using "tu" (informal, direct, calm).
-- No diacritics: `a i s t`, never `ă î ș ț`.
-- Reassuring, not alarmist. Explain, don't scare.
-- No hype, no price predictions, no investment advice — this is a tax tool.
-- Brand name written exactly as given. Domains only inside URLs.
+1. Role and brand (name, summary, audience from `prompts/brands/<slug>.yaml`).
+   The brand is not always a tax tool: Taxes Support (formerly The Crypto
+   Support) is the Romanian crypto tax brand; Comets of Web3 covers crypto and
+   fintech news and regulation.
+2. Language per targeted platform (Romanian without diacritics, or English).
+3. Brand voice, CTA, hashtags, list marker, emoji policy, phrases to avoid.
+4. Universal writing rules (`prompts/style/universal.md`).
+5. Banned phrases, verified facts, figures rule.
+6. Kinds, content types (`prompts/style/content-types.md`).
+7. Targeted platforms only: limits, public playbook, private brand notes.
+8. Private examples, if a style pack exists (see amendment 06).
+9. Card rules, self-check (`prompts/style/self-check.md`), JSON schema.
 
 ## Figures rule
 

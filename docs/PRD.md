@@ -6,7 +6,7 @@
 | Last updated | 2026-10-07 |
 | Tracks | **A: Site** (proposed owner: Raul) · **B: Infra, worker, generator** (proposed owner: Ale) |
 | Related | [README](../README.md) (infra overview; this PRD wins where they differ) |
-| Amendments | [01: Localhost MVP](amendment-01-localhost-mvp.md) (no VPS, everything on localhost) · [02: Standalone site](amendment-02-standalone-site.md) · [03: Finishing the site locally](amendment-03-finish-the-site.md) (local mode and W1–W4 implemented) · [04: More platforms](amendment-04-more-platforms.md) (every Postiz provider: 35 platforms, Pinterest and Dribbble card formats) · [05: Manual channels](amendment-05-manual-channels.md) (nine manual-only channels, 44 platforms) |
+| Amendments | [01: Localhost MVP](amendment-01-localhost-mvp.md) (no VPS, everything on localhost) · [02: Standalone site](amendment-02-standalone-site.md) · [03: Finishing the site locally](amendment-03-finish-the-site.md) (local mode and W1–W4 implemented) · [04: More platforms](amendment-04-more-platforms.md) (every Postiz provider: 35 platforms, Pinterest and Dribbble card formats) · [05: Manual channels](amendment-05-manual-channels.md) (nine manual-only channels, 44 platforms) · [06: Style packs](amendment-06-style-packs.md) (per-brand voice, platform playbooks and private examples) |
 
 > This repository is **public**. Never commit secrets, real `.env` files, account handles that are not public, or internal notes from the site repository.
 
@@ -40,6 +40,8 @@ Final review added migration `0007_media_metadata_immutable.sql`, checked the co
 Amendment 04 (2026-10-07) added every Postiz provider: twelve platforms first, then fifteen more (35 in all), all automatic through Postiz except YouTube (video only, manual-only), and the Pinterest and Dribbble card formats (migrations `0008_more_platforms.sql` and `0009_all_postiz_platforms.sql`): see section 5 and [amendment 04](amendment-04-more-platforms.md). No platform connection exists yet.
 
 Amendment 05 (2026-10-07) added nine manual-only channels with no usable publishing API (Quora, LinkedIn articles, TradingView, Investing.com, Indie Hackers, Stack Exchange, GitHub, generic forums and press outlets): 35 + 9 = 44 platforms, migration `0010_manual_channels.sql`; see section 5 and [amendment 05](amendment-05-manual-channels.md).
+
+Amendment 06 (2026-10-08) assembles the generator prompt per request from public style rules, a brand profile, playbooks for the targeted platforms only and optional private examples (a gitignored style pack); see [amendment 06](amendment-06-style-packs.md).
 
 ## 2. Goals, non-goals, success
 

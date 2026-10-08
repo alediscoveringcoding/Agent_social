@@ -128,6 +128,7 @@ Only placeholders live in git (`.env` is git-ignored everywhere). Real values st
 - [local/.env.example](local/.env.example) — Postiz JWT secret, registration toggle, provider credentials as each platform is connected.
 - [site/.env.example](site/.env.example) — database mode, admin allowlist, local auth/media signing secrets, worker token and the publishing kill switch.
 - [worker/.env.example](worker/.env.example) — site URL/token, Postiz key, optional Claude/Gemini keys, generation provider/model/effort, heartbeat and loop intervals, dry-run setting. Keep AI keys blank for offline use.
+- Generator style: public rules in `prompts/style/` and `prompts/brands/`; an optional private pack in `prompts/private/` (git-ignored, `STYLE_PACK_DIR`), template in `prompts/private.example/`: [amendment 06](docs/amendment-06-style-packs.md).
 
 In the VPS phase these move to Vercel/VPS env and gain `N8N_AUTOMATION_TOKEN`, `N8N_ENCRYPTION_KEY`, a real `POSTIZ_URL` domain, and n8n's own env — see the amendment, section 11.
 

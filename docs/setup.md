@@ -54,6 +54,10 @@ For an offline production-worker test keep AI keys blank and `WORKER_DRY_RUN=tru
 - Auth: OAuth
 - Same as Facebook; needs a public URL for images; Instagram Login may require HTTPS
 
+### Style pack (amendment 06)
+
+The generator reads an optional private style pack from `STYLE_PACK_DIR` (default `prompts/private`, git-ignored). On a server, copy it like `.env` (for example `rsync -a prompts/private/ server:/path/prompts/private/`); without it the worker uses the public generic style. See [amendment 06](amendment-06-style-packs.md).
+
 ### More platforms (amendment 04)
 
 Connect each in Postiz (Settings > Integrations), then run an account sync (the worker does it, or `npm run social:fake-worker -- --sync` locally). The channel arrives in `/admin/social/conturi` paused and without a brand; assign a brand and unpause it. The site knows every provider of Postiz v2.25.0 by the `identifier` Postiz reports; four are aliases (`mastodon-custom` is Mastodon, `instagram-standalone` is Instagram, `tiktok-business` is TikTok, `wrapcast` is Farcaster). A provider the site does not know is ignored and listed in the sync answer. A YouTube channel syncs as a manual account (it needs video). What Postiz v2.25.0 asks for, from its provider source:
