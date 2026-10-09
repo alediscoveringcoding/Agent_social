@@ -111,6 +111,8 @@ npm run admin:create -- --email you@example.com  # first-time setup only
 npm run dev
 ```
 
+After the first setup, start the site and the worker together with one command from the repo root: `bash scripts/dev-local.sh` (or `bash scripts/dev-local.sh --site-only`; from Windows, `wsl.exe -e bash /mnt/r/Repos/Agent_social/scripts/dev-local.sh`). It checks Node, the env files and the ports, prints whether publishing is off, prefixes each log line with `[site]` or `[worker]`, and stops both on Ctrl+C. The worker drafts with the AI provider configured in `worker/.env` and the style pack from `prompts/private/` ([amendment 06](docs/amendment-06-style-packs.md)).
+
 Open **http://localhost:3000/login**, use the password printed once by `admin:create`, and enroll TOTP. For an existing local account, `npm run admin:create -- --email you@example.com --reset` prints a new password and removes its authenticator; enroll TOTP again. Account reset preserves drafts and media.
 
 In another WSL terminal, from `site/`, use `npm run social:fake-worker -- --sync`, assign brands and unpause the fake accounts in **Conturi**, then request drafts in **Genereaza** and run `npm run social:fake-generator -- --once`. The [site guide](site/README.md#run-locally-without-docker) continues through editing, media, figures, approval and publication. Docker and AI keys are optional for this flow.
