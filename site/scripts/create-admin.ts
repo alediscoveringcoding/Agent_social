@@ -66,7 +66,8 @@ async function createLocal(): Promise<string> {
       if (!values.reset) fail(`${email} already exists. Use --reset to set a new password and remove the authenticator.`)
       await local.db.query(
         `update local.admins set password_hash = $2, totp_factor_id = null, totp_secret = null,
-                totp_verified = false, totp_last_step = null where user_id = $1`,
+                totp_verified = false, totp_last_step = null,
+                failed_count = 0, locked_until = null, session_epoch = session_epoch + 1 where user_id = $1`,
         [existing.user_id, hash]
       )
       return `Admin reset (local database): ${email}. Enrol the authenticator again at the next login.`

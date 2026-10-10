@@ -37,6 +37,10 @@ create table if not exists local.admins (
   totp_last_step integer,
   created_at     timestamptz not null default now()
 );
+-- Added later: these apply to an existing database too and leave its rows alone.
+alter table local.admins add column if not exists failed_count  integer not null default 0;
+alter table local.admins add column if not exists locked_until  timestamptz;
+alter table local.admins add column if not exists session_epoch integer not null default 0;
 `
 
 export class LocalDbInUseError extends Error {

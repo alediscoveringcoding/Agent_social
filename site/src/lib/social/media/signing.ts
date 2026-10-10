@@ -5,8 +5,11 @@ export const UPLOAD_TTL = 600
 export interface UploadTicket { path: string; mime: string; exp: number; userId: string }
 
 function mac(label: string, value: string): string {
-  const key = process.env.MEDIA_SIGNING_SECRET || process.env.LOCAL_AUTH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!key || key.length < 32) throw new Error('Media signing requires a secret of at least 32 characters')
+  const explicit = process.env.MEDIA_SIGNING_SECRET
+  const base = explicit || process.env.LOCAL_AUTH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!base || base.length < 32) throw new Error('Media signing requires a secret of at least 32 characters')
+  // A fallback is the session or service secret: derive a separate key, so the raw secret is never used here.
+  const key = explicit ? base : createHmac('sha256', base).update('media-signing-v1').digest()
   return createHmac('sha256', key).update(`${label}\n${value}`).digest('hex')
 }
 function equal(a: string, b: string): boolean {

@@ -59,7 +59,7 @@ describe('local mode crypto', () => {
 
   it('signs sessions and refuses tampered, expired or unsigned ones', () => {
     const now = Date.now()
-    const s = { uid: '00000000-0000-4000-8000-000000000001', email: 'a@example.test', aal: 'aal2' as const, exp: Math.floor(now / 1000) + 60 }
+    const s = { uid: '00000000-0000-4000-8000-000000000001', email: 'a@example.test', aal: 'aal2' as const, epoch: 0, exp: Math.floor(now / 1000) + 60 }
     const token = signSession(s, SECRET)
     assert.deepEqual(verifySession(token, SECRET, now), s)
     assert.equal(verifySession(token, 'another-secret-another-secret-12345', now), null)

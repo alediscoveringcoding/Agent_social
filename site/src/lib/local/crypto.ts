@@ -124,6 +124,8 @@ export interface LocalSession {
   aal: 'aal1' | 'aal2'
   /** Unix seconds. */
   exp: number
+  /** local.admins.session_epoch when signed; a cookie from an older epoch (sign-out, new authenticator, reset) is dead. */
+  epoch: number
 }
 
 /** LOCAL_AUTH_SECRET, or null when it is missing or too short to sign with. */
@@ -151,7 +153,7 @@ export function verifySession(token: string | undefined, secret: string | null, 
   try {
     const s = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as LocalSession
     const valid =
-      typeof s.uid === 'string' && typeof s.email === 'string' && (s.aal === 'aal1' || s.aal === 'aal2') && typeof s.exp === 'number'
+      typeof s.uid === 'string' && typeof s.email === 'string' && (s.aal === 'aal1' || s.aal === 'aal2') && typeof s.exp === 'number' && Number.isSafeInteger(s.epoch)
     return valid && s.exp * 1000 > nowMs ? s : null
   } catch {
     return null

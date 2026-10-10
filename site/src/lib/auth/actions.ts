@@ -25,7 +25,7 @@ async function logAuth(email: string | null, action: string, status: 'success' |
   // Logging must never block a sign-in, but a failed write is reported. The
   // client returns {error} instead of throwing, so the catch alone saw nothing.
   try {
-    const { error } = await createAdminClient().from('social_activity_log').insert({ actor_email: email, action, status, details })
+    const { error } = await createAdminClient().from('social_activity_log').insert({ actor_email: email === null ? null : email.slice(0, 254), action, status, details })
     if (error) console.error('[auth/activity] could not log %s: %s', action, error.message)
   } catch (e) {
     console.error('[auth/activity] could not log %s:', action, e)
