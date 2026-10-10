@@ -76,6 +76,8 @@ const SQL_ERRORS: Record<string, string> = {
   SOCIAL_SCHEDULE_STALE: 'Ora unei destinatii a trecut de mai mult de 2 ore. Alege o ora noua.',
   SOCIAL_ACCOUNT_NOT_FOUND: 'Unul dintre conturi nu mai exista.',
   SOCIAL_REVISION_FROZEN: 'O revizie aprobata nu se mai schimba; se face o revizie noua.',
+  SOCIAL_SOURCES_NOT_VERIFIED: 'Verifica toate sursele (bifeaza "Verificat") inainte de aprobare.',
+  SOCIAL_SOURCES_FROZEN: 'Postarea e aprobata si sursele ei nu se mai schimba. Editeaz-o ca sa faci o revizie noua.',
 }
 
 const STALE = SQL_ERRORS.SOCIAL_STALE_REVISION
@@ -255,6 +257,15 @@ export async function approvePost(
     if (checked.some((c) => c.containsFigures) && !input.figuresChecked) {
       return fail(SQL_ERRORS.SOCIAL_FIGURES_NOT_CHECKED)
     }
+    // Amendment 07: refuse before a time revision is written (the database checks again).
+    const { data: openSources, error: sourcesError } = await db
+      .from('social_post_sources')
+      .select('id')
+      .eq('post_id', post.id)
+      .is('verified_at', null)
+      .limit(1)
+    if (sourcesError) throw new Error(sourcesError.message)
+    if (openSources?.length) return fail(SQL_ERRORS.SOCIAL_SOURCES_NOT_VERIFIED)
 
     // 2. Daily cap per Bucharest day (the database checks again, under a lock).
     const cap = await capError(db, post, planned)

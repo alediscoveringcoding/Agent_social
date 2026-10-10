@@ -93,6 +93,7 @@ describe('drafting flow: actions and queries', () => {
       count: 3,
       language: 'ro',
       templates: ['mint'],
+      research: false,
     })
     assert.equal(g.requested_by, admin.userId)
     assert.equal(g.status, 'queued')

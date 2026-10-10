@@ -1,7 +1,9 @@
 /**
  * Fake generator for localhost (task A3): claims generation requests created
  * in /admin/social/genereaza and delivers fixture drafts (some deliberately
- * invalid) instead of calling Claude.
+ * invalid) instead of calling Claude. A request with web research on ("Cauta
+ * pe web", or the recent-news source) also gets 3 sample sources (example.com)
+ * and one unverified figure with a source link.
  *
  *   npm run social:fake-generator             # loop every 10 s
  *   npm run social:fake-generator -- --once

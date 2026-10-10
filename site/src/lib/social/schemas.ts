@@ -83,7 +83,34 @@ export const FigureSchema = z.object({
   value: z.string().min(1).max(100),
   context: z.string().max(500).nullish(),
   source: z.string().min(1).max(32),
+  // Amendment 07: the web source behind a figure from the research step.
+  source_url: draftUrl,
 })
+
+/**
+ * A web page the research step found (amendment 07). A bad URL drops that
+ * source, not the batch; a person ticks each one as verified before approval.
+ */
+export const DraftSourceSchema = z.object({
+  url: z.string().max(2048),
+  title: z.string().max(300).default(''),
+  publisher: z.string().max(200).nullish(),
+  published_at: z.string().max(40).nullish(),
+  note: z.string().max(500).nullish(),
+  found_in_search: z.boolean().default(false),
+})
+export type DraftSource = z.infer<typeof DraftSourceSchema>
+
+const draftSources = z
+  .array(DraftSourceSchema)
+  .max(20)
+  .default([])
+  .transform((list) => {
+    const seen = new Set<string>()
+    return list
+      .map((s) => ({ ...s, url: s.url.trim() }))
+      .filter((s) => isHttpUrl(s.url) && !seen.has(s.url) && (seen.add(s.url), true))
+  })
 
 const settingsSchema = z.record(z.string(), z.unknown())
 
@@ -147,6 +174,7 @@ export const DraftSchema = z.object({
   card: CardSpecSchema.nullish(),
   // Track B re-extracts figures per text, so the same value repeats; 500 leaves room.
   figures: z.array(FigureSchema).max(500).default([]),
+  sources: draftSources,
   validation_errors: z.array(GeneratorError).max(500).default([]),
   notes: z.string().max(4000).nullish(),
 })
@@ -194,7 +222,15 @@ export const GenerationInputSchema = z.object({
       topic: z.string().min(3).max(500),
       hooks: z.array(z.string().max(100)).max(10).default([]),
     }),
+    // Amendment 07: recent news found by web search; the topic only narrows it.
+    z.object({
+      type: z.literal('news'),
+      topic: z.string().max(500).default(''),
+      window_days: z.number().int().min(1).max(30).default(7),
+    }),
   ]),
+  // Search the web before writing (2 AI calls). Always on for a 'news' source.
+  research: z.boolean().default(false),
   platforms: z.array(z.enum(PLATFORMS)).min(1).max(PLATFORMS.length),
   kinds: z.array(z.enum(POST_KINDS)).min(1),
   count: z.number().int().min(1).max(20),

@@ -2,10 +2,16 @@ import { legalNamesFromEnv } from '@/lib/social/content-rules'
 import { mapDraft, type BrandAccount } from '@/lib/social/draft-mapping'
 import { DraftsBody } from '@/lib/social/schemas'
 import { idRoute } from '@/lib/social/server/job-routes'
-import { apiError, apiOk, fromTransition } from '@/lib/social/server/worker-http'
+import { apiError, apiOk, fromTransition, type WorkerContext } from '@/lib/social/server/worker-http'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+async function postIdByRef(admin: WorkerContext['admin'], ref: string): Promise<string | null> {
+  const { data, error } = await admin.from('social_posts').select('id').eq('generation_ref', ref).maybeSingle()
+  if (error) throw new Error(`social_posts by generation_ref: ${error.message}`)
+  return (data as { id: string } | null)?.id ?? null
+}
 
 /**
  * POST /generation/{id}/drafts {drafts: Draft[]} -> {created, skipped}
@@ -14,6 +20,8 @@ export const dynamic = 'force-dynamic'
  * plain unique column): a re-delivered draft is skipped, never duplicated.
  * Marks the request done and emits `drafts_ready`. Drafts that fail the
  * content rules are stored anyway, with their validation, for a person to fix.
+ * Each draft's `sources` go to `social_post_sources` right after its post
+ * (unverified; approval waits for a person to tick them).
  */
 export const POST = idRoute(DraftsBody, async (id, body, { workerId, admin }) => {
   const { data: state, error: stateError } = await admin.rpc('social_generation_lease_state', {
@@ -61,6 +69,21 @@ export const POST = idRoute(DraftsBody, async (id, body, { workerId, admin }) =>
     if (error) throw new Error(`social_create_post (${draft.client_ref}): ${error.message}`)
     if (postId) created += 1
     else skipped += 1
+
+    // The web sources of the draft (amendment 07). A skipped draft is looked up
+    // by its ref, so a delivery that stopped between the post and its sources
+    // is completed when the worker sends the same drafts again; adding is
+    // idempotent on (post, url).
+    if (mapped.sources.length) {
+      const sourcePost = (postId as string | null) ?? (await postIdByRef(admin, `${id}:${draft.client_ref}`))
+      if (sourcePost) {
+        const { error: sourcesError } = await admin.rpc('social_add_post_sources', {
+          p_post: sourcePost,
+          p_sources: mapped.sources,
+        })
+        if (sourcesError) throw new Error(`social_add_post_sources (${draft.client_ref}): ${sourcesError.message}`)
+      }
+    }
   }
 
   const { data: finish, error: finishError } = await admin.rpc('social_generation_finish', {

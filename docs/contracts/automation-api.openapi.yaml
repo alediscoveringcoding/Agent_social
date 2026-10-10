@@ -1,0 +1,236 @@
+openapi: 3.1.0
+info:
+  title: Social publishing automation API
+  version: 1.0.0-draft
+  summary: Site API consumed by n8n (PRD section 10.4, amendment 07).
+  description: |
+    Written from the implementation in `site/src/app/api/automation/social/v1/`
+    (tests: `site/src/lib/social/__tests__/automation-api.test.ts`).
+
+    Conventions
+    - Every call: `Authorization: Bearer ${N8N_AUTOMATION_TOKEN}`. The token is at least 32 characters and is
+      compared in constant time. The site answers 503 (`NOT_CONFIGURED`) on every call while the token is unset
+      or shorter, 401 (`UNAUTHORIZED`) for a missing or wrong one.
+    - JSON bodies (an empty body is read as `{}`). Unknown body fields are ignored.
+    - Errors are `{"error": {"code", "message", "details"?}}`, the same shape as the worker API.
+    - n8n polls the site; it needs no public webhook.
+    - **This API cannot approve, schedule or publish anything** (PRD D9). A person approves in /admin/social,
+      and approval waits until every source link of the draft is ticked as verified.
+    - Responses are never cached (`Cache-Control: no-store`).
+servers:
+  - url: http://localhost:3000/api/automation/social/v1
+    description: Localhost MVP (amendments 01 and 02)
+security:
+  - automationToken: []
+paths:
+  /generation-requests:
+    post:
+      summary: Ask for drafts (idempotent on workflow + event_id)
+      description: |
+        Creates a generation request exactly as the Genereaza form does, except that nobody requested it
+        (`requested_by` is null) and it carries the idempotency key. Sending the same `workflow` + `event_id`
+        again changes nothing and answers with the first request's id and `created: false`; the first call's
+        `brand` and `input` win. The worker picks the request up like any other. `input` is checked like the
+        form's: a `news` source and `research` are allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GenerationRequestBody' }
+      responses:
+        '200':
+          description: The request exists (`created` tells whether this call made it)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [request_id, created]
+                properties:
+                  request_id: { type: string, format: uuid }
+                  created: { type: boolean }
+        '400': { $ref: '#/components/responses/BadJson' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422':
+          description: |
+            The body does not match the contract (`INVALID_BODY`, `details` lists path + message), or the
+            brand slug is unknown (`BRAND_NOT_FOUND`).
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '503': { $ref: '#/components/responses/NotConfigured' }
+  /events:
+    get:
+      summary: Read the event outbox after a cursor
+      description: |
+        `social_events` oldest first, strictly after `after`. Keep `next_after` and send it back as `after`
+        on the next poll (every 5 minutes). When there is nothing new, `events` is empty and `next_after`
+        equals the `after` that was sent. Reading marks nothing as seen. Event types: `delivery_failed`,
+        `delivery_stale`, `account_reconnect_required`, `manual_due`, `drafts_ready`, `generation_failed`,
+        `foreign_post`, `worker_silent`.
+      parameters:
+        - name: after
+          in: query
+          required: false
+          description: The last event id already handled; 0 starts from the beginning.
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+      responses:
+        '200':
+          description: Events after the cursor
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, next_after]
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: '#/components/schemas/Event' }
+                  next_after:
+                    type: integer
+                    description: The id of the last event returned, or `after` when there are none.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422':
+          description: '`after` or `limit` is not a valid integer in range (code INVALID_QUERY)'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '503': { $ref: '#/components/responses/NotConfigured' }
+  /runs:
+    post:
+      summary: Log what a workflow did for one event (an upsert)
+      description: |
+        Feeds the Automations view. Idempotent on `workflow` + `event_id`: a second report for the same
+        event replaces its `status` and `details` (the first report's time is kept).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RunBody' }
+      responses:
+        '200':
+          description: Logged
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean, const: true }
+        '400': { $ref: '#/components/responses/BadJson' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422':
+          description: The body does not match the contract (code INVALID_BODY)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '503': { $ref: '#/components/responses/NotConfigured' }
+components:
+  securitySchemes:
+    automationToken:
+      type: http
+      scheme: bearer
+      description: N8N_AUTOMATION_TOKEN, at least 32 characters, compared in constant time. The site refuses every call (503) when it is unset or shorter.
+  responses:
+    BadJson:
+      description: The body is not valid JSON (code INVALID_JSON)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: Missing or wrong bearer token (code UNAUTHORIZED)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotConfigured:
+      description: N8N_AUTOMATION_TOKEN is not configured on the site (code NOT_CONFIGURED)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [UNAUTHORIZED, INVALID_JSON, INVALID_BODY, INVALID_QUERY, BRAND_NOT_FOUND, NOT_CONFIGURED, INTERNAL] }
+            message: { type: string }
+            details: {}
+    GenerationRequestBody:
+      type: object
+      required: [workflow, event_id, brand, input]
+      properties:
+        workflow:
+          type: string
+          pattern: '^[a-z0-9-]{1,64}$'
+          description: The n8n workflow, for example `news-to-drafts`.
+        event_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: What makes this call the same call again, for example `news-taxes-support-2026-10-12` or an RSS item guid.
+        brand:
+          type: string
+          description: A brand slug, for example `taxes-support`.
+        input: { $ref: '#/components/schemas/GenerationInput' }
+    GenerationInput:
+      type: object
+      description: |
+        The generation input of the Genereaza form (PRD 10.5, amendment 07). Defaults are applied by the
+        site: `research` false, `hooks` empty, `window_days` 7.
+      required: [source, platforms, kinds, count, language, templates]
+      properties:
+        source:
+          oneOf:
+            - type: object
+              required: [type, url]
+              properties:
+                type: { const: article }
+                url: { type: string, maxLength: 2048, description: An http(s) URL }
+            - type: object
+              required: [type, topic]
+              properties:
+                type: { const: topic }
+                topic: { type: string, minLength: 3, maxLength: 500 }
+                hooks: { type: array, maxItems: 10, items: { type: string, maxLength: 100 } }
+            - type: object
+              required: [type]
+              description: Recent news found by web search. The topic only narrows it; empty means the brand's topics.
+              properties:
+                type: { const: news }
+                topic: { type: string, maxLength: 500, default: '' }
+                window_days: { type: integer, minimum: 1, maximum: 30, default: 7 }
+        research:
+          type: boolean
+          default: false
+          description: Search the web before writing (2 AI calls). Always on for a `news` source.
+        platforms:
+          type: array
+          minItems: 1
+          items: { $ref: 'worker-api.openapi.yaml#/components/schemas/Platform' }
+        kinds: { type: array, minItems: 1, items: { type: string, enum: [social, article, launch] } }
+        count: { type: integer, minimum: 1, maximum: 20 }
+        language: { type: string, const: ro }
+        templates: { type: array, minItems: 1, items: { type: string, enum: [light, dark, mint] } }
+        ai:
+          type: object
+          description: Optional AI pick. Absent = the worker's default. Only the models the site lists are accepted.
+          required: [provider, model]
+          properties:
+            provider: { type: string, enum: [claude, gemini] }
+            model: { type: string }
+    Event:
+      type: object
+      required: [id, type, created_at, payload]
+      properties:
+        id: { type: integer }
+        type:
+          type: string
+          enum: [delivery_failed, delivery_stale, account_reconnect_required, manual_due, drafts_ready, generation_failed, foreign_post, worker_silent]
+        created_at: { type: string, format: date-time }
+        payload: { type: object, additionalProperties: true }
+    RunBody:
+      type: object
+      required: [workflow, event_id, status]
+      properties:
+        workflow: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
+        event_id: { type: string, minLength: 1, maxLength: 200 }
+        status: { type: string, enum: [ok, error, skipped] }
+        details:
+          type: object
+          additionalProperties: true
+          description: Free-form notes for the Automations view, at most 10000 characters of JSON.

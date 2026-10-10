@@ -146,10 +146,26 @@ export async function duplicatePost(postId: string): Promise<ActionResult<{ post
     })
     if (!newId) throw new Error('social_create_post returned nothing')
 
+    // The web sources come along (amendment 07), every one unverified again:
+    // a person ticks them for the copy. social_add_post_sources adds them unticked.
+    const { data: sourceRows, error: sourceError } = await db
+      .from('social_post_sources')
+      .select('url, title, publisher, published_at, note, found_in_search')
+      .eq('post_id', post.id)
+      .order('position', { ascending: true })
+    if (sourceError) throw new Error(sourceError.message)
+    const sources = (sourceRows ?? []) as Array<Record<string, unknown>>
+    if (sources.length) await callRpc<number>(db, 'social_add_post_sources', { p_post: newId, p_sources: sources })
+
     await logActivity(db, actor, {
       action: 'social.post_duplicated',
       postId: newId,
-      details: { source_post_id: post.id, source_revision_id: post.current_revision_id, dropped: all.length - kept.length },
+      details: {
+        source_post_id: post.id,
+        source_revision_id: post.current_revision_id,
+        dropped: all.length - kept.length,
+        sources_copied: sources.length,
+      },
     })
     revalidatePath('/admin/social')
     revalidatePath('/admin/social/ciorne')

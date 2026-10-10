@@ -63,6 +63,8 @@ export interface MappedDraft {
     generator_errors: Array<{ code?: string; message: string }>
   }
   destinations: MappedDestination[]
+  /** The web sources of the draft (amendment 07); stored per post by the drafts route, not on the revision. */
+  sources: DraftInput['sources']
   unmatchedPlatforms: Platform[]
 }
 
@@ -200,6 +202,9 @@ export function mapDraft(
   opts: { legalNames?: ReadonlyArray<string>; now?: Date } = {}
 ): MappedDraft {
   const now = opts.now ?? new Date()
+  // Figures go through as parsed: a researched one keeps its `source_url`
+  // (the web page behind it), the others carry null.
+  const figures = draft.figures
   const destinations: MappedDestination[] = []
   const unmatched: Platform[] = []
   const unknown: string[] = []
@@ -227,7 +232,7 @@ export function mapDraft(
         text,
         settings,
         media: [],
-        figures: draft.figures,
+        figures,
         scheduledAt: null,
         now,
         rules: acc.rules ?? null,
@@ -239,7 +244,7 @@ export function mapDraft(
         text,
         settings,
         scheduled_at: null,
-        figures: draft.figures,
+        figures,
         contains_figures: v.containsFigures,
         // The time is chosen in the composer; a draft is not "invalid" for lacking one yet.
         validation: toStoredValidation(v, now, ['MISSING_TIME']),
@@ -262,12 +267,13 @@ export function mapDraft(
       article: draft.article ?? null,
       launch: draft.launch ?? null,
       card_spec: draft.card ?? null,
-      figures: draft.figures,
+      figures,
       variants: draft.variants,
       notes: notes.filter(Boolean).join('\n') || null,
       generator_errors: draft.validation_errors.map((e) => (typeof e === 'string' ? { message: e } : e)),
     },
     destinations,
+    sources: draft.sources,
     unmatchedPlatforms: unmatched,
   }
 }

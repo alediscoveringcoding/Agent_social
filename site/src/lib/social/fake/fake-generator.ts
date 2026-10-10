@@ -2,16 +2,18 @@
  * The fake generator (task A3): claims generation requests like Track B's
  * generator and delivers fixture drafts instead of calling Claude, including
  * drafts that fail the content rules, so the drafts inbox and the composer's
- * validation can be exercised on localhost.
+ * validation can be exercised on localhost. A request with `research: true`
+ * or a 'news' source also gets sample web sources (example.com) and an
+ * unverified figure with a `source_url`, so the source ticks can be tried.
  */
 
-import { draftsFor } from './fixtures.ts'
+import { draftsFor, withResearch } from './fixtures.ts'
 import type { WorkerApi } from './worker-api-client.ts'
 
 interface ClaimedRequest {
   request_id: string
   brand: string
-  input: { platforms?: string[]; count?: number }
+  input: { platforms?: string[]; count?: number; research?: boolean; source?: { type?: string } }
 }
 
 export interface FakeGeneratorResult {
@@ -40,10 +42,15 @@ export async function runFakeGeneratorOnce(
     }
     const platforms = req.input.platforms?.length ? req.input.platforms : ['x', 'linkedin-page']
     const count = Math.min(Math.max(req.input.count ?? 3, 1), 20)
-    const drafts = draftsFor(platforms, count).map((d) => ({
-      ...d,
-      card: d.card ? { ...d.card, brand: req.brand } : d.card,
-    }))
+    // A request that asks for web research (the checkbox, or recent news) gets
+    // sample sources and one unverified web figure, like the real research step.
+    const research = req.input.research === true || req.input.source?.type === 'news'
+    const drafts = draftsFor(platforms, count)
+      .map((d) => ({
+        ...d,
+        card: d.card ? { ...d.card, brand: req.brand } : d.card,
+      }))
+      .map((d) => (research ? withResearch(d) : d))
     const r = await api.post(`/generation/${req.request_id}/drafts`, { drafts })
     log(`request ${req.request_id.slice(0, 8)} (${req.brand}) -> ${drafts.length} drafts: ${r.status} ${JSON.stringify(r.body)}`)
     out.push({ request_id: req.request_id, status: r.status, body: r.body })

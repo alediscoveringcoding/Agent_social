@@ -75,6 +75,8 @@ export const FIGURE_SOURCES = ['article', 'facts', 'unverified', 'confirmed'] as
 export interface EditFigure extends DraftFigure {
   confirmed_by?: string | null
   confirmed_at?: string | null
+  /** Amendment 07: the web source behind a researched figure. */
+  source_url?: string | null
 }
 
 export interface DraftEdit {
@@ -174,6 +176,8 @@ export function reconcileFigures(
       value,
       context,
       source: f.source,
+      // Only from the stored figure: the browser cannot attach a link to a figure.
+      ...(prev?.source_url ? { source_url: prev.source_url } : {}),
       ...(f.source === 'confirmed'
         ? {
             confirmed_by: confirmedNow ? actorEmail : (prev?.confirmed_by ?? actorEmail),

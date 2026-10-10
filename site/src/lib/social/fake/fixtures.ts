@@ -367,6 +367,58 @@ export const DRAFT_FIXTURES: Fixture[] = [
   },
 ]
 
+/**
+ * What the research step would hand over for a request that asks for it
+ * (amendment 07): a few web pages, example.com only, never a real site.
+ */
+export function researchSources(): NonNullable<DraftWire['sources']> {
+  return [
+    {
+      url: 'https://example.com/stiri/declaratia-unica-termen',
+      title: 'Termenul pentru Declaratia Unica a fost reamintit',
+      publisher: 'Example News',
+      published_at: '4 mai 2026',
+      note: 'Confirma termenul de depunere din 25 mai.',
+      found_in_search: true,
+    },
+    {
+      url: 'https://example.com/stiri/impozit-crypto-explicat',
+      title: 'Impozitul pe castigurile din crypto, explicat',
+      publisher: 'Example Finance',
+      published_at: '28 aprilie 2026',
+      note: 'Sustine cota de impozit pomenita in ciorna.',
+      found_in_search: true,
+    },
+    {
+      url: 'https://example.com/ghiduri/declaratie-pas-cu-pas',
+      title: 'Declaratia pas cu pas',
+      publisher: 'Example Guides',
+      published_at: null,
+      note: null,
+      found_in_search: true,
+    },
+  ]
+}
+
+/** The figure a web page gave the draft: unverified until a person confirms it. */
+export function researchFigure(): NonNullable<DraftWire['figures']>[number] {
+  return {
+    value: '16%',
+    context: 'cota de impozit citata dintr-un articol recent',
+    source: 'unverified',
+    source_url: 'https://example.com/stiri/impozit-crypto-explicat',
+  }
+}
+
+/** A draft as the researching generator would deliver it: sources, and one unverified web figure. */
+export function withResearch(draft: DraftWire): DraftWire {
+  return {
+    ...draft,
+    sources: researchSources(),
+    figures: [...(draft.figures ?? []), researchFigure()],
+  }
+}
+
 /** Drafts for a request: fixtures rotated, variants limited to the requested platforms. */
 export function draftsFor(platforms: readonly string[], count: number, offset = 0): DraftWire[] {
   const usable = DRAFT_FIXTURES.filter((f) => f.variants.some((v) => platforms.includes(v.platform)))

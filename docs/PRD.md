@@ -494,7 +494,7 @@ For `poll` and `reconcile` jobs, `postiz` holds `{post_id, group}` when known an
 
 ### 10.4 Automation API (A implements, n8n in B consumes)
 
-Deferred in local v1 by amendments 01 and 03. The following contract is the future integration target, not a live endpoint in the current app.
+Deferred in local v1 by amendments 01 and 03; implemented locally by [amendment 07](amendment-07-n8n-news-sources.md) (contract: `docs/contracts/automation-api.openapi.yaml`).
 
 Base: `${SITE_BASE_URL}/api/automation/social/v1`. Header: `Authorization: Bearer ${N8N_AUTOMATION_TOKEN}`.
 
