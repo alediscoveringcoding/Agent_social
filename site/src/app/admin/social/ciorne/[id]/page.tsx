@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireAdminPage } from '@/lib/auth/admin'
+import { legalNamesFromEnv } from '@/lib/social/content-rules'
 import { getDraft } from '@/lib/social/queries'
 // W2: available media is loaded only after the page guard.
 import { listMedia } from '@/lib/social/media-queries'
@@ -17,14 +18,18 @@ export const metadata: Metadata = { title: 'Ciorna' }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export default async function DraftPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function DraftPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ dest?: string | string[] }> }) {
   const { id } = await params
+  const { dest } = await searchParams
   await requireAdminPage(`/admin/social/ciorne/${id}`)
   if (!UUID.test(id)) notFound()
   const draft = await getDraft(id)
   if (!draft) notFound()
 
   const mediaLibrary = await listMedia(draft.brand.id)
+  // Private names: only handed to this admin page so the editor can check copy like the server does.
+  const legalNames = legalNamesFromEnv(process.env.SOCIAL_LEGAL_NAMES)
+  const initialDest = typeof dest === 'string' ? dest : null
   const editable = draft.status === 'draft'
   return (
     <>
@@ -63,7 +68,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
           </>
         }
       />
-      <DraftEditor key={draft.revision.id} draft={draft} editable={editable} mediaLibrary={mediaLibrary} />
+      <DraftEditor key={draft.revision.id} draft={draft} editable={editable} mediaLibrary={mediaLibrary} legalNames={legalNames} initialDest={initialDest} />
     </>
   )
 }

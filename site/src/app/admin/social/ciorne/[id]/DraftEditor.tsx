@@ -17,6 +17,7 @@ import type { MediaItem } from '@/lib/social/media-queries'
 import { MediaPanel } from './MediaPanel'
 import { CardStudio } from './CardStudio'
 import { DestinationPreview } from './DestinationPreview'
+import { parseTags, tagsToText } from './ui-helpers'
 
 interface DestState {
   accountId: string
@@ -60,6 +61,25 @@ function initialFor(platform: Platform, draft: DraftDetail): DestState['settings
   return { ...base, ...(variant?.settings ?? {}), __text: text ?? '' }
 }
 
+/** Keeps the raw text while typing; the stored value is always the parsed list. */
+function TagsField({ hint, value, disabled, onChange }: { hint: string; value: unknown; disabled: boolean; onChange: (tags: string[]) => void }) {
+  const [raw, setRaw] = useState(() => tagsToText(value))
+  return (
+    <Field label="Etichete" hint={hint}>
+      <input
+        value={raw}
+        disabled={disabled}
+        onChange={(e) => {
+          setRaw(e.target.value)
+          onChange(parseTags(e.target.value))
+        }}
+        onBlur={() => setRaw(parseTags(raw).join(', '))}
+        className={inputClass}
+      />
+    </Field>
+  )
+}
+
 function SettingsFields({
   platform,
   settings,
@@ -92,14 +112,13 @@ function SettingsFields({
     </Field>
   )
   const tags = (max: number, hint?: string) => (
-    <Field label="Etichete" hint={hint ?? `Separate prin virgula, cel mult ${max}.`} key="tags">
-      <input
-        value={Array.isArray(settings.tags) ? (settings.tags as string[]).join(', ') : ((settings.tags as string) ?? '')}
-        disabled={disabled}
-        onChange={(e) => onChange({ ...settings, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })}
-        className={inputClass}
-      />
-    </Field>
+    <TagsField
+      key="tags"
+      hint={hint ?? `Separate prin virgula, cel mult ${max}.`}
+      value={settings.tags}
+      disabled={disabled}
+      onChange={(next) => onChange({ ...settings, tags: next })}
+    />
   )
   switch (platform) {
     case 'x':
@@ -208,7 +227,7 @@ function Issues({ v }: { v: DestinationValidation }) {
   )
 }
 
-export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: DraftDetail; editable: boolean; mediaLibrary?: MediaItem[] }) {
+export function DraftEditor({ draft, editable, mediaLibrary = [], legalNames = [], initialDest = null }: { draft: DraftDetail; editable: boolean; mediaLibrary?: MediaItem[]; legalNames?: string[]; initialDest?: string | null }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   // W2: a revision refresh must never discard edits typed during a mutation.
@@ -221,7 +240,21 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
   const [dests, setDests] = useState<DestState[]>(
     draft.destinations.map((d) => ({ accountId: d.account_id, text: d.text, settings: d.settings }))
   )
-  const [active, setActive] = useState<string | null>(draft.destinations[0]?.account_id ?? null)
+  const [active, setActiveState] = useState<string | null>(
+    draft.destinations.some((d) => d.account_id === initialDest) ? initialDest : (draft.destinations[0]?.account_id ?? null)
+  )
+  // The page remounts on every new revision; the address keeps the open tab.
+  function setActive(accountId: string | null) {
+    setActiveState(accountId)
+    try {
+      const url = new URL(window.location.href)
+      if (accountId) url.searchParams.set('dest', accountId)
+      else url.searchParams.delete('dest')
+      window.history.replaceState(null, '', url)
+    } catch {
+      // The tab is a convenience only.
+    }
+  }
   const [newFigure, setNewFigure] = useState({ value: '', context: '' })
   const [dirty, setDirty] = useState(false)
 
@@ -244,12 +277,13 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
         media: (mediaByAccount.get(d.accountId) ?? []).map((m) => ({ mediaId: m.media_id, mime: m.mime, width: m.width, height: m.height, altText: m.alt_text })),
         figures,
         rules: acc.rules,
+        legalNames,
       })
       // The time is chosen at approval; it is not a drafting problem.
       out.set(d.accountId, { ...v, errors: v.errors.filter((e) => e.code !== 'MISSING_TIME' && e.code !== 'TIME_IN_PAST'), ok: v.errors.every((e) => e.code === 'MISSING_TIME' || e.code === 'TIME_IN_PAST') })
     }
     return out
-  }, [dests, accounts, mediaByAccount, figures, draft.kind])
+  }, [dests, accounts, mediaByAccount, figures, draft.kind, legalNames])
 
   const totalErrors = [...validations.values()].reduce((n, v) => n + v.errors.length, 0)
   const change = <T,>(setter: (v: T) => void) => (v: T) => {
@@ -418,6 +452,7 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
                     </Button>
                   ) : null}
                   <SettingsFields
+                    key={activeDest.accountId}
                     platform={activeAcc.platform}
                     settings={activeDest.settings}
                     disabled={!editable}
@@ -475,12 +510,14 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
           {editable ? (
             <div className="mt-3 flex flex-wrap items-end gap-2">
               <input
+                aria-label="Cifra"
                 placeholder="Cifra, ex. 16%"
                 value={newFigure.value}
                 onChange={(e) => setNewFigure({ ...newFigure, value: e.target.value })}
                 className={cn(inputClass, 'w-36')}
               />
               <input
+                aria-label="Context"
                 placeholder="Contextul si sursa"
                 value={newFigure.context}
                 onChange={(e) => setNewFigure({ ...newFigure, context: e.target.value })}
@@ -522,7 +559,7 @@ export function DraftEditor({ draft, editable, mediaLibrary = [] }: { draft: Dra
           <>
             <DestinationPreview accountName={activeAcc.display_name} platform={activeAcc.platform} text={activeDest.text} settings={activeDest.settings} media={mediaByAccount.get(activeDest.accountId) ?? []} />
             <MediaPanel key={`${draft.revision.id}:${activeDest.accountId}`} draft={draft} accountId={activeDest.accountId} items={mediaLibrary} disabled={!editable || busy} dirty={dirty} onBusyChange={setMediaBusy} onSelectionDirtyChange={setMediaSelectionDirty} />
-            <CardStudio key={`${draft.revision.id}:${activeDest.accountId}`} draft={draft} accountId={activeDest.accountId} platform={activeAcc.platform} disabled={!editable || busy || mediaSelectionDirty} dirty={dirty} onBusyChange={setMediaBusy} />
+            <CardStudio key={`${draft.revision.id}:${activeDest.accountId}`} draft={draft} accountId={activeDest.accountId} platform={activeAcc.platform} legalNames={legalNames} disabled={!editable || busy || mediaSelectionDirty} dirty={dirty} onBusyChange={setMediaBusy} />
           </>
         ) : null}
 

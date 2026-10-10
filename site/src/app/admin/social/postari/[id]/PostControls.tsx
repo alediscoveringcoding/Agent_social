@@ -13,6 +13,7 @@ import { PLATFORM_LABELS } from '@/lib/social/constants'
 import { isHttpUrl } from '@/lib/social/schemas'
 import { formatBucharest, toLocalInputs } from '@/lib/social/time'
 import { StatusChip } from '../StatusChip'
+import { halfFilledTime } from '../../ciorne/[id]/ui-helpers'
 
 const movable = new Set(['queued', 'claimed', 'manual_pending', 'failed'])
 const cancellable = new Set(['queued', 'claimed', 'manual_pending'])
@@ -28,15 +29,16 @@ export function PostControls({ post }: { post: PostDetail }) {
   const editable = !post.cancelled_at && post.destinations.some((d) => !d.job || movable.has(d.job.status))
   const failed = post.destinations.filter((d) => d.job?.status === 'failed')
   const needsReconcile = failed.some((d) => d.job?.last_error_code === 'RECONCILE_MISS')
+  const halfTime = post.destinations.some((d) => halfFilledTime(times[d.account_id]))
   const jobs = [...post.destinations.flatMap((d) => d.job ? [d.job] : []), ...post.earlierJobs]
 
-  function run(action: () => Promise<ApprovalResult>, message: string, redirect?: string) {
+  function run(action: () => Promise<ApprovalResult>, message: string | ((result: ApprovalResult) => string | null), redirect?: string) {
     setError(null); setIssues([])
     startTransition(async () => {
       try {
         const result = await action()
         if (!result.ok) { setError(result.error); setIssues(result.issues ?? []); toast.error(result.error) }
-        else { toast.success(message); if (redirect) router.push(redirect) }
+        else { const text = typeof message === 'function' ? message(result) : message; if (text) toast.success(text); if (redirect) router.push(redirect) }
       } catch { setError('Ceva nu a mers. Reincarca pagina si incearca din nou.'); toast.error('Actiunea nu a putut fi terminata.') }
       // Approve can save a revision before its final transaction fails.
       finally { router.refresh() }
@@ -70,14 +72,14 @@ export function PostControls({ post }: { post: PostDetail }) {
       })}</ul>}
       {editable ? <div className="mt-5 space-y-3">
         {!post.approval ? <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={figuresChecked} disabled={pending} onChange={(e) => setFiguresChecked(e.target.checked)} />Am verificat cifrele</label> : null}
-        <div className="flex flex-wrap gap-2"><Button tone="secondary" disabled={pending} onClick={() => run(() => reschedulePost({ postId: post.id, revisionId: post.revision.id, times }), post.approval ? 'Ore schimbate. Postarea are nevoie de aprobare.' : 'Ore salvate.')}>{post.approval ? 'Reprogrameaza' : 'Salveaza orele'}</Button>
-          {!post.approval ? <Button disabled={pending || !post.destinations.length} onClick={() => run(() => approvePost({ postId: post.id, revisionId: post.revision.id, times, figuresChecked }), 'Postarea a fost aprobata si programata.')}>Aproba si programeaza</Button> : null}
+        <div className="flex flex-wrap gap-2"><Button tone="secondary" disabled={pending || halfTime} onClick={() => run(() => reschedulePost({ postId: post.id, revisionId: post.revision.id, times }), post.approval ? 'Ore schimbate. Postarea are nevoie de aprobare.' : 'Ore salvate.')}>{post.approval ? 'Reprogrameaza' : 'Salveaza orele'}</Button>{halfTime ? <p className="self-center text-xs text-warn">Completeaza si data, si ora, sau lasa ambele goale.</p> : null}
+          {!post.approval ? <Button disabled={pending || halfTime || !post.destinations.length} onClick={() => run(() => approvePost({ postId: post.id, revisionId: post.revision.id, times, figuresChecked }), 'Postarea a fost aprobata si programata.')}>Aproba si programeaza</Button> : null}
           <Button tone="secondary" disabled={pending} onClick={() => run(() => reopenForEdit({ postId: post.id, revisionId: post.revision.id }), 'Editor deschis.', `/admin/social/ciorne/${post.id}`)}>Editeaza</Button>
         </div>
       </div> : null}
     </Card>
     {jobs.length ? <Card><h2 className="mb-3 font-bold">Publicare pe destinatii</h2><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-ink-soft"><tr><th className="p-2">Cont / revizie</th><th className="p-2">Ora</th><th className="p-2">Stare</th><th className="p-2">Rezultat</th><th className="p-2">Actiune</th></tr></thead><tbody>{jobs.map((job: PostJob) => <tr key={job.id} className="border-t border-line"><td className="p-2">{PLATFORM_LABELS[job.platform]} · {job.account_name}<p className="text-xs text-ink-soft">Revizia {job.revision_number} · {job.attempts} incercari</p></td><td className="p-2">{formatBucharest(job.run_at)}</td><td className="p-2"><StatusChip status={job.status} /></td><td className="p-2">{job.remote_url && isHttpUrl(job.remote_url) ? <a href={job.remote_url} target="_blank" rel="noreferrer" className="text-accent-dark hover:underline">Vezi publicarea ↗</a> : '-'}{job.last_error_code ? <p className="mt-1 text-xs text-danger">{job.last_error_code}: {job.last_error_message}</p> : null}{job.status === 'manual_pending' ? <Link className="ml-2 text-accent-dark" href={`/admin/social/manual/${job.id}`}>Publica manual</Link> : null}</td><td className="p-2">{!post.cancelled_at && cancellable.has(job.status) ? <Button tone="danger" disabled={pending} onClick={() => run(() => cancelDestination({ postId: post.id, jobId: job.id }), 'Destinatie anulata.')}>Anuleaza</Button> : null}</td></tr>)}</tbody></table></div>
-      {failed.length && post.approval && !post.cancelled_at ? <div className="mt-4 space-y-3">{needsReconcile ? <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={reconcileChecked} disabled={pending} onChange={(e) => setReconcileChecked(e.target.checked)} />Am verificat pe platforma: destinatiile cu RECONCILE_MISS nu au fost publicate.</label> : null}<Button tone="secondary" disabled={pending || (needsReconcile && !reconcileChecked)} onClick={() => run(async () => { const result = await retryFailed({ postId: post.id, confirmReconcileMiss: reconcileChecked }); if (result.ok) { toast.info(`${result.retried} destinatii reluate.`); for (const skip of result.skipped) toast.warning(skip.message) } return result }, 'Reincercare verificata.')}>Reincearca doar esuatele</Button></div> : null}
+      {failed.length && post.approval && !post.cancelled_at ? <div className="mt-4 space-y-3">{needsReconcile ? <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={reconcileChecked} disabled={pending} onChange={(e) => setReconcileChecked(e.target.checked)} />Am verificat pe platforma: destinatiile cu RECONCILE_MISS nu au fost publicate.</label> : null}<Button tone="secondary" disabled={pending || (needsReconcile && !reconcileChecked)} onClick={() => run(async () => { const result = await retryFailed({ postId: post.id, confirmReconcileMiss: reconcileChecked }); if (result.ok) { if (result.retried === 0) toast.info('Nimic de reluat.'); for (const skip of result.skipped) toast.warning(skip.message) } return result }, (result) => (result.ok && 'retried' in result && result.retried === 0 ? null : 'Reincercare verificata.'))}>Reincearca doar esuatele</Button></div> : null}
     </Card> : null}
     {!post.cancelled_at ? <div className="flex flex-wrap items-center gap-3"><Button tone="danger" disabled={pending} onClick={() => run(() => cancelPost({ postId: post.id }), 'Postarea a fost anulata unde mai era posibil.')}>Anuleaza postarea</Button><p className="text-xs text-ink-soft">Se anuleaza destinatiile care nu au fost trimise.</p></div> : null}
   </div>

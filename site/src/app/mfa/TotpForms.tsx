@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
 import { startTotpEnroll, verifyTotp, type AuthResult, type EnrollResult } from '@/lib/auth/actions'
 import { Field, inputClass } from '@/components/ui'
 
@@ -40,16 +40,36 @@ export function VerifyTotp({ next }: { next: string }) {
 
 export function EnrollTotp({ next }: { next: string }) {
   const [enroll, setEnroll] = useState<EnrollResult | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  // One enrolment per attempt, even when Strict Mode runs the effect twice.
+  const startedFor = useRef(-1)
   useEffect(() => {
-    let live = true
-    startTotpEnroll().then((r) => {
-      if (live) setEnroll(r)
-    })
-    return () => {
-      live = false
-    }
-  }, [])
+    if (startedFor.current === attempt) return
+    startedFor.current = attempt
+    startTotpEnroll()
+      .then((r) => setEnroll(r))
+      .catch(() => setFailed(true))
+  }, [attempt])
 
+  if (failed) {
+    return (
+      <div className="mt-5 space-y-3">
+        <p className="text-sm font-semibold text-danger">Codul QR nu a putut fi pregatit.</p>
+        <button
+          type="button"
+          onClick={() => {
+            setFailed(false)
+            setEnroll(null)
+            setAttempt((n) => n + 1)
+          }}
+          className="rounded-lg border border-line-2 px-3 py-2 text-sm font-semibold text-ink"
+        >
+          Incearca din nou
+        </button>
+      </div>
+    )
+  }
   if (!enroll) return <p className="mt-5 text-sm text-ink-soft">Se pregateste codul QR...</p>
   if (enroll.error || !enroll.factorId) return <p className="mt-5 text-sm font-semibold text-danger">{enroll.error}</p>
   return (
