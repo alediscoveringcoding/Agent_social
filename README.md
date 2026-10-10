@@ -23,7 +23,7 @@ Final review fixed approval checks for the actual attached card, immutable card 
 
 **Verified:** `bash scripts/update.sh --no-pull` passed with 276 site tests and 27 worker tests (at amendment 03; after amendment 05: `npm run ci` 361 site tests and 65 worker tests, both green), type checks, lint, migrations and a production build. HTTP smoke checks covered 16 authenticated pages, login redirects, both DST weeks, card previews and signed image downloads. The combined flow uses a fresh local database: fake generation → edit/card → approval → media download → published URL in overview/calendar, plus manual publication and the production worker in dry run. No real AI or platform API calls were used for acceptance. After amendment 04 (every Postiz provider, 35 platforms): `npm run ci` in `site` with 341 tests and a production build, and 63 worker tests. After the 2026-10-10 bug-fix batch (migration `0011`, 44 platforms): `npm run ci` in `site` with 409 tests and a production build, and 124 worker tests with the worker type check.
 
-**Remaining:** real Postiz sandbox validation and platform connections/developer approvals; Supabase/Vercel staging and VPS setup; controlled real posts and a restore drill. n8n, the automation API and email/Telegram notifications are deferred. See [Running the app](#running-the-app) below, [site/README.md](site/README.md) for the full local flow, and [the completed handoff](docs/handoff-codex.md) for validation details.
+**Remaining:** real Postiz sandbox validation and platform connections/developer approvals; Supabase/Vercel staging and VPS setup; controlled real posts and a restore drill. n8n runs locally with the automation API and email alerts ([amendment 07](docs/amendment-07-n8n-news-sources.md)); analytics refresh is deferred. See [Running the app](#running-the-app) below, [site/README.md](site/README.md) for the full local flow, and [the completed handoff](docs/handoff-codex.md) for validation details.
 
 ## How it fits together
 
@@ -69,7 +69,9 @@ social-infra/
   prompts/
     facts.yaml, banned.txt, system.md, social.md
   scripts/
-    dev-local.sh, update.sh, dev-up.mjs, dev-down.mjs, health-check.mjs, backup-local.mjs
+    dev-local.sh, update.sh, n8n-local.sh, dev-up.mjs, dev-down.mjs, health-check.mjs, backup-local.mjs
+  n8n/
+    workflows/               news, articles, email alerts, campaign preset (placeholders only)
   card-templates/
     index.html               static brand-card design reference (not rendered by the worker)
   supabase/
@@ -174,10 +176,25 @@ Locally, keep publishing off: `SOCIAL_PUBLISHING_ENABLED=false` in `site/.env.lo
 
 The [site guide](site/README.md#run-locally-without-docker) continues through editing, media, figures, approval and publication. Don't run the fake generator while the real worker runs with an AI key: both claim the same requests.
 
+### Recent news and verified sources
+
+[Amendment 07](docs/amendment-07-n8n-news-sources.md) adds web research before writing.
+
+- **Asking for it.** In **Genereaza**, pick **Stiri recente (cautare pe web)**, with an optional focus and a window in days (default 7). For a **Subiect**, tick **Cauta pe web date actuale**.
+- **The research call.** The worker first searches the web: Claude web search, or Gemini Google Search. It writes research notes in which every fact carries a numbered source, then the normal writing call turns them into drafts.
+  - Drafts cite sources only by number, and the worker maps each number back to a page the search actually returned, so the AI cannot invent links.
+  - If the search finds nothing, or no story passes the quality check, the request fails with the reason and no writing call is made.
+- **Verifying.** Every draft shows a **Surse** panel: title, outlet, date and what each link supports.
+  - Tick **Verificat** on each link after you check it. Approval is blocked until every source is ticked, and the sources lock after approval.
+  - **Copiaza sursele** copies the list for a LinkedIn first comment.
+  - Figures that came from the web stay unverified, with a "sursa" link, until you confirm them.
+- **The original Claude prompts.** The owner's original prompts (LinkedIn for Comets of Web3, Instagram for Taxes Support) live as private brief files in `prompts/private/<brand>/original/` and steer the voice, story choice and structure. The public, name-free rules are in `prompts/style/content-types.md` (News) and `prompts/style/research.md`.
+
 ### AI drafts and cost
 
 - **One request at a time.** The worker handles one request at a time, in order. Each click on **Genereaza** is a separate paid request, so click once and wait.
 - **Calls per request.** A request costs one AI call. It costs one more, a "repair" pass, only when a draft breaks a rule. Claude calls are not retried automatically; a Gemini 5xx is retried twice.
+- **Web research.** It adds one research call and at most `RESEARCH_MAX_SEARCHES` searches (default 5) to a request. Claude charges $10 per 1,000 searches plus the tokens of the pages read. Gemini has no hard search cap; the limit is only asked for in the prompt. Requests without research don't search.
 - **Exactly one call.** Set `GENERATION_REPAIR=false` in `worker/.env`; drafts that break a rule then show their errors in the editor. `CLAUDE_SERVER_FALLBACK=false` stops Anthropic from answering with another model when the chosen one is overloaded.
 - **Choosing the model.** Pick it per request in the **Model AI** dropdown. "AI implicit" uses `GENERATOR_MODEL` and prefers Claude when its key is set, unless `GENERATOR_PROVIDER` says otherwise.
 - **Writing style.** It comes from `prompts/style/`, `prompts/brands/` and the optional private pack in `prompts/private/` ([amendment 06](docs/amendment-06-style-packs.md)).
@@ -202,6 +219,7 @@ From the repo root, in WSL:
 | `node scripts/backup-local.mjs` | Copies `site/.local-db/` (data and private images) and dumps the Postiz database to `~/agent-social-backups/<time>/`. Stop the app first; it refuses while the database is in use |
 | `node scripts/health-check.mjs` | Checks that the site and the worker answer (Postiz optional); exits with an error when one is down |
 | `node scripts/dev-up.mjs` / `node scripts/dev-down.mjs` | Start or stop the local Postiz stack in Docker (http://localhost:4007) |
+| `bash scripts/n8n-local.sh [--import]` | Runs n8n in WSL without Docker (http://127.0.0.1:5678; the first run downloads it). `--import` loads the workflows from `n8n/workflows/` and exits |
 
 In `site/` (`npm run <name>`):
 
@@ -240,15 +258,15 @@ In `worker/`: `npm run dev` (the worker alone, restarts on code changes), `npm t
 Only placeholders live in git (`.env` is git-ignored everywhere). Real values stay on each developer's or the publisher machine.
 
 - [local/.env.example](local/.env.example) — Postiz JWT secret, registration toggle, provider credentials as each platform is connected.
-- [site/.env.example](site/.env.example) — database mode, admin allowlist, local auth/media signing secrets, worker token and the publishing kill switch.
-- [worker/.env.example](worker/.env.example) — site URL/token, Postiz key, optional Claude/Gemini keys, generation provider/model/effort, heartbeat and loop intervals, dry-run setting. Keep AI keys blank for offline use.
+- [site/.env.example](site/.env.example) — database mode, admin allowlist, local auth/media signing secrets, worker token, n8n automation token and the publishing kill switch.
+- [worker/.env.example](worker/.env.example) — site URL/token, Postiz key, optional Claude/Gemini keys, generation provider/model/effort, repair and fallback switches, web research limits (`RESEARCH_MAX_SEARCHES`), heartbeat and loop intervals, dry-run setting. Keep AI keys blank for offline use.
 - Generator style: public rules in `prompts/style/` and `prompts/brands/`; an optional private pack in `prompts/private/` (git-ignored, `STYLE_PACK_DIR`), template in `prompts/private.example/`: [amendment 06](docs/amendment-06-style-packs.md).
 
 In the VPS phase these move to Vercel/VPS env and gain `N8N_AUTOMATION_TOKEN`, `N8N_ENCRYPTION_KEY`, a real `POSTIZ_URL` domain, and n8n's own env — see the amendment, section 11.
 
 ## Publishing flow
 
-1. An admin requests drafts in **Genereaza**. The fake generator or configured production generator delivers them through the worker API; the automation API is deferred.
+1. An admin requests drafts in **Genereaza**, or n8n creates the request through the automation API. The fake generator or the production generator, with optional web research, delivers them through the worker API.
 2. An admin edits and approves it in `/admin/social`. Approval stores a hash of the exact content.
 3. Approval creates one delivery job per destination, in the same transaction.
 4. The worker claims due automatic jobs, checks the approval hash and media bytes, and either reports a dry-run result or submits to Postiz when real delivery is configured. Manual jobs become due for handoff.
@@ -261,16 +279,24 @@ Failure handling:
 - One platform failing never rolls back the others.
 - Times are stored in UTC and shown in Europe/Bucharest.
 
-## n8n workflows (deferred)
+## n8n workflows
 
-These remain a later phase; local v1 uses generation requests and the in-app event feed.
+n8n runs locally next to the site and talks only to the site's automation API (`/api/automation/social/v1`, token `N8N_AUTOMATION_TOKEN`). It can create generation requests, read events and log runs; it can never approve or publish. Setup: [n8n/README.md](n8n/README.md). The last runs show in the **Automatizari** card on **Prezentare**.
 
-| Workflow | What it does |
-| --- | --- |
-| Article to drafts | New blog article creates editable drafts with the canonical link |
-| Campaign to draft | Admin-configured templates and calendars create drafts |
-| Results to notifications | Failures and reconnect-needed alerts reach the admin |
-| Analytics refresh | Daily metrics pull, weekly internal summary |
+| Workflow (`n8n/workflows/`) | Trigger | What it does |
+| --- | --- | --- |
+| `news-to-drafts` | Mon, Wed, Fri 07:00 | One news request with web research per brand |
+| `article-to-drafts` | RSS poll of the blog | A new article creates drafts with its link |
+| `events-to-email` | Every 5 minutes | Emails a digest of alerts: failed posts, drafts ready, reconnects, manual posts due |
+| `campaign-presets` | May, off by default | Declaratia Unica countdown drafts |
+
+The workflows are imported switched off. Each scheduled news run costs, per brand, 2 AI calls and up to 5 searches. Analytics refresh is still deferred.
+
+Quick start:
+1. `bash scripts/update.sh --no-pull`, which creates `N8N_AUTOMATION_TOKEN`.
+2. `bash scripts/n8n-local.sh --import`, then `bash scripts/n8n-local.sh`.
+3. In n8n, create the "Agent Social automation" (Header Auth) and "Agent Social SMTP" credentials.
+4. Edit each workflow's Config node, then activate the workflows.
 
 Conventions:
 
@@ -359,7 +385,7 @@ Data rules:
 - [ ] 2. Developer apps and callback URLs, first real connection (dev.to/Hashnode first, then LinkedIn, Facebook, Instagram)
 - [x] 3. Local site foundation: migrations, authenticated admin, worker API and publishing feature flag
 - [x] 4. Local full flow: draft, media, approve, schedule, fake/dry-run publication and URL, plus manual handoff
-- [ ] 5. n8n workflows (dropped from the localhost MVP, see the amendment)
+- [x] 5. n8n workflows: news, articles, email alerts and a campaign preset through the automation API ([amendment 07](docs/amendment-07-n8n-news-sources.md)); analytics refresh still deferred
 - [ ] 6. Analytics, then enable remaining accounts one at a time
 
 ## Acceptance checks

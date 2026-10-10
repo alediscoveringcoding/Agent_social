@@ -1,0 +1,166 @@
+{
+  "id": "AgSocArtDrafts01",
+  "name": "Agent Social - article to drafts",
+  "active": false,
+  "versionId": "5b1f0c2e-6a1d-4f55-9a10-0000000a0002",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Article to drafts\n\nPolls the blog RSS feed. Every NEW article creates one draft request (source type `article`, no web search: 1 AI call). Drafts land in Ciorne; a person approves.\n\n1. Set the **Feed URL** on the RSS node (placeholder: https://example.com/blog/rss.xml).\n2. Edit **Config** (site URL, brand, platforms, count).\n3. Pick the credential **Agent Social automation** on the HTTP nodes.\n4. Activate the workflow.\n\nThe event id is the item guid (or its link), so an article never creates two requests. The first poll after activation only remembers the feed; older articles are not imported.",
+        "height": 320,
+        "width": 460,
+        "color": 7
+      },
+      "id": "7c0a3f20-0001-4a00-8000-000000000001",
+      "name": "Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-160, -160]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "value": 30,
+              "unit": "minutes"
+            }
+          ]
+        },
+        "feedUrl": "https://example.com/blog/rss.xml"
+      },
+      "id": "7c0a3f20-0002-4a00-8000-000000000002",
+      "name": "RSS Feed Trigger",
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [360, 200]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"siteBaseUrl\": \"http://127.0.0.1:3000\",\n  \"research\": false,\n  \"brand\": {\n    \"slug\": \"taxes-support\",\n    \"platforms\": [\"linkedin\", \"instagram\"],\n    \"templates\": [\"dark\", \"light\", \"mint\"],\n    \"count\": 3\n  }\n}\n",
+        "options": {}
+      },
+      "id": "7c0a3f20-0003-4a00-8000-000000000003",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [580, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $input.first().json;\nlet base = String(cfg.siteBaseUrl || '');\nwhile (base.endsWith('/')) base = base.slice(0, -1);\nif (!base.startsWith('http://') && !base.startsWith('https://')) throw new Error('Config: siteBaseUrl must start with http:// or https://');\nconst brand = cfg.brand || {};\nconst slug = String(brand.slug || '');\nconst api = base + '/api/automation/social/v1';\nconst articles = $('RSS Feed Trigger').all();\nreturn articles.map((it, i) => {\n  const a = it.json;\n  const link = String(a.link || '');\n  const eventId = String(a.guid || a.link || 'article-' + (a.isoDate || a.title || i)).slice(0, 200);\n  return {\n    json: {\n      brand: slug,\n      event_id: eventId,\n      title: String(a.title || '').slice(0, 120),\n      url: api + '/generation-requests',\n      runsUrl: api + '/runs',\n      body: {\n        workflow: 'article-to-drafts',\n        event_id: eventId,\n        brand: slug,\n        input: {\n          source: { type: 'article', url: link },\n          research: cfg.research === true,\n          kinds: ['social'],\n          count: Number(brand.count) || 3,\n          language: 'ro',\n          templates: Array.isArray(brand.templates) && brand.templates.length > 0 ? brand.templates : ['dark', 'light', 'mint'],\n          platforms: brand.platforms,\n        },\n      },\n    },\n  };\n});"
+      },
+      "id": "7c0a3f20-0004-4a00-8000-000000000004",
+      "name": "Build requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "7c0a3f20-0005-4a00-8000-000000000005",
+      "name": "Create generation request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 200],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": null,
+          "name": "Agent Social automation"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sent = $('Build requests').all();\nreturn $input.all().map((item, i) => {\n  const req = sent[i].json;\n  const r = item.json;\n  const body = r.body && typeof r.body === 'object' ? r.body : {};\n  let status = 'error';\n  const details = { brand: req.brand, title: req.title };\n  if (r.error !== undefined) {\n    details.error = String(r.error.message || r.error).slice(0, 300);\n  } else if (r.statusCode >= 200 && r.statusCode < 300) {\n    status = body.created === false ? 'skipped' : 'ok';\n    details.statusCode = r.statusCode;\n    details.request_id = body.request_id;\n    details.created = body.created;\n  } else {\n    details.statusCode = r.statusCode;\n    details.response = JSON.stringify(r.body === undefined ? null : r.body).slice(0, 300);\n  }\n  return { json: { url: req.runsUrl, body: { workflow: 'article-to-drafts', event_id: req.event_id, status, details } } };\n});"
+      },
+      "id": "7c0a3f20-0006-4a00-8000-000000000006",
+      "name": "Prepare run logs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1240, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "7c0a3f20-0007-4a00-8000-000000000007",
+      "name": "Log run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1460, 200],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": null,
+          "name": "Agent Social automation"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "RSS Feed Trigger": {
+      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+    },
+    "Config": {
+      "main": [[{ "node": "Build requests", "type": "main", "index": 0 }]]
+    },
+    "Build requests": {
+      "main": [[{ "node": "Create generation request", "type": "main", "index": 0 }]]
+    },
+    "Create generation request": {
+      "main": [[{ "node": "Prepare run logs", "type": "main", "index": 0 }]]
+    },
+    "Prepare run logs": {
+      "main": [[{ "node": "Log run", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Bucharest",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "executionTimeout": 300
+  }
+}

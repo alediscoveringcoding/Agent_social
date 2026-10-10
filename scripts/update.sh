@@ -162,6 +162,19 @@ else
   fi
 fi
 
+# The automation API (n8n, amendment 07) refuses every call without a token of 32+
+# characters. Create one when it is missing or empty; never overwrite a value.
+if [ -z "$(env_get site/.env.local N8N_AUTOMATION_TOKEN)" ]; then
+  N8N_TOKEN=$(rand_hex)
+  if grep -qE '^N8N_AUTOMATION_TOKEN=' site/.env.local; then
+    sed -i "s/^N8N_AUTOMATION_TOKEN=.*/N8N_AUTOMATION_TOKEN=$N8N_TOKEN/" site/.env.local
+  else
+    printf '\n# Bearer token for the n8n automation API (create requests, read events, log runs).\nN8N_AUTOMATION_TOKEN=%s\n' "$N8N_TOKEN" >>site/.env.local
+  fi
+  unset N8N_TOKEN
+  warn "N8N_AUTOMATION_TOKEN created in site/.env.local: paste it into the n8n credential \"Agent Social automation\" as 'Bearer <token>' (see n8n/README.md)"
+fi
+
 [ "$(env_get site/.env.local WORKER_TOKEN)" = "$WORKER_TOKEN" ] ||
   warn "WORKER_TOKEN differs between worker/.env and site/.env.local: the worker will get 401 until they match"
 case "$(env_get site/.env.local ADMIN_EMAILS)" in
@@ -218,4 +231,5 @@ cat <<'EOF'
   First time only (with the site stopped):
     cd site && npm run admin:create -- --email you@example.com
   Without an AI key: cd site && npm run social:fake-generator -- --once
+  Automations (optional, needs the site running): bash scripts/n8n-local.sh --import, then bash scripts/n8n-local.sh (guide: n8n/README.md)
 EOF
