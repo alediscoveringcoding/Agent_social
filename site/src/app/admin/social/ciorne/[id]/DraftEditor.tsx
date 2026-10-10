@@ -1,11 +1,12 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { saveDraft } from '@/lib/social/actions'
 import { PLATFORM_KIND, PLATFORM_LABELS, type Platform } from '@/lib/social/constants'
 import type { EditFigure } from '@/lib/social/draft-edit'
+import { figureSourceUrl } from '@/lib/social/news-ui'
 import { SETTINGS_FIELDS } from '@/lib/social/platform-settings'
 import type { DraftDetail } from '@/lib/social/queries'
 import { lengthUnit } from '@/lib/social/text-length'
@@ -227,7 +228,7 @@ function Issues({ v }: { v: DestinationValidation }) {
   )
 }
 
-export function DraftEditor({ draft, editable, mediaLibrary = [], legalNames = [], initialDest = null }: { draft: DraftDetail; editable: boolean; mediaLibrary?: MediaItem[]; legalNames?: string[]; initialDest?: string | null }) {
+export function DraftEditor({ draft, editable, mediaLibrary = [], legalNames = [], initialDest = null, sourcesPanel = null }: { draft: DraftDetail; editable: boolean; mediaLibrary?: MediaItem[]; legalNames?: string[]; initialDest?: string | null; sourcesPanel?: ReactNode }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   // W2: a revision refresh must never discard edits typed during a mutation.
@@ -474,11 +475,21 @@ export function DraftEditor({ draft, editable, mediaLibrary = [], legalNames = [
           <ul className="mt-3 space-y-2">
             {figures.map((f, i) => {
               const s = SOURCE_LABELS[f.source] ?? { label: f.source, tone: 'neutral' as const }
+              // Amendment 07: a figure found on the web links to the page it came from.
+              const sourceUrl = figureSourceUrl(f)
               return (
                 <li key={`${f.value}-${i}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2">
                   <div className="min-w-0">
                     <span className="font-bold text-ink">{f.value}</span>{' '}
                     <span className="text-sm text-ink-soft">{f.context ?? ''}</span>
+                    {sourceUrl ? (
+                      <>
+                        {' '}
+                        <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-accent-dark hover:underline">
+                          sursa ↗
+                        </a>
+                      </>
+                    ) : null}
                     {f.confirmed_by ? (
                       <span className="block text-xs text-ink-soft">
                         confirmata de {f.confirmed_by}
@@ -536,6 +547,9 @@ export function DraftEditor({ draft, editable, mediaLibrary = [], legalNames = [
             </div>
           ) : null}
         </Card>
+
+        {/* Amendment 07: the web sources behind the figures; approval waits for each to be ticked. */}
+        {sourcesPanel}
       </fieldset>
 
       <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">

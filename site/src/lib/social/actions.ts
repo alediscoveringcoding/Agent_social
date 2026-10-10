@@ -4,9 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin, type AdminIdentity } from '@/lib/auth/admin'
 import { AdminAuthError } from '@/lib/auth/decision'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { AI_MODELS, PLATFORM_KIND, type Platform, type PostKind } from './constants.ts'
+import type { Platform, PostKind } from './constants.ts'
 import { legalNamesFromEnv } from './content-rules.ts'
 import { buildDraftRevision, DraftEditError, type BaseRevision, type DraftEdit, type EditFigure } from './draft-edit.ts'
+import { buildGenerationCandidate, generationIssueMessage, type GenerationFormValues } from './news-ui.ts'
 import { GenerationInputSchema } from './schemas.ts'
 import { logActivity } from './server/activity.ts'
 
@@ -59,42 +60,24 @@ function revalidateDrafting(postId?: string) {
 // Generate (F2): a generation request for the worker's generator
 // ---------------------------------------------------------------------------
 
-export interface GenerationRequestForm {
-  brandId: string
-  source: { type: 'article'; url: string } | { type: 'topic'; topic: string; hooks: string[] }
-  platforms: Platform[]
-  count: number
-  templates: Array<'light' | 'dark' | 'mint'>
-  /** An AI_MODELS id; empty or absent = the worker's default. */
-  aiModel?: string
-}
+/**
+ * Amendment 07: the source can also be recent news (`news`, a web search), and
+ * `research` asks a topic to search the web first. The input is validated by
+ * GenerationInputSchema below, so the worker reads exactly what is stored.
+ */
+export type GenerationRequestForm = GenerationFormValues
 
 export async function createGenerationRequest(form: GenerationRequestForm): Promise<ActionResult<{ requestId: string }>> {
   return guarded<{ requestId: string }>('createGenerationRequest', async (actor) => {
     const db = createAdminClient()
-    const platforms = [...new Set(form.platforms ?? [])]
-    const kinds = [...new Set(platforms.map((p) => PLATFORM_KIND[p]).filter(Boolean))] as PostKind[]
-    const model = form.aiModel ? AI_MODELS.find((m) => m.id === form.aiModel) : undefined
-    if (form.aiModel && !model) return { ok: false, error: 'Alege un model AI din lista.' }
-    const parsed = GenerationInputSchema.safeParse({
-      ...(model ? { ai: { provider: model.provider, model: model.id } } : {}),
-      source: form.source,
-      platforms,
-      kinds,
-      count: Number(form.count),
-      language: 'ro',
-      templates: form.templates?.length ? form.templates : ['dark', 'light', 'mint'],
-    })
+    const built = buildGenerationCandidate(form)
+    if (!built.ok) return { ok: false, error: built.error }
+    const platforms = built.candidate.platforms as Platform[]
+    const parsed = GenerationInputSchema.safeParse(built.candidate)
     if (!parsed.success) {
-      const issue = parsed.error.issues[0]
-      const where = issue?.path.join('.') ?? ''
-      const messages: Record<string, string> = {
-        'source.url': 'Linkul articolului trebuie sa inceapa cu https://.',
-        'source.topic': 'Descrie subiectul in cel putin 3 caractere.',
-        platforms: 'Alege cel putin o platforma.',
-        count: 'Numarul de ciorne e intre 1 si 20.',
-      }
-      return { ok: false, error: messages[where] ?? `Date invalide (${where || 'formular'}).` }
+      const where = parsed.error.issues[0]?.path.join('.') ?? ''
+      const sourceType = (built.candidate.source as { type?: string } | null | undefined)?.type
+      return { ok: false, error: generationIssueMessage(where, sourceType) }
     }
 
     const { data: brand } = await db.from('social_brands').select('id').eq('id', form.brandId).maybeSingle()
@@ -116,6 +99,7 @@ export async function createGenerationRequest(form: GenerationRequestForm): Prom
         platforms,
         count: parsed.data.count,
         source: parsed.data.source.type,
+        research: parsed.data.research,
         ai_model: parsed.data.ai?.model ?? null,
       },
     })

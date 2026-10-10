@@ -4,7 +4,21 @@ import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createGenerationRequest } from '@/lib/social/actions'
-import { AI_MODELS, CARD_TEMPLATES, CARD_TEMPLATE_LABELS, PLATFORMS, PLATFORM_LABELS, type CardTemplate, type Platform } from '@/lib/social/constants'
+import {
+  AI_MODELS,
+  CARD_TEMPLATES,
+  CARD_TEMPLATE_LABELS,
+  GENERATION_SOURCE_LABELS,
+  GENERATION_SOURCE_TYPES,
+  NEWS_WINDOW_DAYS,
+  PLATFORMS,
+  PLATFORM_LABELS,
+  RESEARCH_COST_HINT,
+  type CardTemplate,
+  type GenerationSourceType,
+  type Platform,
+} from '@/lib/social/constants'
+import { buildGenerationForm } from '@/lib/social/news-ui'
 import { Button, Field, inputClass } from '@/components/ui'
 
 interface Props {
@@ -16,10 +30,13 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [brandId, setBrandId] = useState(brands[0]?.id ?? '')
-  const [sourceType, setSourceType] = useState<'topic' | 'article'>('topic')
+  const [sourceType, setSourceType] = useState<GenerationSourceType>('topic')
   const [url, setUrl] = useState('')
   const [topic, setTopic] = useState('')
   const [hooks, setHooks] = useState('')
+  const [webSearch, setWebSearch] = useState(false)
+  const [focus, setFocus] = useState('')
+  const [windowDays, setWindowDays] = useState(String(NEWS_WINDOW_DAYS.default))
   const [platforms, setPlatforms] = useState<Platform[]>(['x', 'linkedin-page', 'facebook', 'instagram'])
   const [count, setCount] = useState(5)
   const [templates, setTemplates] = useState<CardTemplate[]>(['dark', 'light', 'mint'])
@@ -27,32 +44,33 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
 
   const available = useMemo(() => new Set(platformsByBrand[brandId] ?? []), [platformsByBrand, brandId])
   const missing = platforms.filter((p) => !available.has(p))
+  // News always searches the web; a topic searches when asked.
+  const research = sourceType === 'news' || (sourceType === 'topic' && webSearch)
 
   const toggle = <T,>(list: T[], value: T) => (list.includes(value) ? list.filter((v) => v !== value) : [...list, value])
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
+    // Every click is a paid AI request: never send a second one while the first is in flight.
+    if (pending) return
     start(async () => {
-      const r = await createGenerationRequest({
-        brandId,
-        source:
-          sourceType === 'article'
-            ? { type: 'article', url: url.trim() }
-            : { type: 'topic', topic: topic.trim(), hooks: hooks.split(',').map((h) => h.trim()).filter(Boolean) },
-        platforms,
-        count,
-        templates,
-        aiModel,
-      })
-      if (!r.ok) {
-        toast.error(r.error)
-        return
+      try {
+        const r = await createGenerationRequest(
+          buildGenerationForm({ brandId, mode: sourceType, url, topic, hooks, focus, windowDays, webSearch, platforms, count, templates, aiModel })
+        )
+        if (!r.ok) {
+          toast.error(r.error)
+          return
+        }
+        toast.success('Cererea a fost trimisa generatorului.')
+        setTopic('')
+        setUrl('')
+        setHooks('')
+        setFocus('')
+        router.refresh()
+      } catch {
+        toast.error('Cererea nu a putut fi trimisa. Incearca din nou.')
       }
-      toast.success('Cererea a fost trimisa generatorului.')
-      setTopic('')
-      setUrl('')
-      setHooks('')
-      router.refresh()
     })
   }
 
@@ -70,17 +88,18 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
 
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold text-ink">Sursa</legend>
-        <div className="flex gap-2">
-          {(['topic', 'article'] as const).map((t) => (
+        <div className="flex flex-wrap gap-2">
+          {GENERATION_SOURCE_TYPES.map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setSourceType(t)}
+              aria-pressed={sourceType === t}
               className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${
                 sourceType === t ? 'border-accent bg-accent-soft text-accent-dark' : 'border-line-2 text-ink-soft hover:bg-bg-mint'
               }`}
             >
-              {t === 'topic' ? 'Subiect' : 'Articol de pe blog'}
+              {GENERATION_SOURCE_LABELS[t]}
             </button>
           ))}
         </div>
@@ -94,6 +113,30 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
               required
             />
           </Field>
+        ) : sourceType === 'news' ? (
+          <>
+            <Field label="Subiect (optional)" hint="Lasa gol pentru temele brandului. Altfel, cautarea se restrange la subiectul tau.">
+              <input
+                value={focus}
+                onChange={(e) => setFocus(e.target.value)}
+                placeholder="Declaratia Unica, criptomonede, taxe"
+                className={inputClass}
+                maxLength={500}
+              />
+            </Field>
+            <Field label="Perioada (zile)" hint={`Stiri din ultimele zile, intre ${NEWS_WINDOW_DAYS.min} si ${NEWS_WINDOW_DAYS.max}.`}>
+              <input
+                type="number"
+                min={NEWS_WINDOW_DAYS.min}
+                max={NEWS_WINDOW_DAYS.max}
+                step={1}
+                value={windowDays}
+                onChange={(e) => setWindowDays(e.target.value)}
+                className={inputClass}
+                required
+              />
+            </Field>
+          </>
         ) : (
           <>
             <Field label="Subiect">
@@ -109,8 +152,18 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
             <Field label="Unghiuri (optional)" hint="Separate prin virgula, de exemplu: termen, schimbare de cota.">
               <input value={hooks} onChange={(e) => setHooks(e.target.value)} className={inputClass} />
             </Field>
+            <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <input type="checkbox" checked={webSearch} onChange={(e) => setWebSearch(e.target.checked)} />
+              Cauta pe web date actuale
+            </label>
           </>
         )}
+        {research ? (
+          <div role="note" className="rounded-lg border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-warn">
+            <p className="font-semibold">{RESEARCH_COST_HINT}</p>
+            <p className="mt-0.5">Sursele gasite apar pe ciorna si trebuie bifate ca verificate inainte de aprobare.</p>
+          </div>
+        ) : null}
       </fieldset>
 
       <fieldset>
@@ -174,7 +227,8 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
         </select>
       </Field>
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        {research ? <span className="text-xs text-ink-soft">Cu cautare pe web</span> : null}
         <Button type="submit" disabled={pending || !brandId || platforms.length === 0}>
           {pending ? 'Se trimite...' : 'Genereaza ciornele'}
         </Button>

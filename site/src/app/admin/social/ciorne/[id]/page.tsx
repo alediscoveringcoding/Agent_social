@@ -6,9 +6,13 @@ import { legalNamesFromEnv } from '@/lib/social/content-rules'
 import { getDraft } from '@/lib/social/queries'
 // W2: available media is loaded only after the page guard.
 import { listMedia } from '@/lib/social/media-queries'
+import { sourcesLocked } from '@/lib/social/news-ui'
 import { isHttpUrl } from '@/lib/social/schemas'
+// Amendment 07: the web sources behind the draft, ticked by a person before approval.
+import { getPostSources } from '@/lib/social/sources-queries'
 import { formatBucharest } from '@/lib/social/time'
 import { Badge, PageTitle } from '@/components/ui'
+import { SourcesPanel } from '../../SourcesPanel'
 import { DraftEditor } from './DraftEditor'
 import { DiscardButton } from '../DiscardButton'
 // W3: duplicate the current content into a fresh draft.
@@ -26,7 +30,7 @@ export default async function DraftPage({ params, searchParams }: { params: Prom
   const draft = await getDraft(id)
   if (!draft) notFound()
 
-  const mediaLibrary = await listMedia(draft.brand.id)
+  const [mediaLibrary, sources] = await Promise.all([listMedia(draft.brand.id), getPostSources(draft.id)])
   // Private names: only handed to this admin page so the editor can check copy like the server does.
   const legalNames = legalNamesFromEnv(process.env.SOCIAL_LEGAL_NAMES)
   const initialDest = typeof dest === 'string' ? dest : null
@@ -68,7 +72,15 @@ export default async function DraftPage({ params, searchParams }: { params: Prom
           </>
         }
       />
-      <DraftEditor key={draft.revision.id} draft={draft} editable={editable} mediaLibrary={mediaLibrary} legalNames={legalNames} initialDest={initialDest} />
+      <DraftEditor
+        key={draft.revision.id}
+        draft={draft}
+        editable={editable}
+        mediaLibrary={mediaLibrary}
+        legalNames={legalNames}
+        initialDest={initialDest}
+        sourcesPanel={<SourcesPanel sources={sources} locked={sourcesLocked(draft.status)} />}
+      />
     </>
   )
 }

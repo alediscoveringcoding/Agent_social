@@ -5,6 +5,7 @@ import { listAccounts, listBrands, listGenerationRequests } from '@/lib/social/q
 import { Badge, Card, PageTitle } from '@/components/ui'
 import { formatBucharest } from '@/lib/social/time'
 import { AI_MODELS, PLATFORM_LABELS, type Platform } from '@/lib/social/constants'
+import { requestSourceLabel, requestUsesResearch } from '@/lib/social/news-ui'
 import { GenerateForm } from './GenerateForm'
 
 export const metadata: Metadata = { title: 'Genereaza' }
@@ -45,8 +46,8 @@ export default async function GeneratePage() {
             <ul className="space-y-2">
               {requests.map((r) => {
                 const s = STATUS[r.status] ?? STATUS.queued
-                const source =
-                  r.input.source?.type === 'article' ? r.input.source.url : r.input.source?.type === 'topic' ? r.input.source.topic : '-'
+                const source = requestSourceLabel(r.input.source)
+                const research = requestUsesResearch(r.input)
                 return (
                   <li key={r.id} className="rounded-card-sm border border-line bg-card px-4 py-3">
                     <div className="flex items-center justify-between gap-2">
@@ -58,6 +59,7 @@ export default async function GeneratePage() {
                     <p className="mt-1 text-xs text-ink-soft">
                       {r.brand?.name ?? '-'} · {(r.input.platforms ?? []).map((p) => PLATFORM_LABELS[p as Platform] ?? p).join(', ')} ·{' '}
                       {r.input.count ?? '?'} ciorne · {aiLabel(r.input.ai?.model)} · {formatBucharest(r.created_at)}
+                      {research ? ' · cu cautare pe web' : ''}
                     </p>
                     {r.status === 'done' ? (
                       <Link href="/admin/social/ciorne" className="mt-1 inline-block text-xs font-semibold text-accent-dark hover:underline">

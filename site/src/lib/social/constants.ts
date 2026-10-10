@@ -306,6 +306,8 @@ export const ERROR_CODE_LABELS: Record<string, string> = {
   INTEGRATION_NOT_FOUND: 'Canalul nu mai exista in Postiz',
   HASHNODE_CONFIG_MISSING: 'Lipseste publicatia Hashnode',
   DRAFTS_POST_UNCERTAIN: 'Ciornele poate au fost salvate; verifica Ciorne inainte sa generezi din nou',
+  RESEARCH_EMPTY: 'Cautarea pe web nu a gasit surse; nu s-a scris nicio ciorna',
+  RESEARCH_NO_STORY: 'Nicio stire nu a trecut filtrul de calitate; nu s-a scris nicio ciorna (vezi motivele in mesaj)',
 }
 
 export const DELIVERY_OUTCOMES = ['published', 'failed', 'retry', 'reconciling', 'not_found'] as const
@@ -426,6 +428,45 @@ export const CARD_TEMPLATE_LABELS: Record<CardTemplate, string> = {
   light: 'Light',
   dark: 'Dark',
   mint: 'Mint',
+}
+
+/**
+ * Amendment 07: web news research and verified sources. Copy is Romanian
+ * without diacritics.
+ */
+export const GENERATION_SOURCE_TYPES = ['topic', 'article', 'news'] as const
+export type GenerationSourceType = (typeof GENERATION_SOURCE_TYPES)[number]
+
+export const GENERATION_SOURCE_LABELS: Record<GenerationSourceType, string> = {
+  topic: 'Subiect',
+  article: 'Articol de pe blog',
+  news: 'Stiri recente (cautare pe web)',
+}
+
+/** The news window, in days (GenerationInputSchema: 1..30, default 7). */
+export const NEWS_WINDOW_DAYS = { min: 1, max: 30, default: 7 } as const
+
+export const RESEARCH_COST_HINT = 'Cautarea pe web inseamna 2 apeluri AI si cel mult 5 cautari (cost suplimentar).'
+
+export const SOURCES_APPROVAL_BLOCKED_HINT = 'Aprobarea e blocata pana verifici toate sursele.'
+export const SOURCES_FROZEN_HINT = 'Sursele sunt blocate dupa aprobare.'
+
+/** social_automation_runs.status. */
+export const AUTOMATION_STATUSES = ['ok', 'error', 'skipped'] as const
+export type AutomationStatus = (typeof AUTOMATION_STATUSES)[number]
+
+export const AUTOMATION_STATUS_LABELS: Record<AutomationStatus, string> = {
+  ok: 'Reusit',
+  error: 'Eroare',
+  skipped: 'Sarit',
+}
+
+/** The shipped n8n workflows (n8n/workflows/); an unknown slug is shown as it is. */
+export const AUTOMATION_WORKFLOW_LABELS: Record<string, string> = {
+  'news-to-drafts': 'Stiri in ciorne',
+  'article-to-drafts': 'Articole in ciorne',
+  'events-to-email': 'Alerte pe email',
+  'campaign-presets': 'Campanie programata',
 }
 
 export const SOCIAL_TIMEZONE = 'Europe/Bucharest'

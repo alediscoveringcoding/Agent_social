@@ -10,6 +10,7 @@ import type { ApprovalResult } from '@/lib/social/approval-actions'
 import type { DestinationIssues, LocalTime } from '@/lib/social/approval'
 import { approvePost, cancelDestination, cancelPost, reopenForEdit, reschedulePost, retryFailed, suggestTimes } from '@/lib/social/approval-actions'
 import { PLATFORM_LABELS } from '@/lib/social/constants'
+import { approvalBlockedHint } from '@/lib/social/news-ui'
 import { isHttpUrl } from '@/lib/social/schemas'
 import { formatBucharest, toLocalInputs } from '@/lib/social/time'
 import { StatusChip } from '../StatusChip'
@@ -17,7 +18,7 @@ import { halfFilledTime } from '../../ciorne/[id]/ui-helpers'
 
 const movable = new Set(['queued', 'claimed', 'manual_pending', 'failed'])
 const cancellable = new Set(['queued', 'claimed', 'manual_pending'])
-export function PostControls({ post }: { post: PostDetail }) {
+export function PostControls({ post, sourcesUnverified = 0 }: { post: PostDetail; sourcesUnverified?: number }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [times, setTimes] = useState<Record<string, LocalTime>>(() => Object.fromEntries(post.destinations.map((d) => [d.account_id, d.scheduled_at ? toLocalInputs(d.scheduled_at) : { date: '', time: '' }])))
@@ -72,6 +73,8 @@ export function PostControls({ post }: { post: PostDetail }) {
       })}</ul>}
       {editable ? <div className="mt-5 space-y-3">
         {!post.approval ? <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={figuresChecked} disabled={pending} onChange={(e) => setFiguresChecked(e.target.checked)} />Am verificat cifrele</label> : null}
+        {/* Amendment 07: the server refuses the approval while a source is unticked; say so before the click. */}
+        {!post.approval && approvalBlockedHint(sourcesUnverified) ? <p className="text-xs font-semibold text-warn">{approvalBlockedHint(sourcesUnverified)} ({sourcesUnverified} {sourcesUnverified === 1 ? 'neverificata' : 'neverificate'})</p> : null}
         <div className="flex flex-wrap gap-2"><Button tone="secondary" disabled={pending || halfTime} onClick={() => run(() => reschedulePost({ postId: post.id, revisionId: post.revision.id, times }), post.approval ? 'Ore schimbate. Postarea are nevoie de aprobare.' : 'Ore salvate.')}>{post.approval ? 'Reprogrameaza' : 'Salveaza orele'}</Button>{halfTime ? <p className="self-center text-xs text-warn">Completeaza si data, si ora, sau lasa ambele goale.</p> : null}
           {!post.approval ? <Button disabled={pending || halfTime || !post.destinations.length} onClick={() => run(() => approvePost({ postId: post.id, revisionId: post.revision.id, times, figuresChecked }), 'Postarea a fost aprobata si programata.')}>Aproba si programeaza</Button> : null}
           <Button tone="secondary" disabled={pending} onClick={() => run(() => reopenForEdit({ postId: post.id, revisionId: post.revision.id }), 'Editor deschis.', `/admin/social/ciorne/${post.id}`)}>Editeaza</Button>
