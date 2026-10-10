@@ -88,7 +88,7 @@ Base `${SITE_BASE_URL}/api/automation/social/v1`, header `Authorization: Bearer 
 | File | Trigger | What it does |
 | --- | --- | --- |
 | `news-to-drafts.json` | Schedule (Mon, Wed, Fri 07:00 Bucharest) | For each configured brand, `POST /generation-requests` with `source.type = 'news'`. The `event_id` is `news-<brand>-<date>` |
-| `article-to-drafts.json` | RSS poll of the blog | Each new article creates a request with `source.type = 'article'`. The `event_id` is the item guid |
+| `article-to-drafts.json` | RSS poll of the blog | Each new article creates a request with `source.type = 'article'`. The `event_id` is `article-<brand>-<first 32 hex characters of SHA-256 of the guid or link>` |
 | `events-to-email.json` | Every 5 minutes | `GET /events` from the stored cursor; emails the alert types to the admins; logs a run |
 | `campaign-presets.json` | Schedule, inactive by default | Example preset (the "Declaratia Unica" countdown in May) |
 
@@ -102,3 +102,21 @@ The workflows hold placeholders only. The token is an n8n Header Auth credential
 | With research | 2 (+1 repair at most) | at most `RESEARCH_MAX_SEARCHES` |
 
 Claude web search is billed at $10 per 1,000 searches, plus the result tokens. `GENERATION_REPAIR=false` drops the repair call.
+
+## 5. Follow-up fixes (2026-10-10, after review)
+
+- **Migration `0013_retry_confirm_and_research_sources.sql`:**
+  - A retry of a `POLL_TIMEOUT` job needs the same confirmation as `RECONCILE_MISS`, because the post may already be live.
+  - `retry` is refused for a `submitted` job.
+  - A post from a research request with no source cannot be approved (`SOCIAL_SOURCES_MISSING`).
+  - A release by the kill switch refunds the attempt.
+- **Events cursor:** `GET /events` also returns `latest_id`, so n8n notices a reset outbox. The email digest applies its 48-hour age filter only on the first run, so a long SMTP outage loses no alert.
+- **Links:** on research requests, a draft's `source_url` and `variants[].link` must be a brief source or the request's article URL; anything else is cleared with a reviewer note. A URL in the post text that is neither is a validation error, `link_not_from_search`. Only x, facebook, telegram and bluesky may carry one URL in the text; LinkedIn and Instagram carry none.
+- **Figures:** on research requests, figures are `unverified` unless they are an active verified fact.
+- **Facts:** facts whose `valid_to` has passed are not given to the writer, and the writer prompt states today's date (Europe/Bucharest). The owner keeps `prompts/facts.yaml` current.
+- **Research verdict:** news research uses the 9–10 audit and may answer "NO QUALIFYING STORY". Topic and article research only stop on "NO SOURCES FOUND". Neither verdict calls the writer.
+- **Writer:**
+  - With a brief it writes up to N drafts, never padding.
+  - devto, hashnode and medium are dropped for non-article requests, because they need our blog's canonical URL.
+- **Limits:** `RESEARCH_TIMEOUT_MS` is capped at 540000, inside the generation lease. Gemini counts every HTTP attempt as a call.
+- **Brand topics:** private `news_topics` come before public ones (cap 14).

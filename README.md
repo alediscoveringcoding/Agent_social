@@ -62,7 +62,7 @@ social-infra/
     docker-compose.yml       Postiz v2.25.0 + Postgres + Redis + Temporal
     .env.example
   site/                     Next.js admin, local database, media, worker API and automation API
-    supabase/migrations/     the authoritative schema (0001-0012)
+    supabase/migrations/     the authoritative schema (0001-0013)
   worker/
     src/
       loops/                 delivery, generator, sync
