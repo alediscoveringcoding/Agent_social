@@ -25,8 +25,8 @@ test("X uses URL, emoji and CJK weights; figures are not validation errors", () 
 });
 test("figure provenance survives detection; URL digits and single digits do not add entries", () => {
   const draft = modelDraft({ canonical_text: "16% pe 25 mai 2027, 600 RON. Pasul 3: https://taxes.support/2026", figures: [
-    { value: "16 %", context: "cota", source: "unverified" },
-    { value: "16%", context: "cota din articol", source: "article" },
+    { value: "16 %", context: "cota", source: "unverified", source_id: "" },
+    { value: "16%", context: "cota din articol", source: "article", source_id: "" },
   ] });
   const validated = validateDraft(draft, 0, "taxes-support");
   assert.equal(validated.figures.find(f => f.value === "16%")?.source, "article");
@@ -64,7 +64,7 @@ test("provider wire overflows remain reviewable instead of losing the draft batc
     notes: 'n'.repeat(4100),
     article: { title: 'Article', subtitle: 's'.repeat(510), body_markdown: 'Text', tags: [], canonical_url: '' },
     variants: Array.from({ length: PLATFORMS.length + 1 }, () => variant("x", "Text")),
-    figures: [{ value: '', context: '', source: 'unverified' }, { value: '16%', context: 'c'.repeat(510), source: 'facts' }],
+    figures: [{ value: '', context: '', source: 'unverified', source_id: "" }, { value: '16%', context: 'c'.repeat(510), source: 'facts', source_id: "" }],
   }), 0, 'taxes-support');
   assert.equal(draft.notes.length, 4000);
   assert.equal(draft.article.subtitle.length, 500);

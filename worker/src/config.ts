@@ -37,6 +37,12 @@ const schema = z.object({
   GEMINI_API_KEY: z.preprocess(blankToUndefined, z.string().optional()),
   GEMINI_MODEL: z.preprocess(blankToUndefined, z.string().default("gemini-3.8-flash")),
 
+  // Web research (amendment 07). At most this many searches per request (Claude enforces it as
+  // max_uses; Gemini is only asked to stay within it). Claude bills $10 per 1,000 searches.
+  RESEARCH_MAX_SEARCHES: z.preprocess(blankToUndefined, z.coerce.number().int().min(1).max(20).default(5)),
+  // Time limit for the whole research step, continuations included. Blank = 300000 (5 minutes).
+  RESEARCH_TIMEOUT_MS: z.preprocess(blankToUndefined, z.coerce.number().int().positive().optional()),
+
   // Private style pack for the generator (amendment 06). Blank means <repo>/prompts/private.
   STYLE_PACK_DIR: z.preprocess(blankToUndefined, z.string().optional()),
   WORKER_DRY_RUN: envBool(true),

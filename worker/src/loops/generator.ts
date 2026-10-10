@@ -9,6 +9,10 @@ import { variantSettings } from "../generator/variant-settings.js";
 import { kindOf } from "../platforms.js";
 import { normalizeFigure, unlistedFigures, type DraftFigure } from "../generator/figures.js";
 import { buildSystemPrompt, buildUserPrompt, brandFromSlug } from "../generator/prompts.js";
+import { buildResearchPrompts } from "../generator/research-prompts.js";
+import { runResearch, type ResearchRunner } from "../generator/research.js";
+import { wantsResearch, type ResearchBrief } from "../generator/research-types.js";
+import { mapDraftSources } from "../generator/source-map.js";
 import { DEFAULT_STYLE_PACK_DIR, loadStylePack } from "../generator/style-pack.js";
 import { buildRepairPrompt, mergeRepairs } from "../generator/repair.js";
 import { boundDraftForSite } from "../generator/wire-bounds.js";
@@ -30,11 +34,14 @@ export function startGeneratorLoop() {
   return () => clearInterval(timer);
 }
 
-export function validateDraft(draft: any, i: number, brandSlug: string, input: any = {}): {
+export function validateDraft(draft: any, i: number, brandSlug: string, input: any = {}, research?: ResearchBrief): {
   client_ref: string; figures: DraftFigure[]; validation_errors: ValidationError[]; [key: string]: any;
 } {
   const errors: ValidationError[] = [];
-  draft = boundDraftForSite(draft, errors);
+  // Source ids become the URLs the search found (amendment 07), then the wire limits apply to them.
+  const mapped = mapDraftSources(draft, research, wantsResearch(input));
+  errors.push(...mapped.errors);
+  draft = boundDraftForSite(mapped.draft, errors);
   const sourceUrl = draft.source_url || (input.source?.type === "article" ? input.source.url : null);
   // title and link are model-side helpers; the site gets them as settings.
   const variants = (draft.variants ?? []).map(({ title, link, ...v }: any) => {
@@ -126,11 +133,12 @@ interface GenerationRequest { request_id: string; brand: string; input: any; lea
 type GenerationApi = Pick<typeof siteApi, "generationHeartbeat" | "postDrafts" | "generationFailed">;
 
 export async function processGenerationRequest(req: GenerationRequest, deps: {
-  api?: GenerationApi; generate?: typeof generateDrafts; heartbeatMs?: number; repair?: boolean;
+  api?: GenerationApi; generate?: typeof generateDrafts; research?: ResearchRunner; heartbeatMs?: number; repair?: boolean;
 } = {}) {
   const { request_id, brand: brandSlug, input } = req;
   const api = deps.api ?? siteApi;
   const generate = deps.generate ?? generateDrafts;
+  const research = deps.research ?? runResearch;
   const controller = new AbortController();
   let expires = new Date(req.lease_expires_at).getTime();
   let finished = false;
@@ -174,16 +182,34 @@ export async function processGenerationRequest(req: GenerationRequest, deps: {
     schedule();
     const brand = brandFromSlug(brandSlug);
     const choice = resolveChoice(input?.ai);
-    const system = buildSystemPrompt(brand, input, loadStylePack(brandSlug, config.STYLE_PACK_DIR ?? DEFAULT_STYLE_PACK_DIR));
-    const { drafts } = await generate(system, buildUserPrompt(input), choice, { signal: controller.signal });
+    const style = loadStylePack(brandSlug, config.STYLE_PACK_DIR ?? DEFAULT_STYLE_PACK_DIR);
+    // Opt-in web research first (amendment 07): 1 extra AI call plus the searches, under the same
+    // lease, heartbeat and abort handling as the writer. No sources, no writer call.
+    let brief: ResearchBrief | undefined;
+    if (wantsResearch(input)) {
+      const prompts = buildResearchPrompts(brand, input, style);
+      const found = await research(prompts.system, prompts.user, choice, { signal: controller.signal, maxSearches: config.RESEARCH_MAX_SEARCHES, timeoutMs: config.RESEARCH_TIMEOUT_MS });
+      checkLease();
+      brief = found;
+      logger.info("Research done", { requestId: request_id, provider: found.provider, model: found.model, searches: found.searches, calls: found.calls ?? 1, sources: found.sources.length });
+      if (found.sources.length === 0) {
+        throw new AiOutputError("RESEARCH_EMPTY", `The web search found no sources (${found.searches} searches), so nothing was written`);
+      }
+      // research.md: nothing passed the audit. Skip the paid writer call and show the near misses.
+      if (/^\W*no qualifying story/i.test(found.text)) {
+        throw new AiOutputError("RESEARCH_NO_STORY", `No story passed the audit, so nothing was written. ${found.text.trim().slice(0, 1500)}`);
+      }
+    }
+    const system = buildSystemPrompt(brand, input, style);
+    const { drafts } = await generate(system, buildUserPrompt(input, brief), choice, { signal: controller.signal });
     checkLease();
-    const validated = drafts.map((d, i) => validateDraft(d, i, brandSlug, input));
+    const validated = drafts.map((d, i) => validateDraft(d, i, brandSlug, input, brief));
     let finalDrafts = validated;
     if ((deps.repair ?? config.GENERATION_REPAIR) && validated.some(d => d.validation_errors.length > 0)) {
       try {
-        const repaired = await generate(system, buildRepairPrompt(validated), choice, { signal: controller.signal });
+        const repaired = await generate(system, buildRepairPrompt(validated, brief), choice, { signal: controller.signal });
         checkLease();
-        finalDrafts = mergeRepairs(validated, repaired.drafts.map((d, i) => validateDraft(d, i, brandSlug, input)));
+        finalDrafts = mergeRepairs(validated, repaired.drafts.map((d, i) => validateDraft(d, i, brandSlug, input, brief)));
       } catch (err) {
         checkLease();
         logger.warn("Repair failed, keeping original drafts", { requestId: request_id, error: String(err) });

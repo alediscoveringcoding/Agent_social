@@ -49,6 +49,18 @@ test("GENERATION_REPAIR and CLAUDE_SERVER_FALLBACK default to true and parse lik
   assert.equal(parseConfig({ ...base, GENERATION_REPAIR: "" }).GENERATION_REPAIR, true);
 });
 
+test("RESEARCH_MAX_SEARCHES is 1 to 20 and defaults to 5; RESEARCH_TIMEOUT_MS is optional", () => {
+  assert.equal(parseConfig(base).RESEARCH_MAX_SEARCHES, 5);
+  assert.equal(parseConfig({ ...base, RESEARCH_MAX_SEARCHES: "" }).RESEARCH_MAX_SEARCHES, 5);
+  assert.equal(parseConfig({ ...base, RESEARCH_MAX_SEARCHES: "1" }).RESEARCH_MAX_SEARCHES, 1);
+  assert.equal(parseConfig({ ...base, RESEARCH_MAX_SEARCHES: "20" }).RESEARCH_MAX_SEARCHES, 20);
+  for (const bad of ["0", "21", "-1", "2.5", "many"]) assert.throws(() => parseConfig({ ...base, RESEARCH_MAX_SEARCHES: bad }), bad);
+  assert.equal(parseConfig(base).RESEARCH_TIMEOUT_MS, undefined);
+  assert.equal(parseConfig({ ...base, RESEARCH_TIMEOUT_MS: "" }).RESEARCH_TIMEOUT_MS, undefined);
+  assert.equal(parseConfig({ ...base, RESEARCH_TIMEOUT_MS: "90000" }).RESEARCH_TIMEOUT_MS, 90_000);
+  assert.throws(() => parseConfig({ ...base, RESEARCH_TIMEOUT_MS: "0" }));
+});
+
 test("a blank WORKER_ID keeps the default", () => {
   assert.equal(parseConfig({ ...base, WORKER_ID: "" }).WORKER_ID, "worker-local-01");
   assert.equal(parseConfig({ ...base, WORKER_ID: "w2" }).WORKER_ID, "w2");

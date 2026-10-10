@@ -37,29 +37,15 @@ function retryDelayMs(status: number, body: any, attempt: number): number | unde
   return undefined;
 }
 
-export async function generateDrafts(
-  systemPrompt: string,
-  userPrompt: string,
-  model: string = config.GEMINI_MODEL,
-  opts: { fetch?: typeof fetch; signal?: AbortSignal; sleep?: (ms: number, signal?: AbortSignal) => Promise<void> } = {},
-): Promise<{ drafts: ModelDraft[]; stopReason: string }> {
+type GeminiOpts = { fetch?: typeof fetch; signal?: AbortSignal; sleep?: (ms: number, signal?: AbortSignal) => Promise<void> };
+
+/** POST models.generateContent with the retry policy above; returns the parsed body of a 2xx answer. */
+async function generate(model: string, payload: object, opts: GeminiOpts): Promise<any> {
   if (!config.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY is not set");
   }
-  logger.info("Calling Gemini API", { model });
-
   const url = `${GEMINI_BASE_URL}/models/${encodeURIComponent(model)}:generateContent`;
-  const request = JSON.stringify({
-    // camelCase like every other field here (the API reference name).
-    systemInstruction: { parts: [{ text: systemPrompt }] },
-    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-    generationConfig: {
-      responseMimeType: "application/json",
-      responseJsonSchema: draftSchema,
-      // Thinking tokens count against this on Gemini 3, so leave headroom.
-      maxOutputTokens: 32768,
-    },
-  });
+  const request = JSON.stringify(payload);
 
   const started = Date.now();
   let res!: Response;
@@ -83,7 +69,11 @@ export async function generateDrafts(
   if (!res.ok) {
     throw new Error(`Gemini API ${res.status}: ${body?.error?.message || res.statusText}`);
   }
+  return body;
+}
 
+/** The first candidate and its answer text; throws on a blocked prompt, a bad stop or no text. */
+function readAnswer(body: any): { candidate: any; text: string; stopReason: string } {
   // No candidates only happens when the prompt itself was blocked.
   const blockReason = body.promptFeedback?.blockReason;
   if (blockReason) {
@@ -104,10 +94,84 @@ export async function generateDrafts(
   if (!text) {
     throw new AiOutputError("AI_BAD_OUTPUT", "Gemini returned no text");
   }
+  return { candidate, text, stopReason };
+}
+
+export async function generateDrafts(
+  systemPrompt: string,
+  userPrompt: string,
+  model: string = config.GEMINI_MODEL,
+  opts: GeminiOpts = {},
+): Promise<{ drafts: ModelDraft[]; stopReason: string }> {
+  if (!config.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not set");
+  }
+  logger.info("Calling Gemini API", { model });
+
+  const body = await generate(model, {
+    // camelCase like every other field here (the API reference name).
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseJsonSchema: draftSchema,
+      // Thinking tokens count against this on Gemini 3, so leave headroom.
+      maxOutputTokens: 32768,
+    },
+  }, opts);
+  const { text, stopReason } = readAnswer(body);
 
   try {
     return { drafts: parseModelResponse(text), stopReason };
   } catch (err) {
     throw new AiOutputError("AI_BAD_OUTPUT", `Gemini returned an invalid draft batch: ${String(err).slice(0, 300)}`);
   }
+}
+
+/** One answer part: its text (a thought part is "") and where grounding says it comes from. */
+export interface GeminiSearchResult {
+  parts: string[];
+  chunks: Array<{ uri: string; title: string }>;
+  /** Offsets are UTF-8 bytes inside parts[partIndex]; chunks index into `chunks`. */
+  supports: Array<{ partIndex: number; start: number; end: number; text: string; chunks: number[] }>;
+  queries: string[];
+}
+
+/**
+ * Google Search grounding for the research step: plain text (no responseSchema) plus
+ * groundingMetadata. The search count is webSearchQueries.length; Gemini has no cap parameter,
+ * so the caller asks for a maximum in the prompt.
+ */
+export async function searchWeb(
+  systemPrompt: string,
+  userPrompt: string,
+  model: string = config.GEMINI_MODEL,
+  opts: GeminiOpts = {},
+): Promise<GeminiSearchResult> {
+  if (!config.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not set");
+  }
+  logger.info("Calling Gemini API", { model, purpose: "research" });
+  const body = await generate(model, {
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+    tools: [{ google_search: {} }],
+    // Thinking tokens count against this on Gemini 3, so leave headroom.
+    generationConfig: { maxOutputTokens: 32768 },
+  }, opts);
+  const { candidate } = readAnswer(body);
+  const meta = candidate.groundingMetadata ?? {};
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : 0);
+  return {
+    parts: (candidate.content?.parts ?? []).map((p: any) => (typeof p?.text === "string" && !p.thought ? p.text : "")),
+    chunks: (meta.groundingChunks ?? []).map((c: any) => ({ uri: String(c?.web?.uri ?? ""), title: String(c?.web?.title ?? "") })),
+    supports: (meta.groundingSupports ?? []).map((s: any) => ({
+      partIndex: num(s?.segment?.partIndex),
+      start: num(s?.segment?.startIndex),
+      end: num(s?.segment?.endIndex),
+      text: String(s?.segment?.text ?? ""),
+      chunks: (Array.isArray(s?.groundingChunkIndices) ? s.groundingChunkIndices : []).filter((i: unknown) => Number.isInteger(i)),
+    })),
+    queries: (meta.webSearchQueries ?? []).filter((q: unknown) => typeof q === "string"),
+  };
 }

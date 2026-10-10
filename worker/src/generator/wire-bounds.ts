@@ -1,6 +1,9 @@
 import type { ValidationError } from './validators.js';
 import { PLATFORMS } from '../platforms.js';
 
+/** The site's limits for a draft's sources (DraftSourceSchema) and figure source_url. */
+export const SOURCE_LIMITS = { count: 20, url: 2048, title: 300, publisher: 200, published_at: 40, note: 500 } as const;
+
 /** Keep one oversized field from 422-ing an entire otherwise usable batch.
  * Content limits still go through repair; wire limits retain a review error.
  */
@@ -35,7 +38,20 @@ export function boundDraftForSite(input: any, errors: ValidationError[]): any {
   draft.figures = (draft.figures ?? []).filter((figure: any) => {
     if (!figure.value?.trim()) { issue('figures.value'); return false; }
     text(figure, 'value', 100, 'figures.value'); text(figure, 'context', 500, 'figures.context');
+    // A cut URL points at the wrong page, so a too long source_url is dropped, never shortened.
+    if (typeof figure.source_url === 'string' && figure.source_url.length > SOURCE_LIMITS.url) { issue('figures.source_url'); delete figure.source_url; }
     return true;
   });
+  // Sources are research links a person verifies: a cut URL would be wrong, so that source is dropped.
+  if (Array.isArray(draft.sources)) {
+    draft.sources = draft.sources.filter((source: any) => {
+      if (typeof source?.url !== 'string' || !source.url.trim() || source.url.length > SOURCE_LIMITS.url) { issue('sources.url'); return false; }
+      return true;
+    });
+    list(draft, 'sources', SOURCE_LIMITS.count, 'sources');
+    for (const source of draft.sources) {
+      for (const key of ['title', 'publisher', 'published_at', 'note'] as const) text(source, key, SOURCE_LIMITS[key], `sources.${key}`);
+    }
+  }
   return draft;
 }

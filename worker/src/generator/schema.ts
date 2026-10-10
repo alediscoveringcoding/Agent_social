@@ -44,7 +44,13 @@ export const ModelDraftSchema = z.strictObject({
     value: z.string(),
     context: z.string(),
     source: z.enum(["article", "facts", "unverified"]),
+    source_id: z.string().describe('Research source id (for example "S3") behind a figure taken from the web; empty string when none'),
   })),
+  // Amendment 07: ids come from the research brief; the worker maps them to the URLs the search found.
+  sources: z.array(z.strictObject({
+    id: z.string().describe('Source id from the research brief, for example "S3"'),
+    note: z.string().describe("What this source supports in the draft, at most 500 characters"),
+  })).describe("Sources the draft relies on, by id; empty array when there is no research brief"),
   notes: z.string().describe("Reviewer notes; empty string when absent"),
 });
 export const ModelResponseSchema = z.strictObject({ drafts: z.array(ModelDraftSchema) });
@@ -66,7 +72,10 @@ export function parseModelResponse(text: string): ModelDraft[] {
       }
       for (const f of Array.isArray(draft.figures) ? draft.figures : []) {
         if (typeof f?.source === "string") f.source = f.source.toLowerCase();
+        if (f && typeof f === "object" && f.source_id === undefined) f.source_id = "";
       }
+      // A model that skips the new fields is read as "no sources"; a research request then gets sources_missing.
+      if (draft.sources === undefined) draft.sources = [];
     }
   }
   const result = ModelResponseSchema.parse(raw);

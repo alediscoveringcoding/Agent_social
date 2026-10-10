@@ -1,5 +1,9 @@
+import type { ResearchBrief } from "./research-types.js";
+import { restoreSourceIds } from "./source-map.js";
+
 // Builds the one allowed repair prompt when a draft batch fails validation (PRD F2).
-export function buildRepairPrompt(drafts: any[]): string {
+// `research` is the brief the drafts were written from: the repaired drafts must keep citing its ids.
+export function buildRepairPrompt(drafts: any[], research?: ResearchBrief): string {
   const errorsSection = drafts
     .filter((d: any) => d.validation_errors.length > 0)
     .map((d: any) => {
@@ -21,8 +25,13 @@ export function buildRepairPrompt(drafts: any[]): string {
     card: { ...card, brand: undefined, stat: card.stat ?? "" },
     article: draft.article ? { ...draft.article, subtitle: draft.article.subtitle ?? "", canonical_url: draft.article.canonical_url ?? "" } : null,
     launch: draft.launch ? { ...draft.launch, maker_comment: draft.launch.maker_comment ?? "" } : null,
+    // The site gets URLs; the model cites ids from the brief (amendment 07).
+    ...restoreSourceIds(draft, research),
   }));
-  return `Fix only the failing drafts below. Return the same client_ref for each, no new drafts. Respond with the provider JSON schema.\n\nErrors:\n${errorsSection}\n\nOriginal drafts:\n${JSON.stringify(originals, null, 2)}`;
+  const sources = research
+    ? `\n\nSOURCES (cite only these ids in sources and in figures[].source_id; never invent a source or a URL):\n${research.sources.map((s) => `${s.id}: ${s.title} | ${s.publisher} | ${s.published_at} | ${s.url}`).join("\n")}`
+    : "";
+  return `Fix only the failing drafts below. Return the same client_ref for each, no new drafts. Respond with the provider JSON schema.\n\nErrors:\n${errorsSection}\n\nOriginal drafts:\n${JSON.stringify(originals, null, 2)}${sources}`;
 }
 
 /** Keep batch order and valid originals; accept only an actual improvement. */
