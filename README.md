@@ -21,9 +21,9 @@ Current phase: **local v1 complete on `main`**, verified on 2026-10-06. [Amendme
 
 Final review fixed approval checks for the actual attached card, immutable card metadata (migration `0007`), competing media/text edits, and consistent keyword matching. All four branches were merged into `main`; the feature branches remain available.
 
-**Verified:** `bash scripts/update.sh --no-pull` passed with 276 site tests and 27 worker tests (at amendment 03; after amendment 05: `npm run ci` 361 site tests and 65 worker tests, both green), type checks, lint, migrations and a production build. HTTP smoke checks covered 16 authenticated pages, login redirects, both DST weeks, card previews and signed image downloads. The combined flow uses a fresh local database: fake generation → edit/card → approval → media download → published URL in overview/calendar, plus manual publication and the production worker in dry run. No real AI or platform API calls were used for acceptance. After amendment 04 (every Postiz provider, 35 platforms): `npm run ci` in `site` with 341 tests and a production build, and 63 worker tests.
+**Verified:** `bash scripts/update.sh --no-pull` passed with 276 site tests and 27 worker tests (at amendment 03; after amendment 05: `npm run ci` 361 site tests and 65 worker tests, both green), type checks, lint, migrations and a production build. HTTP smoke checks covered 16 authenticated pages, login redirects, both DST weeks, card previews and signed image downloads. The combined flow uses a fresh local database: fake generation → edit/card → approval → media download → published URL in overview/calendar, plus manual publication and the production worker in dry run. No real AI or platform API calls were used for acceptance. After amendment 04 (every Postiz provider, 35 platforms): `npm run ci` in `site` with 341 tests and a production build, and 63 worker tests. After the 2026-10-10 bug-fix batch (migration `0011`, 44 platforms): `npm run ci` in `site` with 409 tests and a production build, and 124 worker tests with the worker type check.
 
-**Remaining:** real Postiz sandbox validation and platform connections/developer approvals; Supabase/Vercel staging and VPS setup; controlled real posts and a restore drill. n8n, the automation API and email/Telegram notifications are deferred. See [site/README.md](site/README.md) to run the app and [the completed handoff](docs/handoff-codex.md) for validation details.
+**Remaining:** real Postiz sandbox validation and platform connections/developer approvals; Supabase/Vercel staging and VPS setup; controlled real posts and a restore drill. n8n, the automation API and email/Telegram notifications are deferred. See [Running the app](#running-the-app) below, [site/README.md](site/README.md) for the full local flow, and [the completed handoff](docs/handoff-codex.md) for validation details.
 
 ## How it fits together
 
@@ -69,7 +69,7 @@ social-infra/
   prompts/
     facts.yaml, banned.txt, system.md, social.md
   scripts/
-    dev-up.mjs, dev-down.mjs, health-check.mjs, backup-local.mjs
+    dev-local.sh, update.sh, dev-up.mjs, dev-down.mjs, health-check.mjs, backup-local.mjs
   card-templates/
     index.html               static brand-card design reference (not rendered by the worker)
   supabase/
@@ -100,28 +100,140 @@ Domains (example, adjust to yours):
 
 Starting size (VPS phase): 4 vCPU, 8 GB RAM, persistent storage, EU region. Watch usage before upsizing.
 
-## Running the local app on main
+## Running the app
 
-Use Linux/WSL for Git, npm and Node. With the site stopped, run from the repo root (replace the example email with your allowlisted address):
+Everything runs in **WSL (Linux)**. The Windows folder `R:\Repos\Agent_social` and the WSL folder `/mnt/r/Repos/Agent_social` are the same checkout. Run npm and Node only in WSL: an install from Windows writes Windows binaries that break the app in WSL.
+
+### What you need
+
+- WSL with Node 22.6 or newer (`nvm install 22 && nvm alias default 22`).
+- An authenticator app (TOTP) for the admin login.
+- Optional: a Claude (`ANTHROPIC_API_KEY`) or Gemini (`GEMINI_API_KEY`) key for real drafts. Without one, the fake generator writes test drafts.
+- Optional: Docker, only for the Postiz stack (real publishing, not set up yet).
+
+### First-time setup
+
+From the repo root, in WSL (use your own email):
 
 ```bash
+cd /mnt/r/Repos/Agent_social
 bash scripts/update.sh --no-pull --admin-email you@example.com
-cd site
-npm run admin:create -- --email you@example.com  # first-time setup only
-npm run dev
+cd site && npm run admin:create -- --email you@example.com && cd ..
 ```
 
-After the first setup, start the site and the worker together with one command from the repo root: `bash scripts/dev-local.sh` (or `bash scripts/dev-local.sh --site-only`; from Windows, `wsl.exe -e bash /mnt/r/Repos/Agent_social/scripts/dev-local.sh`). It checks Node, the env files and the ports, prints whether publishing is off, prefixes each log line with `[site]` or `[worker]`, and stops both on Ctrl+C. The worker drafts with the AI provider configured in `worker/.env` and the style pack from `prompts/private/` ([amendment 06](docs/amendment-06-style-packs.md)).
+- `update.sh` installs the dependencies and creates `site/.env.local` and `worker/.env` with fresh secrets and a matching `WORKER_TOKEN`. It puts your email in `ADMIN_EMAILS`, creates the local database and runs all checks. It never overwrites an existing `.env` file.
+- `admin:create` prints a password once. Keep it; the authenticator is set up at the first login.
+- For real drafts, add `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` to `worker/.env`. That file is git-ignored; never commit keys.
 
-Open **http://localhost:3000/login**, use the password printed once by `admin:create`, and enroll TOTP. For an existing local account, `npm run admin:create -- --email you@example.com --reset` prints a new password and removes its authenticator; enroll TOTP again. Account reset preserves drafts and media.
+### Start and stop
 
-In another WSL terminal, from `site/`, use `npm run social:fake-worker -- --sync`, assign brands and unpause the fake accounts in **Conturi**, then request drafts in **Genereaza** and run `npm run social:fake-generator -- --once`. The [site guide](site/README.md#run-locally-without-docker) continues through editing, media, figures, approval and publication. Docker and AI keys are optional for this flow.
+```bash
+bash scripts/dev-local.sh              # site + worker
+bash scripts/dev-local.sh --site-only  # site only (for the fake generator and fake worker)
+```
 
-For production-worker dry runs, keep AI keys blank and `WORKER_DRY_RUN=true`, point it at the running local site with the matching `WORKER_TOKEN`, then run `cd worker && npm run dev` from the repo root. It downloads approved media and reports test results without calling Postiz; use fake account sync locally. The mock site in `worker/test/mock-site.mjs` remains a worker-test fixture.
+From Windows PowerShell: `wsl.exe -e bash /mnt/r/Repos/Agent_social/scripts/dev-local.sh`.
+
+- **Before starting**, the script checks Node, the env files, `node_modules` and the ports. It prints whether publishing is off (`SOCIAL_PUBLISHING_ENABLED`, `WORKER_DRY_RUN`).
+- **While running**, it prefixes each log line with `[site]` or `[worker]`.
+- **Stopping**: **Ctrl+C** stops both. If the site or the worker exits on its own, the script stops the other one and exits with an error.
+- **After editing `.env` files**: `site/.env.local` and `worker/.env` are read at start, so restart the app after changing them.
+- **Database updates**: new database migrations apply automatically when the site starts.
+
+The worker logs a few `TimeoutError` lines right after start while Next.js compiles the pages. They stop by themselves.
+
+### Sign in
+
+Open **http://localhost:3000/login** and enter your email and the password from `admin:create`.
+
+- **Authenticator**: the first time, add the key shown on the page to your authenticator app, then type the 6-digit code. After that, every login asks for a code.
+- **Allowed emails**: the email must be in `ADMIN_EMAILS` in `site/.env.local` (comma-separated). Add one with `bash scripts/update.sh --no-pull --admin-email other@example.com`, then restart.
+- **Lockout**: 10 wrong passwords or codes lock the account for 15 minutes.
+- **Sessions**: signing out ends all of that account's sessions. Signing in on another browser ends the earlier one.
+- **Forgotten password or lost phone**: stop the app, then run `cd site && npm run admin:create -- --email you@example.com --reset`. You get a new password and the authenticator is removed, so you set it up again. Drafts and media stay.
+
+### Using it
+
+The admin pages:
+- **Prezentare**: the overview, with what needs attention and the event feed.
+- **Genereaza**: request AI drafts for a brand and platforms.
+- **Ciorne**: edit drafts, cards and images.
+- **Postari**: schedule, check figures, approve.
+- **Calendar**: see what is scheduled.
+- **Conturi**: assign accounts to brands, pause them, create manual accounts.
+- **Media**: the image library.
+- **Manual**: copy-and-paste handoffs for platforms without an API.
+
+Locally, keep publishing off: `SOCIAL_PUBLISHING_ENABLED=false` in `site/.env.local` and `WORKER_DRY_RUN=true` in `worker/.env`.
+
+**Without an AI key** (offline test flow):
+1. Start the site with `bash scripts/dev-local.sh --site-only`.
+2. In another WSL terminal, from `site/`, run `npm run social:fake-worker -- --sync`.
+3. In **Conturi**, assign the fake accounts to a brand and unpause them.
+4. Request drafts in **Genereaza**, then run `npm run social:fake-generator -- --once`.
+
+The [site guide](site/README.md#run-locally-without-docker) continues through editing, media, figures, approval and publication. Don't run the fake generator while the real worker runs with an AI key: both claim the same requests.
+
+### AI drafts and cost
+
+- **One request at a time.** The worker handles one request at a time, in order. Each click on **Genereaza** is a separate paid request, so click once and wait.
+- **Calls per request.** A request costs one AI call. It costs one more, a "repair" pass, only when a draft breaks a rule. Claude calls are not retried automatically; a Gemini 5xx is retried twice.
+- **Exactly one call.** Set `GENERATION_REPAIR=false` in `worker/.env`; drafts that break a rule then show their errors in the editor. `CLAUDE_SERVER_FALLBACK=false` stops Anthropic from answering with another model when the chosen one is overloaded.
+- **Choosing the model.** Pick it per request in the **Model AI** dropdown. "AI implicit" uses `GENERATOR_MODEL` and prefers Claude when its key is set, unless `GENERATOR_PROVIDER` says otherwise.
+- **Writing style.** It comes from `prompts/style/`, `prompts/brands/` and the optional private pack in `prompts/private/` ([amendment 06](docs/amendment-06-style-packs.md)).
+
+### Updating
+
+Stop the app first; `update.sh` refuses to reinstall while the site or worker runs.
+
+```bash
+bash scripts/update.sh           # git pull, install, settings, database, all checks
+bash scripts/update.sh --quick   # the same without the production build
+```
+
+### Scripts
+
+From the repo root, in WSL:
+
+| Command | What it does |
+| --- | --- |
+| `bash scripts/dev-local.sh [--site-only]` | Starts the site (http://localhost:3000) and the worker (health on :8787); Ctrl+C stops both |
+| `bash scripts/update.sh [--no-pull] [--quick] [--admin-email EMAIL]` | Pull, install when needed, create missing settings, migrate, run every check. `--help` lists the options |
+| `node scripts/backup-local.mjs` | Copies `site/.local-db/` (data and private images) and dumps the Postiz database to `~/agent-social-backups/<time>/`. Stop the app first; it refuses while the database is in use |
+| `node scripts/health-check.mjs` | Checks that the site and the worker answer (Postiz optional); exits with an error when one is down |
+| `node scripts/dev-up.mjs` / `node scripts/dev-down.mjs` | Start or stop the local Postiz stack in Docker (http://localhost:4007) |
+
+In `site/` (`npm run <name>`):
+
+| Command | What it does |
+| --- | --- |
+| `dev` / `build` / `start` | Development server, production build, production server (all on 127.0.0.1:3000) |
+| `ci` | Type check, lint, all tests and a production build; `typecheck`, `lint` and `test` run one step |
+| `admin:create -- --email EMAIL [--password '...'] [--reset]` | Create an admin, or reset one's password and authenticator. App stopped |
+| `db:status` / `db:migrate` | Show or apply database migrations. App stopped |
+| `db:reset -- --yes` | **Deletes the whole local database**: every draft, account and admin |
+| `social:fake-worker -- --sync` | Registers fake channels. Other options in [site/README.md](site/README.md): `--once`, `--scenario`, `--race` |
+| `social:fake-generator -- --once` | Answers one generation request with test drafts (`--fail` reports a failure) |
+
+In `worker/`: `npm run dev` (the worker alone, restarts on code changes), `npm test`, `npx --no-install tsc --noEmit`.
+
+### Troubleshooting
+
+- **"port 3000 is in use"**: the app is already running in another terminal. Stop it there with Ctrl+C.
+- **Login refused**: the email is missing from `ADMIN_EMAILS`, or the account is locked for 15 minutes after 10 failures.
+- **"database in use"** from `admin:create` or `db:*`: stop the app first, because only one process can open the local database.
+- **Gemini 503 "high demand"**: pick another model in the dropdown or try again later.
+- **No drafts appear**: the worker needs an AI key in `worker/.env` (or use the fake generator) and a restart after adding it.
 
 ### Postiz sandbox (external setup still pending)
 
-`node scripts/dev-up.mjs` starts the local Postiz/Temporal stack on http://localhost:4007. Create its user/API key, configure `worker/.env`, close registration and connect a throwaway account before testing real delivery. [docs/setup.md](docs/setup.md) and [docs/postiz-notes.md](docs/postiz-notes.md) track the remaining setup and API checks.
+`node scripts/dev-up.mjs` starts the local Postiz/Temporal stack on http://localhost:4007. Before testing real delivery:
+1. Create its user and an API key.
+2. Configure `worker/.env`.
+3. Close registration.
+4. Connect a throwaway account.
+
+[docs/setup.md](docs/setup.md) and [docs/postiz-notes.md](docs/postiz-notes.md) track the remaining setup and API checks.
 
 ## Environment
 
