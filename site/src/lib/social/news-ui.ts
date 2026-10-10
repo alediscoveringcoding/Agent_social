@@ -19,6 +19,17 @@ import {
 } from './constants.ts'
 import { isHttpUrl } from './schemas.ts'
 
+/** What a web search adds to a request. The 5 is the worker's default (RESEARCH_MAX_SEARCHES, worker/.env.example). */
+export const RESEARCH_COST_NOTE =
+  'Cautarea pe web inseamna 2 apeluri AI si cel mult 5 cautari (implicit; RESEARCH_MAX_SEARCHES in worker/.env), cost suplimentar.'
+
+/** GenerationInputSchema: a topic takes at most 10 angles of at most 100 characters each. */
+export const HOOKS_MAX = { items: 10, length: 100 } as const
+
+export const NO_TEMPLATE_MESSAGE = 'Alege cel putin un sablon de card.'
+
+const ALL_TEMPLATES: CardTemplate[] = ['dark', 'light', 'mint']
+
 // ---------------------------------------------------------------------------
 // Generation form and request
 // ---------------------------------------------------------------------------
@@ -54,6 +65,14 @@ export function parseHooks(raw: string): string[] {
     .split(',')
     .map((h) => h.trim())
     .filter(Boolean)
+}
+
+/** What is wrong with the angles of a topic (comma separated text), or null. */
+export function hooksIssue(raw: string): string | null {
+  const hooks = parseHooks(raw)
+  if (hooks.length > HOOKS_MAX.items) return `Cel mult ${HOOKS_MAX.items} unghiuri, separate prin virgula (ai scris ${hooks.length}).`
+  if (hooks.some((h) => h.length > HOOKS_MAX.length)) return `Fiecare unghi poate avea cel mult ${HOOKS_MAX.length} de caractere.`
+  return null
 }
 
 /** The "Perioada" field as whole days in 1..30; blank or junk falls back to the default. */
@@ -98,6 +117,13 @@ export function buildGenerationForm(s: GenerationFormState): GenerationFormValue
     templates: s.templates,
     aiModel: s.aiModel,
   }
+}
+
+/** What the form checks in the browser before the paid request goes out; null when it can be sent. */
+export function validateGenerationState(s: Pick<GenerationFormState, 'mode' | 'hooks' | 'templates'>): string | null {
+  if (!s.templates.length) return NO_TEMPLATE_MESSAGE
+  if (s.mode === 'topic') return hooksIssue(s.hooks)
+  return null
 }
 
 function normalizeSource(source: unknown): unknown {
@@ -147,7 +173,8 @@ export function buildGenerationCandidate(
       kinds,
       count: Number(form.count),
       language: 'ro',
-      templates: form.templates?.length ? form.templates : ['dark', 'light', 'mint'],
+      // Absent means all three; an empty list is a choice the schema refuses (NO_TEMPLATE_MESSAGE).
+      templates: form.templates ?? ALL_TEMPLATES,
     },
   }
 }
@@ -156,18 +183,24 @@ export function buildGenerationCandidate(
 export function generationIssueMessage(path: string, sourceType: string | undefined): string {
   switch (path) {
     case 'source.url':
-      return 'Linkul articolului trebuie sa inceapa cu https://.'
+      return 'Linkul articolului trebuie sa inceapa cu http:// sau https://, fara spatii, si sa aiba cel mult 2048 de caractere.'
     case 'source.topic':
       return sourceType === 'news'
         ? 'Subiectul poate avea cel mult 500 de caractere.'
         : 'Descrie subiectul in cel putin 3 caractere.'
     case 'source.window_days':
       return `Perioada e un numar intreg de zile, intre ${NEWS_WINDOW_DAYS.min} si ${NEWS_WINDOW_DAYS.max}.`
+    case 'source.hooks':
+      return `Cel mult ${HOOKS_MAX.items} unghiuri, fiecare de cel mult ${HOOKS_MAX.length} de caractere.`
     case 'platforms':
       return 'Alege cel putin o platforma.'
+    case 'templates':
+      return NO_TEMPLATE_MESSAGE
     case 'count':
       return 'Numarul de ciorne e intre 1 si 20.'
     default:
+      if (path.startsWith('source.hooks.')) return `Fiecare unghi poate avea cel mult ${HOOKS_MAX.length} de caractere.`
+      if (path.startsWith('templates.')) return 'Alege sabloane de card din lista.'
       return `Date invalide (${path || 'formular'}).`
   }
 }
@@ -207,6 +240,8 @@ export interface SourceLike {
   found_in_search?: boolean | null
   verified_at?: string | null
   verified_by?: string | null
+  /** The e-mail of whoever ticked it, read from the activity log (verified_by itself is a uuid). */
+  verified_by_email?: string | null
 }
 
 export function isSafeSourceUrl(url: string | null | undefined): url is string {
@@ -274,9 +309,13 @@ export function approvalBlockedHint(unverified: number): string | null {
   return unverified > 0 ? SOURCES_APPROVAL_BLOCKED_HINT : null
 }
 
-/** After approval the sources are frozen; a draft (or a cancelled post) can still change them. */
-export function sourcesLocked(status: string): boolean {
-  return status !== 'draft' && status !== 'cancelled'
+/**
+ * The sources freeze exactly while the current revision has an active (not
+ * revoked) approval, as social_post_sources_frozen does in SQL. The post status
+ * does not decide it: cancelling a post leaves its approval active.
+ */
+export function sourcesLocked(activeApproval: unknown): boolean {
+  return Boolean(activeApproval)
 }
 
 /** The plain list for the LinkedIn first comment. Links that are not http(s) are left out. */

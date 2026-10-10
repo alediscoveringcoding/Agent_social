@@ -59,17 +59,31 @@ function toUser(a: AdminRow) {
   }
 }
 
+/**
+ * Whether the request reached the server over https. Next fills in
+ * x-forwarded-proto on every request (https when the socket is encrypted or a
+ * proxy said so); without it the scheme of the Origin or Referer the browser
+ * sent decides. NODE_ENV does not: `npm start` on plain http://127.0.0.1 must
+ * still be able to keep its session cookie.
+ */
+export function requestIsHttps(h: { get(name: string): string | null }): boolean {
+  const forwarded = h.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase()
+  if (forwarded) return forwarded === 'https'
+  const from = h.get('origin') || h.get('referer') || ''
+  return /^https:\/\//i.test(from.trim())
+}
+
 export async function createLocalSessionClient() {
   const secret = authSecret()
   if (!secret) throw new Error('DB_MODE=local needs LOCAL_AUTH_SECRET (32+ characters) in .env.local; scripts/update.sh creates it')
   const store = await cookies()
   const db = await getLocalDb()
-  // Secure in production or behind https; plain http://127.0.0.1 under `next dev` still works.
-  let secure = process.env.NODE_ENV === 'production'
+  // Secure only when the request really is https; a plain http://127.0.0.1 visit (dev or `npm start`) works.
+  let secure = false
   try {
-    if (!secure) secure = (await headers()).get('x-forwarded-proto')?.split(',')[0]?.trim() === 'https'
+    secure = requestIsHttps(await headers())
   } catch {
-    // no request context
+    // no request context: no cookie can be set either
   }
 
   const session = () => verifySession(store.get(SESSION_COOKIE)?.value, secret)
@@ -185,7 +199,14 @@ export async function createLocalSessionClient() {
              where user_id = $1 and (totp_last_step is null or totp_last_step < $2) returning session_epoch`,
             [c.a.user_id, step]
           )
-          if (!taken.rows[0]) return bad()
+          if (!taken.rows[0]) {
+            // The guard failed. If the stored step is exactly this one, a request with the same valid
+            // code won the race a moment ago: that is not a wrong code, so it must not count towards
+            // the lockout. Any other reason (a later step is already stored) is a stale code.
+            const stored = await db.query<{ totp_last_step: number | null }>('select totp_last_step from local.admins where user_id = $1', [c.a.user_id])
+            if (Number(stored.rows[0]?.totp_last_step) === step) return { data: null, error: authError('Invalid TOTP code') }
+            return bad()
+          }
           save({ ...c.s, aal: 'aal2', exp: nowS() + SESSION_TTL_S, epoch: taken.rows[0].session_epoch })
           return { data: {}, error: null }
         },

@@ -446,8 +446,6 @@ export const GENERATION_SOURCE_LABELS: Record<GenerationSourceType, string> = {
 /** The news window, in days (GenerationInputSchema: 1..30, default 7). */
 export const NEWS_WINDOW_DAYS = { min: 1, max: 30, default: 7 } as const
 
-export const RESEARCH_COST_HINT = 'Cautarea pe web inseamna 2 apeluri AI si cel mult 5 cautari (cost suplimentar).'
-
 export const SOURCES_APPROVAL_BLOCKED_HINT = 'Aprobarea e blocata pana verifici toate sursele.'
 export const SOURCES_FROZEN_HINT = 'Sursele sunt blocate dupa aprobare.'
 

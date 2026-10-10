@@ -10,7 +10,7 @@ process.env.LOCAL_AUTH_SECRET = 'local-auth-secret-for-tests-0123456789'
 
 const { getLocalDb, openLocalDb } = await import('../db.ts')
 const { SESSION_COOKIE, authSecret, base32Decode, hashPassword, hotp, signSession, totpStep, verifySession } = await import('../crypto.ts')
-const { createLocalSessionClient, MAX_FAILURES } = await import('../session-client.ts')
+const { createLocalSessionClient, MAX_FAILURES, requestIsHttps } = await import('../session-client.ts')
 
 const scratch: string[] = [serverDir]
 after(async () => {
@@ -105,9 +105,91 @@ describe('local TOTP replay', () => {
     assert.equal(results.filter((r) => r.error === null).length, 1)
     const step = (await row(id)).totp_last_step
     assert.ok(step !== null)
+    // The loser raced a valid code, it did not guess a wrong one: nothing is counted against the admin.
+    assert.equal((await row(id)).failed_count, 0, 'a lost race is not a failed attempt')
     // Replaying afterwards (a new request) is refused too, and the step has not gone down.
     assert.ok((await (await client()).mfa.challengeAndVerify({ factorId: enrolled.id, code })).error)
     assert.equal((await row(id)).totp_last_step, step)
+    // That one is a stale code, not a race, and it does count.
+    assert.equal((await row(id)).failed_count, 1)
+  })
+
+  it('does not count the loser of a same-code race, however often it happens, but still locks on real wrong codes', async () => {
+    const { email, id } = await newAdmin()
+    assert.equal((await (await client()).signInWithPassword({ email, password: PASSWORD })).error, null)
+    const enrolled = (await (await client()).mfa.enroll({ factorType: 'totp' })).data!
+    const key = base32Decode(enrolled.totp.secret)
+    const now = totpStep(Date.now())
+    const generic = 'Invalid TOTP code'
+
+    // Two races in a row, each on a later step (the step only moves forward).
+    for (const step of [now, now + 1]) {
+      const code = hotp(key, step)
+      const [a, b] = [await client(), await client()]
+      const results = await Promise.all([a.mfa.challengeAndVerify({ factorId: enrolled.id, code }), b.mfa.challengeAndVerify({ factorId: enrolled.id, code })])
+      assert.equal(results.filter((r) => r.error === null).length, 1, `step ${step}: one winner`)
+      assert.equal(results.find((r) => r.error)!.error!.message, generic, 'the loser gets the generic error')
+      assert.equal((await row(id)).failed_count, 0, `step ${step}: the loser was not counted`)
+      assert.equal((await row(id)).locked_until, null)
+      assert.equal((await row(id)).totp_last_step, step)
+    }
+  })
+
+  it('counts a different stale code that loses the race: only the same step is free', async () => {
+    const { email, id } = await newAdmin()
+    assert.equal((await (await client()).signInWithPassword({ email, password: PASSWORD })).error, null)
+    const enrolled = (await (await client()).mfa.enroll({ factorType: 'totp' })).data!
+    const key = base32Decode(enrolled.totp.secret)
+    const now = totpStep(Date.now())
+    // Both codes are valid when they are read; the later step is stored first, so the earlier one is stale.
+    const [late, early] = [hotp(key, now + 1), hotp(key, now)]
+    const [a, b] = [await client(), await client()]
+    const results = await Promise.all([a.mfa.challengeAndVerify({ factorId: enrolled.id, code: late }), b.mfa.challengeAndVerify({ factorId: enrolled.id, code: early })])
+    assert.equal(results[0].error, null)
+    assert.equal(results[1].error!.message, 'Invalid TOTP code')
+    const after = await row(id)
+    assert.equal(after.totp_last_step, now + 1, 'the step never goes down')
+    assert.equal(after.failed_count, 1, 'a different, stale code is a failure')
+  })
+})
+
+describe('session cookie scheme', () => {
+  const headers = (init: Record<string, string>) => new Headers(init)
+
+  it('is https only when the request says so: x-forwarded-proto first', () => {
+    assert.equal(requestIsHttps(headers({})), false, 'nothing says https')
+    assert.equal(requestIsHttps(headers({ 'x-forwarded-proto': 'https' })), true)
+    assert.equal(requestIsHttps(headers({ 'x-forwarded-proto': 'HTTPS' })), true)
+    assert.equal(requestIsHttps(headers({ 'x-forwarded-proto': 'http' })), false)
+    assert.equal(requestIsHttps(headers({ 'x-forwarded-proto': 'https, http' })), true, 'the first hop is the browser')
+    assert.equal(requestIsHttps(headers({ 'x-forwarded-proto': 'http, https' })), false)
+    // The header wins over what the browser claims in Origin.
+    assert.equal(requestIsHttps(headers({ 'x-forwarded-proto': 'http', origin: 'https://example.test' })), false)
+  })
+
+  it('falls back to the scheme of the Origin or Referer when the header is missing', () => {
+    assert.equal(requestIsHttps(headers({ origin: 'https://example.test' })), true)
+    assert.equal(requestIsHttps(headers({ origin: 'http://127.0.0.1:3000' })), false)
+    assert.equal(requestIsHttps(headers({ referer: 'https://example.test/admin/login' })), true)
+    assert.equal(requestIsHttps(headers({ referer: 'http://127.0.0.1:3000/admin/login' })), false)
+    assert.equal(requestIsHttps(headers({ origin: 'null' })), false)
+  })
+
+  it('does not depend on NODE_ENV: `npm start` on plain http keeps working', async () => {
+    // @types/node types NODE_ENV as read-only.
+    const env = process.env as Record<string, string | undefined>
+    const before = env.NODE_ENV
+    env.NODE_ENV = 'production'
+    try {
+      assert.equal(requestIsHttps(headers({ 'x-forwarded-proto': 'http' })), false)
+      assert.equal(requestIsHttps(headers({})), false)
+      const { email } = await newAdmin()
+      assert.equal((await (await client()).signInWithPassword({ email, password: PASSWORD })).error, null, 'sign-in works over plain http in production mode')
+      assert.ok(jar().get(SESSION_COOKIE))
+    } finally {
+      if (before === undefined) delete env.NODE_ENV
+      else env.NODE_ENV = before
+    }
   })
 })
 

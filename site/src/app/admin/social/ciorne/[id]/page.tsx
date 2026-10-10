@@ -9,7 +9,7 @@ import { listMedia } from '@/lib/social/media-queries'
 import { sourcesLocked } from '@/lib/social/news-ui'
 import { isHttpUrl } from '@/lib/social/schemas'
 // Amendment 07: the web sources behind the draft, ticked by a person before approval.
-import { getPostSources } from '@/lib/social/sources-queries'
+import { getPostSources, revisionHasActiveApproval } from '@/lib/social/sources-queries'
 import { formatBucharest } from '@/lib/social/time'
 import { Badge, PageTitle } from '@/components/ui'
 import { SourcesPanel } from '../../SourcesPanel'
@@ -30,7 +30,13 @@ export default async function DraftPage({ params, searchParams }: { params: Prom
   const draft = await getDraft(id)
   if (!draft) notFound()
 
-  const [mediaLibrary, sources] = await Promise.all([listMedia(draft.brand.id), getPostSources(draft.id)])
+  // The sources lock exactly when the post page locks them: the current revision has an active approval.
+  // The status does not say so (a cancelled post keeps its approval).
+  const [mediaLibrary, sources, approved] = await Promise.all([
+    listMedia(draft.brand.id),
+    getPostSources(draft.id),
+    revisionHasActiveApproval(draft.revision.id),
+  ])
   // Private names: only handed to this admin page so the editor can check copy like the server does.
   const legalNames = legalNamesFromEnv(process.env.SOCIAL_LEGAL_NAMES)
   const initialDest = typeof dest === 'string' ? dest : null
@@ -52,7 +58,7 @@ export default async function DraftPage({ params, searchParams }: { params: Prom
               <>
                 {' '}
                 · sursa{' '}
-                <a href={draft.source_url} target="_blank" rel="noreferrer" className="text-accent-dark hover:underline">
+                <a href={draft.source_url} target="_blank" rel="noopener noreferrer" className="text-accent-dark hover:underline">
                   {draft.source_url}
                 </a>
               </>
@@ -79,7 +85,7 @@ export default async function DraftPage({ params, searchParams }: { params: Prom
         mediaLibrary={mediaLibrary}
         legalNames={legalNames}
         initialDest={initialDest}
-        sourcesPanel={<SourcesPanel sources={sources} locked={sourcesLocked(draft.status)} />}
+        sourcesPanel={<SourcesPanel sources={sources} locked={sourcesLocked(approved)} />}
       />
     </>
   )

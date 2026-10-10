@@ -31,6 +31,14 @@ export function SourcesPanel({ sources, locked }: { sources: PostSource[]; locke
   const [pending, start] = useTransition()
   // A click shows at once; it holds only while the server still shows the value it started from.
   const [optimistic, setOptimistic] = useState<Record<string, OptimisticVerify>>({})
+  // Fresh sources from the server (the refresh after a click, or anyone else's change) win over
+  // every click made against the old ones: a stale entry would otherwise come back later, when the
+  // server value happens to equal the one the click started from.
+  const [seen, setSeen] = useState(sources)
+  if (seen !== sources) {
+    setSeen(sources)
+    setOptimistic((current) => (Object.keys(current).length ? {} : current))
+  }
 
   if (sources.length === 0) return null
 
@@ -47,6 +55,9 @@ export function SourcesPanel({ sources, locked }: { sources: PostSource[]; locke
     start(async () => {
       try {
         const result = await setSourceVerified(source.id, wanted)
+        // Either way the click is done: a refusal goes back to what the server shows, and a success
+        // hands over to the refreshed sources (the render-time reset above drops the entry the
+        // moment they arrive, so the box does not flick back to the old value in between).
         if (!result.ok) {
           toast.error(result.error)
           undo(source.id)
@@ -100,7 +111,8 @@ export function SourcesPanel({ sources, locked }: { sources: PostSource[]; locke
           const isVerified = effectiveVerified(Boolean(source.verified_at), optimistic[source.id])
           const title = sourceTitle(source)
           const meta = sourceMeta(source)
-          const by = verifierName(source.verified_by)
+          // verified_by is a user id; the e-mail comes from the activity log (sources-queries.ts).
+          const by = verifierName(source.verified_by_email) ?? verifierName(source.verified_by)
           return (
             <li key={source.id} className="rounded-lg border border-line px-3 py-2">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -117,7 +129,7 @@ export function SourcesPanel({ sources, locked }: { sources: PostSource[]; locke
                   ) : (
                     <span className="break-words text-sm font-semibold text-ink">{title}</span>
                   )}
-                  {!isSafeSourceUrl(source.url) ? <p className="text-xs text-danger">Linkul nu e un https valid, nu se poate deschide.</p> : null}
+                  {!isSafeSourceUrl(source.url) ? <p className="text-xs text-danger">Linkul nu e un http sau https valid, nu se poate deschide.</p> : null}
                   {meta ? <p className="text-xs text-ink-soft">{meta}</p> : null}
                   {source.note ? <p className="mt-1 text-xs text-ink-soft">Sustine: {source.note}</p> : null}
                   {isVerified && source.verified_at ? (

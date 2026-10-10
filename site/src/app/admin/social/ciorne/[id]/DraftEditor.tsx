@@ -316,11 +316,18 @@ export function DraftEditor({ draft, editable, mediaLibrary = [], legalNames = [
   function save() {
     if (mediaSelectionDirty) { toast.error('Salveaza sau restabileste selectia imaginilor inainte de a salva textul.'); return }
     start(async () => {
-      const r = await saveDraft({
-        postId: draft.id,
-        baseRevisionId: draft.revision.id,
-        edit: { title, canonicalText: canonical, figures, destinations: dests },
-      })
+      // A dropped connection throws; without this the transition rethrows and the person sees nothing.
+      let r: Awaited<ReturnType<typeof saveDraft>>
+      try {
+        r = await saveDraft({
+          postId: draft.id,
+          baseRevisionId: draft.revision.id,
+          edit: { title, canonicalText: canonical, figures, destinations: dests },
+        })
+      } catch {
+        toast.error('Salvarea nu a reusit. Verifica conexiunea si incearca din nou.')
+        return
+      }
       if (!r.ok) {
         toast.error(r.error)
         return
