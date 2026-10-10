@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { findBannedPhrases, findBareDomains, findUrls, maskUrls } from "./content-rules.js";
 import { measurePlatformLength, utf8Length } from "./text-length.js";
 import { detectFigures } from "./figures.js";
+import { isAllowedLink } from "./source-map.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROMPTS_DIR = path.resolve(__dirname, "../../../prompts");
@@ -188,6 +189,21 @@ export function validateContent(text: string, platform: string): ValidationError
   }
 
   return errors;
+}
+
+/**
+ * Research drafts (amendment 07): a link in the text must be one of the brief's sources or the
+ * request's own article (`allowed` comes from allowedLinkKeys). A link the model made up is an
+ * error. Whether one allowed link is wanted at all is the platform's prompt rule, not checked here.
+ * Links are found as the site finds them, "www." ones included.
+ */
+export function validateLinksFromSearch(text: string, allowed: ReadonlySet<string>): ValidationError[] {
+  const bad = new Set<string>();
+  for (const { url } of findUrls(text)) if (!isAllowedLink(url, allowed)) bad.add(url);
+  return [...bad].map((url) => ({
+    rule: "link_not_from_search",
+    message: `The text links to ${url.length > 120 ? `${url.slice(0, 120)}...` : url}, which the web search did not return; keep only a link from the research sources or remove it`,
+  }));
 }
 
 // Extract figures from text for the figures array

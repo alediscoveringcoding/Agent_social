@@ -7,6 +7,8 @@ import { logger } from "../logger.js";
 import { siteApi, LeaseLostError } from "../services/site-api.js";
 import { postizApi, PostizHttpError } from "../services/postiz-api.js";
 import { destinationHash } from "../delivery/hash.js";
+import { measurePlatformLength } from "../generator/text-length.js";
+import { LENGTH_LIMITS } from "../generator/validators.js";
 import {
   buildPostizPost,
   postizContent,
@@ -22,8 +24,18 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const HEARTBEAT_INTERVAL_MS = 120_000;
 /** A signed media URL must answer within this time. */
 export const MEDIA_DOWNLOAD_TIMEOUT_MS = 60_000;
-/** Reconcile only trusts a post created this much before the attempt started (clock skew between hosts). */
-export const RECONCILE_CLOCK_SKEW_MS = 2 * 60_000;
+/**
+ * Reconcile only trusts a post created this much before the attempt started (clock skew between
+ * hosts: a Postiz host that runs behind stamps a real post earlier than the attempt). The content
+ * match and the wait before not_found keep the wider window safe.
+ */
+export const RECONCILE_CLOCK_SKEW_MS = 10 * 60_000;
+/** Reconcile: a text that is a prefix of the other counts as the same post only when it covers this share of it. */
+export const RECONCILE_PREFIX_MIN_RATIO = 0.9;
+/** Reconcile: a text cut at the platform's limit keeps at least this share of the limit once normalized (markup and punctuation go). */
+export const RECONCILE_CUT_MIN_SHARE = 0.75;
+/** Reconcile: shorter texts must be equal; a short prefix proves nothing. */
+const RECONCILE_MIN_CHARS = 20;
 /** A reconciling job reports not_found only once the attempt is this old: Postiz may still be writing the post. */
 export const RECONCILE_MIN_AGE_MS = 10 * 60_000;
 /** Poll looks this many days either side of the job's own times. */
@@ -428,13 +440,23 @@ export function normalizeContent(s: unknown): string {
     .trim();
 }
 
-/** Equal, or one is the start of the other (a provider that truncates or adds a footer). */
-function sameContent(a: string, b: string): boolean {
-  if (!a || !b) return false;
-  if (a === b) return true;
-  const shorter = a.length <= b.length ? a : b;
-  const longer = a.length <= b.length ? b : a;
-  return shorter.length >= 20 && longer.startsWith(shorter.slice(0, 120));
+/**
+ * Is the stored text our post? `ours` and `theirs` are normalized (normalizeContent). Equal, or a
+ * genuine truncation or addition:
+ * - one is a prefix of the other, and the shorter is at least RECONCILE_PREFIX_MIN_RATIO of the
+ *   longer (a provider that cuts a few words or appends a short footer); or
+ * - `ours` is longer, `theirs` is a prefix of it, and `cutAt` (the platform's known limit, given only
+ *   when our text exceeds it) explains the cut: `theirs` is no longer than the limit and fills most of it.
+ * Two different posts that merely open the same way (a template, a recurring headline) do not match.
+ */
+export function sameContent(ours: string, theirs: string, cutAt?: number): boolean {
+  if (!ours || !theirs) return false;
+  if (ours === theirs) return true;
+  const shorter = ours.length <= theirs.length ? ours : theirs;
+  const longer = ours.length <= theirs.length ? theirs : ours;
+  if (shorter.length < RECONCILE_MIN_CHARS || !longer.startsWith(shorter)) return false;
+  if (shorter.length >= longer.length * RECONCILE_PREFIX_MIN_RATIO) return true;
+  return longer === ours && cutAt !== undefined && shorter.length <= cutAt && shorter.length >= cutAt * RECONCILE_CUT_MIN_SHARE;
 }
 
 export interface ReconcileQuery {
@@ -456,13 +478,16 @@ export function pickReconcileMatch(posts: any[], q: ReconcileQuery): { match: an
   } catch {
     wanted = [normalizeContent(q.text)];
   }
+  // A platform that cuts a long text at its limit: only when ours is over that limit can this explain a short stored text.
+  const limit = LENGTH_LIMITS[q.platform];
+  const cutAt = limit !== undefined && measurePlatformLength(q.platform, q.text) > limit ? limit : undefined;
   const matches: Array<{ post: any; distance: number }> = [];
   for (const p of posts || []) {
     // GET /posts lists `integration: {id, ...}`; older mocks put the id there directly.
     if ((p.integration?.id ?? p.integration) !== q.integrationId) continue;
     if (p.deletedAt) continue;
     const content = normalizeContent(p.content);
-    if (!wanted.some((w) => sameContent(w, content))) continue;
+    if (!wanted.some((w) => sameContent(w, content, cutAt))) continue;
     const at = Date.parse(p.createdAt ?? p.created_at ?? p.publishDate ?? "");
     // A post without a usable time is not excluded: the range query already narrowed it.
     if (!Number.isNaN(at) && at < q.attemptStartMs - RECONCILE_CLOCK_SKEW_MS) continue;

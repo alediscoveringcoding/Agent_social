@@ -1,7 +1,8 @@
 import "../test-support/env.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runResearch, parseClaudeContent, MAX_SOURCES } from "./research.js";
+import { runResearch, parseClaudeContent, researchVerdict, MAX_SOURCES, STOPPED_EARLY_NOTE } from "./research.js";
+import { logger } from "../logger.js";
 import { wantsResearch } from "./research-types.js";
 import type { ClaudeClient, ClaudeMessage, ClaudeRequest } from "../services/claude-api.js";
 import { MAX_PAUSE_CONTINUATIONS } from "../services/claude-api.js";
@@ -148,17 +149,42 @@ test("Claude: pause_turn continuations are capped at 3 (4 calls in all)", async 
   assert.equal(MAX_PAUSE_CONTINUATIONS, 3);
   assert.equal(seen.length, 4);
   assert.equal(brief.calls, 4);
-  assert.equal(brief.text, "Parte 1.[S1] Parte 2.[S2] Parte 3.[S3] Parte 4.[S4]");
+  // Still paused after the last continuation: the partial notes are kept and marked.
+  assert.equal(brief.text, `Parte 1.[S1] Parte 2.[S2] Parte 3.[S3] Parte 4.[S4]\n\n${STOPPED_EARLY_NOTE}`);
+  assert.equal(brief.sources.length, 4);
   // The assistant message grows with every paused turn.
   assert.equal((seen[3]!.messages[1]!.content as unknown[]).length, 3);
 });
 
-test("Claude: no continuation once the search budget is spent", async () => {
+/** The warnings logged while `run` works. */
+async function warningsOf(run: () => Promise<unknown>): Promise<Array<{ msg: string; data?: Record<string, unknown> }>> {
+  const seen: Array<{ msg: string; data?: Record<string, unknown> }> = [];
+  const original = logger.warn;
+  logger.warn = (msg, data) => { seen.push({ msg, data }); };
+  try { await run(); } finally { logger.warn = original; }
+  return seen;
+}
+
+test("Claude: no continuation once the search budget is spent; the brief is marked and a warning logged", async () => {
   const seen: ClaudeRequest[] = [];
-  const brief = await runResearch("s", "u", claudeChoice, { maxSearches: 2, client: fakeClaude([message([serverUse(), textBlock("Notite.", [cite(A, "t", "q")])], "pause_turn", 2)], seen) });
+  let brief!: Awaited<ReturnType<typeof runResearch>>;
+  const warnings = await warningsOf(async () => {
+    brief = await runResearch("s", "u", claudeChoice, { maxSearches: 2, client: fakeClaude([message([serverUse(), textBlock("Notite.", [cite(A, "t", "q")])], "pause_turn", 2)], seen) });
+  });
   assert.equal(seen.length, 1);
   assert.equal(brief.calls, 1);
   assert.equal(brief.searches, 2);
+  assert.equal(brief.text, `Notite.[S1]\n\n${STOPPED_EARLY_NOTE}`);
+  assert.ok(warnings.some((w) => /stopped early/.test(w.msg) && w.data?.searches === 2 && w.data?.maxSearches === 2));
+});
+
+test("Claude: a finished turn is not marked", async () => {
+  let brief!: Awaited<ReturnType<typeof runResearch>>;
+  const warnings = await warningsOf(async () => {
+    brief = await runResearch("s", "u", claudeChoice, { client: fakeClaude([message([textBlock("Notite.", [cite(A, "t", "q")])], "end_turn", 1)]) });
+  });
+  assert.equal(brief.text, "Notite.[S1]");
+  assert.deepEqual(warnings, []);
 });
 
 test("Claude: a paused turn that never wrote notes is a bad output; other stops map like the writer", async () => {
@@ -279,6 +305,81 @@ test("Gemini: stop reasons and missing text fail like the writer", async () => {
   await assert.rejects(runResearch("s", "u", geminiChoice, { fetch: reply("MAX_TOKENS") }), { code: "AI_TRUNCATED" });
   await assert.rejects(runResearch("s", "u", geminiChoice, { fetch: reply("STOP", []) }), { code: "AI_BAD_OUTPUT" });
   await assert.rejects(runResearch("s", "u", geminiChoice, { fetch: (async () => Response.json({ error: { message: "bad" } }, { status: 400 })) as typeof fetch }), /Gemini API 400/);
+});
+
+const GEMINI_API = "https://generativelanguage.googleapis.com/";
+
+test("Gemini: calls counts every HTTP attempt, retries included", async () => {
+  let attempts = 0;
+  const waits: number[] = [];
+  const fetchFn = (async (input: string | URL | Request) => {
+    if (!String(input).startsWith(GEMINI_API)) return new Response("ok");
+    attempts++;
+    return attempts < 3 ? Response.json({ error: { message: "busy" } }, { status: 503 }) : Response.json(groundedBody());
+  }) as typeof fetch;
+  const brief = await runResearch("s", "u", geminiChoice, { fetch: fetchFn, sleep: async (ms) => { waits.push(ms); } });
+  assert.equal(attempts, 3);
+  assert.deepEqual(waits, [5000, 15000]);
+  assert.equal(brief.calls, 3);
+  assert.equal(brief.searches, 2);
+});
+
+test("Gemini: more searches than RESEARCH_MAX_SEARCHES is logged (the brief is still used)", async () => {
+  let brief!: Awaited<ReturnType<typeof runResearch>>;
+  const over = await warningsOf(async () => { brief = await runResearch("s", "u", geminiChoice, { maxSearches: 1, fetch: geminiFetch(groundedBody(), {}) }); });
+  assert.deepEqual(over.map((w) => [w.msg, w.data]), [["Gemini grounding used more searches than allowed", { searches: 2, maxSearches: 1 }]]);
+  assert.equal(brief.searches, 2);
+  assert.ok(brief.sources.length > 0);
+  assert.deepEqual(await warningsOf(() => runResearch("s", "u", geminiChoice, { maxSearches: 2, fetch: geminiFetch(groundedBody(), {}) })), []);
+});
+
+test("Gemini: an abort or timeout while the body is read is rethrown, not read as an empty answer", async () => {
+  const brokenBody = (read: () => Promise<never>) => (async () => ({ ok: true, status: 200, statusText: "OK", json: read })) as unknown as typeof fetch;
+  for (const name of ["AbortError", "TimeoutError"]) {
+    await assert.rejects(runResearch("s", "u", geminiChoice, { fetch: brokenBody(async () => { throw new DOMException("read cut off", name); }) }), { name });
+  }
+  // The lease was lost while the body came in: whatever the read threw, the caller sees the abort.
+  const lease = new AbortController();
+  await assert.rejects(runResearch("s", "u", geminiChoice, {
+    signal: lease.signal,
+    fetch: brokenBody(async () => { lease.abort(new Error("LEASE_LOST")); throw lease.signal.reason; }),
+  }), /LEASE_LOST/);
+  // A body that is not JSON still reads as empty, and the missing answer is the error.
+  await assert.rejects(runResearch("s", "u", geminiChoice, { fetch: (async () => new Response("<html>busy</html>", { status: 200 })) as typeof fetch }), { code: "AI_BAD_OUTPUT" });
+  await assert.rejects(runResearch("s", "u", geminiChoice, { fetch: (async () => new Response("<html>", { status: 502 })) as typeof fetch, sleep: async () => {} }), /Gemini API 502/);
+});
+
+// --- the verdict in the notes ---
+
+test("researchVerdict: news stops on a verdict line, narration before it included, unless a story block is there", () => {
+  const verdict = (text: string, type = "news") => researchVerdict(text, type);
+  assert.equal(verdict("NO QUALIFYING STORY\nnear miss | 6 | one source"), "no_story");
+  assert.equal(verdict("I ran five searches and read the results.\n\nNo qualifying story\nnear miss"), "no_story");
+  assert.equal(verdict("Searches done.\r\n**NO QUALIFYING STORY**"), "no_story");
+  assert.equal(verdict("> - no qualifying story"), "no_story");
+  assert.equal(verdict("Nothing.\nNO SOURCES FOUND"), "no_sources");
+  // NO QUALIFYING STORY wins when both are said.
+  assert.equal(verdict("NO SOURCES FOUND\nNO QUALIFYING STORY"), "no_story");
+  // A story block: the verdict words are narration.
+  assert.equal(verdict("STORY 1: BNR raises the rate\nFacts:\n- 6%.[S1]\nNO QUALIFYING STORY for the rest"), "ok");
+  assert.equal(verdict("Story 2: x\nno sources found for the second"), "ok");
+  // Inside a sentence is not the start of a line.
+  assert.equal(verdict("Result: NO QUALIFYING STORY"), "ok");
+  assert.equal(verdict("The audit said no qualifying story was found, so I list one."), "ok");
+  assert.equal(verdict("Plain notes."), "ok");
+});
+
+test("researchVerdict: topic and article research stop only on NO SOURCES FOUND without a story or a facts list", () => {
+  for (const type of ["topic", "article", undefined]) {
+    assert.equal(researchVerdict("NO QUALIFYING STORY\nnear miss", type), "ok");
+    assert.equal(researchVerdict("I searched.\nNO SOURCES FOUND", type), "no_sources");
+    assert.equal(researchVerdict("**No sources found**\nUnverified: none", type), "no_sources");
+    assert.equal(researchVerdict("NO SOURCES FOUND for the news.\nFacts:\n- The rate is 6%.[S1]", type), "ok");
+    assert.equal(researchVerdict("NO SOURCES FOUND\nFacts: none", type), "no_sources");
+    assert.equal(researchVerdict("NO SOURCES FOUND\nSTORY 1: x", type), "ok");
+    assert.equal(researchVerdict("NO SOURCES FOUND for the first query\nANGLE 1: New rule\nDate: none", type), "ok");
+    assert.equal(researchVerdict("They said NO SOURCES FOUND here", type), "ok");
+  }
 });
 
 test("wantsResearch: asked for, or a news source", () => {

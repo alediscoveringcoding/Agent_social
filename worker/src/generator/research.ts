@@ -18,7 +18,10 @@ const REDIRECT_TIMEOUT_MS = 10_000;
 // Redirects resolved per answer; dedupe may merge a few of them.
 const MAX_RESOLVED = 40;
 
-/** A brief plus how many HTTP calls it took (1 plus pause_turn continuations; Gemini is always 1). */
+/** Added to the notes when Claude was still paused at the call or search cap. The writer sees it. */
+export const STOPPED_EARLY_NOTE = "(research stopped early: search or call limit reached)";
+
+/** A brief plus how many HTTP calls it took (Claude: 1 plus pause_turn continuations; Gemini: attempts, retries included). */
 export type ResearchResult = ResearchBrief & { calls: number };
 /** What the generator loop needs from a research function (tests inject a fake). */
 export type ResearchRunner = (
@@ -57,7 +60,7 @@ export async function runResearch(
   const system = `${systemPrompt}\n\nSearch budget: use at most ${maxSearches} web searches in total.`;
   try {
     return choice.provider === "gemini"
-      ? await researchWithGemini(system, userPrompt, choice.model, signal, opts)
+      ? await researchWithGemini(system, userPrompt, choice.model, maxSearches, signal, opts)
       : await researchWithClaude(system, userPrompt, choice.model, maxSearches, signal, opts);
   } catch (err) {
     if (timeout.aborted && !opts.signal?.aborted) throw new Error(`Research timed out after ${timeoutMs} ms`, { cause: err });
@@ -175,7 +178,13 @@ async function researchWithClaude(
   if (!parsed.text) {
     throw new AiOutputError("AI_BAD_OUTPUT", raw.paused ? "Claude research stayed paused without writing notes" : "Claude returned no research notes");
   }
-  return { text: parsed.text, sources: parsed.sources, searches: raw.searches, provider: "claude", model: raw.model, calls: raw.calls };
+  // Still paused at the call or search cap: the partial notes are kept, but the writer is told.
+  let text = parsed.text;
+  if (raw.paused) {
+    logger.warn("Research stopped early: call or search limit reached, using the partial notes", { calls: raw.calls, searches: raw.searches, maxSearches });
+    text = `${text}\n\n${STOPPED_EARLY_NOTE}`;
+  }
+  return { text, sources: parsed.sources, searches: raw.searches, provider: "claude", model: raw.model, calls: raw.calls };
 }
 
 // --- Gemini ---
@@ -265,9 +274,44 @@ export async function parseGeminiGrounding(grounding: gemini.GeminiSearchResult,
 }
 
 async function researchWithGemini(
-  system: string, user: string, model: string, signal: AbortSignal, opts: ResearchOptions,
+  system: string, user: string, model: string, maxSearches: number, signal: AbortSignal, opts: ResearchOptions,
 ): Promise<ResearchResult> {
   const grounding = await gemini.searchWeb(system, user, model, { fetch: opts.fetch, signal, sleep: opts.sleep });
   const parsed = await parseGeminiGrounding(grounding, opts.fetch ?? fetch, signal);
-  return { text: parsed.text, sources: parsed.sources, searches: grounding.queries.length, provider: "gemini", model, calls: 1 };
+  const searches = grounding.queries.length;
+  // Gemini has no search cap: the prompt only asks. Searches are billed, so a breach is worth a line.
+  if (searches > maxSearches) logger.warn("Gemini grounding used more searches than allowed", { searches, maxSearches });
+  // calls: the real HTTP attempts, retries included (each one counts against the quota).
+  return { text: parsed.text, sources: parsed.sources, searches, provider: "gemini", model, calls: grounding.calls };
+}
+
+// --- the verdict in the notes ---
+
+// A verdict may follow a line of narration ("I searched ... "), and may sit inside markup ("**", "- ", "> ").
+// (Markup = anything that is not a letter, a digit or a line break.)
+const NO_STORY = /^[^\p{L}\p{N}\r\n]*NO QUALIFYING STORY/imu;
+const NO_SOURCES = /^[^\p{L}\p{N}\r\n]*NO SOURCES FOUND/imu;
+const STORY_BLOCK = /^[^\p{L}\p{N}\r\n]*STORY\s*\d+\s*:/imu;
+// Topic and article notes (research.md) number their blocks "ANGLE n:" instead.
+const ANGLE_BLOCK = /^[^\p{L}\p{N}\r\n]*ANGLE\s*\d+\s*:/imu;
+// "Facts:" on its own line, then at least one bullet.
+const FACT_LIST = /^[^\p{L}\p{N}\r\n]*Facts?\s*:[^\p{L}\p{N}\r\n]*\r?\n\s*[-*\u2022]\s*\S/imu;
+
+export type ResearchVerdict = "ok" | "no_story" | "no_sources";
+
+/**
+ * Should the writer run at all? research.md has the model say so in its notes.
+ * - News: "NO QUALIFYING STORY" (nothing passed the audit) or "NO SOURCES FOUND", at the start of any
+ *   line, and only when no "STORY n:" block is there; a brief with stories is never stopped.
+ * - Topic and article: only "NO SOURCES FOUND" counts, and only with no "STORY n:" or "ANGLE n:" block and
+ *   no "Facts:" list.
+ */
+export function researchVerdict(text: string, sourceType: string | undefined): ResearchVerdict {
+  if (sourceType === "news") {
+    if (STORY_BLOCK.test(text)) return "ok";
+    if (NO_STORY.test(text)) return "no_story";
+    return NO_SOURCES.test(text) ? "no_sources" : "ok";
+  }
+  const content = STORY_BLOCK.test(text) || ANGLE_BLOCK.test(text) || FACT_LIST.test(text);
+  return NO_SOURCES.test(text) && !content ? "no_sources" : "ok";
 }

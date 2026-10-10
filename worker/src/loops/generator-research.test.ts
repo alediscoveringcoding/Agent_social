@@ -5,9 +5,11 @@ import { setTimeout as delay } from "node:timers/promises";
 import { processGenerationRequest, validateDraft } from "./generator.js";
 import { LeaseLostError } from "../services/site-api.js";
 import { AiOutputError } from "../services/ai-errors.js";
-import { modelDraft } from "../test-support/drafts.js";
+import { modelDraft, variant } from "../test-support/drafts.js";
 import { buildRepairPrompt } from "../generator/repair.js";
-import { buildUserPrompt } from "../generator/prompts.js";
+import { activeFacts, buildUserPrompt } from "../generator/prompts.js";
+import { factFigures, loadFacts } from "../generator/source-map.js";
+import { normalizeFigure } from "../generator/figures.js";
 import { boundDraftForSite, SOURCE_LIMITS } from "../generator/wire-bounds.js";
 import { ModelDraftSchema, draftSchema, parseModelResponse } from "../generator/schema.js";
 import type { ResearchBrief } from "../generator/research-types.js";
@@ -242,10 +244,10 @@ test("a brief with no sources fails with RESEARCH_EMPTY and makes no writer call
   assert.match(failed[0]![1], /3 searches/);
 });
 
-test("a brief where no story passed the audit fails with RESEARCH_NO_STORY and makes no writer call", async () => {
+test("a news brief where no story passed the audit fails with RESEARCH_NO_STORY and makes no writer call", async () => {
   const { api, posted, failed } = harness();
   let writes = 0;
-  await processGenerationRequest(request(researchInput), {
+  await processGenerationRequest(request(newsInput), {
     api,
     research: async () => ({ ...brief, text: "NO QUALIFYING STORY\nBNR rate decision | 7 | no fixed date", calls: 1 }),
     generate: async () => { writes++; return { drafts: [modelDraft()], stopReason: "end_turn" }; },
@@ -255,6 +257,34 @@ test("a brief where no story passed the audit fails with RESEARCH_NO_STORY and m
   assert.equal(failed[0]![0], "RESEARCH_NO_STORY");
   assert.match(failed[0]![1], /BNR rate decision/);
 });
+
+// What the research step said, and what the loop does with it: [source input, notes, writer runs?, error code].
+const verdicts: Array<[string, unknown, string, boolean, string?]> = [
+  ["news, narration before the verdict", newsInput, "I searched the last 7 days and found nothing solid.\nNO QUALIFYING STORY\nBNR rate decision | 7 | no fixed date", false, "RESEARCH_NO_STORY"],
+  ["news, markup and case", newsInput, "Searches done.\n\n**No qualifying story**\n- near miss | 6 | one source", false, "RESEARCH_NO_STORY"],
+  ["news, no sources found", newsInput, "Looked everywhere.\nNO SOURCES FOUND", false, "RESEARCH_EMPTY"],
+  ["news, a story block wins over a later line", newsInput, "STORY 1: BNR raises the rate\nDate: 3 April 2026\nFacts:\n- Rate is 6%.[S1]\nNO QUALIFYING STORY for the second angle", true],
+  ["news, the phrase inside a sentence is only narration", newsInput, "STORY 1: BNR\nThe audit found that NO QUALIFYING STORY exists for X, so only one is listed.", true],
+  ["news, no phrase at all", newsInput, "Notes without a verdict.", true],
+  ["topic, the story verdict does not apply", researchInput, "NO QUALIFYING STORY\nnear miss", true],
+  ["topic, narration then no sources and no facts", researchInput, "I searched twice.\nNO SOURCES FOUND\nUnverified: none", false, "RESEARCH_EMPTY"],
+  ["topic, no sources found but a facts list", researchInput, "NO SOURCES FOUND for the latest news.\nFacts:\n- The rate is 6%.[S1]", true],
+  ["topic, notes with a story block", researchInput, "NO SOURCES FOUND for the first query\nSTORY 1: Rate\nFacts:\n- 6%.[S1]", true],
+  ["article, no sources found", { ...base, source: { type: "article", url: "https://taxes.support/blog/ghid" }, research: true }, "Checked.\nno sources found", false, "RESEARCH_EMPTY"],
+];
+for (const [name, input, notes, runs, code] of verdicts) {
+  test(`research verdict: ${name}`, async () => {
+    const { api, failed } = harness();
+    let writes = 0;
+    await processGenerationRequest(request(input), {
+      api, repair: false,
+      research: async () => ({ ...brief, text: notes, calls: 1 }),
+      generate: async () => { writes++; return { drafts: [modelDraft()], stopReason: "end_turn" }; },
+    });
+    assert.equal(writes, runs ? 1 : 0);
+    assert.deepEqual(failed.map((f) => f[0]), code ? [code] : []);
+  });
+}
 
 test("a research failure reports its code and makes no writer call", async () => {
   for (const [error, code] of [[new AiOutputError("AI_REFUSED", "Claude stopped with refusal"), "AI_REFUSED"], [new Error("Research timed out after 300000 ms"), "GENERATION_ERROR"]] as const) {
@@ -328,4 +358,145 @@ test("the research call runs under the lease: a lost lease stops it with no repo
   assert.equal(aborted, true);
   assert.equal(writes, 0);
   assert.equal(reported, 0);
+});
+
+// --- links come from the search only ---
+
+const ARTICLE = "https://taxes.support/blog/ghid";
+const articleResearchInput = { ...base, source: { type: "article", url: ARTICLE }, research: true };
+const withText = (text: string, patch: Record<string, unknown> = {}) => cited({ variants: [variant("x", text)], ...patch });
+
+test("research request: a source_url or link the search did not return is replaced with a note, and the text link is an error", () => {
+  const draft = validateDraft(cited({
+    source_url: "https://invented.example/a",
+    variants: [
+      variant("x", "Dobanda la 6%. https://invented.example/b"),
+      variant("pinterest", "Descriere", { title: "Titlu", link: "https://invented.example/c" }),
+    ],
+  }), 0, "taxes-support", researchInput, brief);
+  // Only the text link is an error: the replaced ones are notes, so they cost no repair call.
+  assert.deepEqual(draft.validation_errors, [{ rule: "link_not_from_search", field: "variants.x", message: draft.validation_errors[0]!.message }]);
+  assert.match(draft.validation_errors[0]!.message, /invented\.example\/b/);
+  assert.equal(draft.source_url, "https://www.bnr.ro/comunicat");
+  const pinterest = draft.variants.find((v: { platform: string }) => v.platform === "pinterest");
+  assert.deepEqual(pinterest.settings, { title: "Titlu", link: "https://www.bnr.ro/comunicat" });
+  assert.match(draft.notes, /invented\.example\/a/);
+  assert.match(draft.notes, /invented\.example\/c pentru pinterest/);
+});
+
+test("links to a source of the brief or to the request's article are fine in the text; a plain request is not checked", () => {
+  const fine = validateDraft(withText("Dobanda la 6%. https://www.bnr.ro/comunicat"), 0, "taxes-support", researchInput, brief);
+  assert.deepEqual(fine.validation_errors, []);
+  assert.equal(fine.notes, null);
+  const article = validateDraft(withText(`Dobanda la 6%. ${ARTICLE}`, { source_url: ARTICLE }), 0, "taxes-support", articleResearchInput, brief);
+  assert.deepEqual(article.validation_errors, []);
+  assert.equal(article.source_url, ARTICLE);
+  // The article link is not allowed on a topic request, and www. links count.
+  const topic = validateDraft(withText(`Dobanda la 6%. ${ARTICLE} www.altceva.ro/x`), 0, "taxes-support", researchInput, brief);
+  assert.deepEqual(ruleOf(topic), ["link_not_from_search", "link_not_from_search"]);
+  const plain = validateDraft(withText("Dobanda la 6%. https://anywhere.example/x"), 0, "taxes-support", plainInput);
+  assert.deepEqual(plain.validation_errors, []);
+});
+
+test("a news request without a brief has no source to link to", () => {
+  const draft = validateDraft(withText("Dobanda la 6%. https://www.bnr.ro/comunicat", { sources: [], figures: [] }), 0, "taxes-support", newsInput);
+  assert.deepEqual(ruleOf(draft), ["sources_missing", "link_not_from_search"]);
+});
+
+test("an invented source_url alone costs no repair call and the reviewer sees the note", async () => {
+  const { api, posted, failed } = harness();
+  let writes = 0;
+  await processGenerationRequest(request(researchInput), {
+    api, repair: true,
+    research: found,
+    generate: async () => { writes++; return { drafts: [cited({ source_url: "https://invented.example/a" })], stopReason: "end_turn" }; },
+  });
+  assert.equal(writes, 1);
+  assert.deepEqual(failed, []);
+  assert.deepEqual(posted[0].validation_errors, []);
+  assert.equal(posted[0].source_url, "https://www.bnr.ro/comunicat");
+  assert.match(posted[0].notes, /invented\.example\/a/);
+});
+
+// --- devto, hashnode and medium need our blog's canonical URL ---
+
+const blogArticle = { title: "Titlu", subtitle: "Subtitlu", body_markdown: "Un ghid calm", tags: ["a"], canonical_url: "" };
+const articleDraft = () => modelDraft({
+  kind: "article", article: { ...blogArticle },
+  variants: [variant("x", "Taxes Support te ajuta."), variant("devto", ""), variant("hashnode", ""), variant("medium", ""), variant("wordpress", "")],
+});
+const platformsOf = (d: Record<string, any>): string[] => d.variants.map((v: { platform: string }) => v.platform);
+
+test("a request that is not an article drops devto, hashnode and medium with a note, and keeps the other article platforms", () => {
+  for (const input of [plainInput, researchInput, newsInput]) {
+    const draft = validateDraft(articleDraft(), 0, "taxes-support", input, input === plainInput ? undefined : brief);
+    assert.deepEqual(platformsOf(draft), ["x", "wordpress"]);
+    assert.ok(!ruleOf(draft).includes("CANONICAL_MISSING"));
+    assert.match(draft.notes, /devto, hashnode, medium/);
+  }
+});
+
+test("an article request keeps devto, hashnode and medium and takes the canonical from the article", () => {
+  const draft = validateDraft(articleDraft(), 0, "taxes-support", { ...base, source: { type: "article", url: ARTICLE } });
+  assert.deepEqual(platformsOf(draft), ["x", "devto", "hashnode", "medium", "wordpress"]);
+  assert.equal(draft.article.canonical_url, ARTICLE);
+  assert.ok(!ruleOf(draft).includes("CANONICAL_MISSING"));
+  assert.equal(draft.notes, null);
+});
+
+test("dropping the canonical platforms spends no repair call", async () => {
+  const { api, posted, failed } = harness();
+  let writes = 0;
+  await processGenerationRequest(request(plainInput), {
+    api, repair: true,
+    generate: async () => { writes++; return { drafts: [articleDraft()], stopReason: "end_turn" }; },
+  });
+  assert.equal(writes, 1);
+  assert.deepEqual(failed, []);
+  assert.deepEqual(platformsOf(posted[0]), ["x", "wordpress"]);
+  assert.deepEqual(posted[0].validation_errors, []);
+  // The repaired draft goes through the same filter when a model brings the platforms back.
+  assert.match(posted[0].notes, /devto/);
+});
+
+test("a note already on the draft is kept, and a repeated note is not added twice", () => {
+  const once = validateDraft({ ...articleDraft(), notes: "Verifica titlul." }, 0, "taxes-support", plainInput);
+  assert.match(once.notes, /^Verifica titlul\.\nVariantele devto, hashnode, medium/);
+  const again = validateDraft({ ...articleDraft(), notes: once.notes }, 0, "taxes-support", plainInput);
+  assert.equal(again.notes, once.notes);
+});
+
+// --- figures without a web source ---
+
+test("research request: a figure the model calls 'facts' or 'article' is unverified unless the verified facts state it", () => {
+  const text = "Impozitul este 10%, dobanda 6% si 1.000 lei.";
+  const draft = validateDraft(cited({
+    canonical_text: text,
+    variants: [variant("x", text)],
+    sources: [{ id: "S1", note: "" }],
+    figures: [
+      { value: "10%", context: "", source: "facts", source_id: "" },
+      { value: "6%", context: "", source: "facts", source_id: "" },
+      { value: "1.000 lei", context: "", source: "article", source_id: "" },
+    ],
+  }), 0, "taxes-support", researchInput, brief, [normalizeFigure("10%")]);
+  assert.equal(figureOf(draft, "10%").source, "facts");
+  assert.equal(figureOf(draft, "6%").source, "unverified");
+  assert.equal(figureOf(draft, "1.000 lei").source, "unverified");
+  // A plain request keeps what the model said.
+  const plain = validateDraft(cited({ figures: [{ value: "6%", context: "", source: "facts", source_id: "" }] }), 0, "taxes-support", plainInput);
+  assert.equal(figureOf(plain, "6%").source, "facts");
+});
+
+test("the verified facts are those valid on the request's day (input.today), as the writer was given them", () => {
+  for (const today of ["2025-06-01", "2026-10-10", "2099-01-01"]) {
+    const active = factFigures(activeFacts(loadFacts(), today));
+    const draft = validateDraft(cited({
+      canonical_text: "Termenul este 25 mai.",
+      variants: [variant("x", "Termenul este 25 mai.")],
+      sources: [{ id: "S1", note: "" }],
+      figures: [{ value: "25 mai", context: "", source: "facts", source_id: "" }],
+    }), 0, "taxes-support", { ...researchInput, today }, brief);
+    assert.equal(figureOf(draft, "25 mai").source, active.includes(normalizeFigure("25 mai")) ? "facts" : "unverified", today);
+  }
 });

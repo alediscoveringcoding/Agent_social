@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { readdirSync } from "node:fs";
 import * as nodeOs from "node:os";
-import { classifyCreateError, pickReconcileMatch, normalizeContent, processJob, RECONCILE_MIN_AGE_MS } from "./delivery.js";
+import { classifyCreateError, pickReconcileMatch, normalizeContent, processJob, sameContent, RECONCILE_CLOCK_SKEW_MS, RECONCILE_MIN_AGE_MS } from "./delivery.js";
 import { destinationHash } from "../delivery/hash.js";
 import { siteApi, LeaseLostError } from "../services/site-api.js";
 import { postizApi, PostizHttpError, parseRetryAfter } from "../services/postiz-api.js";
@@ -177,7 +177,7 @@ const query = { integrationId: "mock-bluesky", platform: "bluesky", text: "Terme
 
 test("reconcile matches by channel, content and time, ignoring HTML and case", () => {
   const posts = [
-    post("old", "Termenul este 25 mai.", T0 - 10 * 60_000), // before the attempt
+    post("old", "Termenul este 25 mai.", T0 - 12 * 60_000), // before the attempt, beyond the clock skew
     post("other-text", "Altceva cu totul si mai lung", T0 + 1000),
     post("other-channel", "Termenul este 25 mai.", T0 + 1000, "mock-x"),
     post("mine", "<p>TERMENUL este 25 mai.</p>", T0 + 5000),
@@ -187,9 +187,74 @@ test("reconcile matches by channel, content and time, ignoring HTML and case", (
   assert.equal(count, 1);
 });
 
-test("reconcile tolerates two minutes of clock skew but not more", () => {
+test("reconcile tolerates ten minutes of clock skew (a Postiz host that runs behind) but not more", () => {
+  assert.equal(RECONCILE_CLOCK_SKEW_MS, 10 * 60_000);
   assert.equal(pickReconcileMatch([post("a", query.text, T0 - 90_000)], query).match?.id, "a");
-  assert.equal(pickReconcileMatch([post("a", query.text, T0 - 150_000)], query).match, null);
+  assert.equal(pickReconcileMatch([post("a", query.text, T0 - 9 * 60_000)], query).match?.id, "a");
+  assert.equal(pickReconcileMatch([post("a", query.text, T0 - 11 * 60_000)], query).match, null);
+});
+
+// Two different posts on one channel that open the same way (a template, a recurring headline).
+const OPENING = "Atentie la termenul din luna mai: Declaratia Unica se depune pana pe 25 mai, iar plata impozitului are acelasi termen, deci pregateste din timp toate documentele";
+const tail = (word: string, n = 300) => ` ${word} `.repeat(Math.ceil(n / (word.length + 2))).slice(0, n);
+
+test("sameContent: equal texts, or a genuine truncation; a shared opening is not enough", () => {
+  assert.ok(OPENING.length >= 150);
+  const a = normalizeContent(OPENING + tail("alfa"));
+  const b = normalizeContent(OPENING + tail("beta"));
+  // Same first 150 characters, different posts.
+  assert.equal(sameContent(a, b), false);
+  assert.equal(sameContent(b, a), false);
+  // One is only the opening of the other: far shorter than 90% of it.
+  assert.equal(sameContent(normalizeContent(OPENING), a), false);
+  assert.equal(sameContent(a, normalizeContent(OPENING)), false);
+  // Equal after normalization.
+  assert.equal(sameContent(a, normalizeContent(`<p>${OPENING.toUpperCase()}</p>${tail("alfa")}`)), true);
+  assert.equal(sameContent("", a), false);
+  assert.equal(sameContent(a, ""), false);
+});
+
+test("sameContent: a prefix counts only when it is at least 90% of the longer text and long enough", () => {
+  const full = normalizeContent(OPENING + tail("alfa", 300));
+  const nineTenths = full.slice(0, Math.ceil(full.length * 0.9));
+  const eightyFive = full.slice(0, Math.floor(full.length * 0.85));
+  assert.equal(sameContent(full, nineTenths), true);
+  assert.equal(sameContent(nineTenths, full), true);
+  assert.equal(sameContent(full, eightyFive), false);
+  assert.equal(sameContent(eightyFive, full), false);
+  // A short prefix proves nothing, even when it is all of the shorter text.
+  assert.equal(sameContent("termenul este", "termenul este 25 mai"), false);
+  assert.equal(sameContent("termenul este 25 mai", "termenul este 25 mai"), true);
+});
+
+test("sameContent: our text over the platform limit may be stored cut at that limit", () => {
+  const ours = normalizeContent(OPENING + tail("alfa", 600));
+  const cut = ours.slice(0, 280);
+  assert.equal(sameContent(ours, cut), false);
+  assert.equal(sameContent(ours, cut, 280), true);
+  // Only ours may be the longer one, and the stored text must fill the limit.
+  assert.equal(sameContent(cut, ours, 280), false);
+  assert.equal(sameContent(ours, ours.slice(0, 120), 280), false);
+  assert.equal(sameContent(ours, ours.slice(0, 300), 280), false);
+  // The cut text must still be a prefix.
+  assert.equal(sameContent(ours, `${cut.slice(0, 200)} altceva`, 280), false);
+});
+
+test("reconcile does not take another post that shares the opening; it takes a cut of ours at the platform limit", () => {
+  const text = OPENING + tail("alfa", 100);
+  assert.ok(Array.from(text).length < 300);
+  const q = { integrationId: "mock-bluesky", platform: "bluesky", text, settings: {}, attemptStartMs: T0 };
+  const other = post("other", OPENING + tail("beta", 100), T0 + 2000);
+  assert.deepEqual(pickReconcileMatch([other], q), { match: null, count: 0 });
+  assert.equal(pickReconcileMatch([other, post("mine", text, T0 + 4000)], q).match.id, "mine");
+  // A text that fits the limit has no cut to explain: a third of it missing is another post.
+  assert.equal(pickReconcileMatch([post("shorter", text.slice(0, 200), T0 + 3000)], q).match, null);
+  // Bluesky takes 300: our text is longer and was stored cut near that limit.
+  const long = { ...q, text: OPENING + tail("alfa", 500) };
+  assert.ok(Array.from(long.text).length > 300);
+  assert.equal(pickReconcileMatch([post("cut", long.text.slice(0, 295), T0 + 3000)], long).match?.id, "cut");
+  assert.equal(pickReconcileMatch([post("cut-short", long.text.slice(0, 160), T0 + 3000)], long).match, null);
+  assert.deepEqual(pickReconcileMatch([post("other-long", OPENING + tail("beta", 500), T0 + 3000)], long), { match: null, count: 0 });
 });
 
 test("with several matches reconcile takes the closest to the attempt start", () => {

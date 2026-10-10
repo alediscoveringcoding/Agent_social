@@ -61,6 +61,13 @@ test("RESEARCH_MAX_SEARCHES is 1 to 20 and defaults to 5; RESEARCH_TIMEOUT_MS is
   assert.throws(() => parseConfig({ ...base, RESEARCH_TIMEOUT_MS: "0" }));
 });
 
+test("RESEARCH_TIMEOUT_MS stays inside the generation lease: at most 540000", () => {
+  assert.equal(parseConfig({ ...base, RESEARCH_TIMEOUT_MS: "540000" }).RESEARCH_TIMEOUT_MS, 540_000);
+  for (const bad of ["540001", "600000", "9999999", "-5", "1.5", "soon"]) {
+    assert.throws(() => parseConfig({ ...base, RESEARCH_TIMEOUT_MS: bad }), bad);
+  }
+});
+
 test("a blank WORKER_ID keeps the default", () => {
   assert.equal(parseConfig({ ...base, WORKER_ID: "" }).WORKER_ID, "worker-local-01");
   assert.equal(parseConfig({ ...base, WORKER_ID: "w2" }).WORKER_ID, "w2");

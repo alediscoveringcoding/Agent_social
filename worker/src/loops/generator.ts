@@ -4,18 +4,21 @@ import { LeaseLostError, isAmbiguousSiteError, isTransportError, siteApi } from 
 import { AiNotConfiguredError, generateDrafts, resolveChoice } from "../services/llm.js";
 import { AiOutputError } from "../services/ai-errors.js";
 import { isOurBlogUrl } from "../generator/content-rules.js";
-import { DEVTO_MAX_TAGS, HASHNODE_MAX_TAGS, MEDIUM_MAX_TAGS, MEDIUM_TAG_MAX, PH_TAGLINE_MAX, validateContent, validateVariantFields, type ValidationError } from "../generator/validators.js";
+import { DEVTO_MAX_TAGS, HASHNODE_MAX_TAGS, MEDIUM_MAX_TAGS, MEDIUM_TAG_MAX, PH_TAGLINE_MAX, validateContent, validateLinksFromSearch, validateVariantFields, type ValidationError } from "../generator/validators.js";
 import { variantSettings } from "../generator/variant-settings.js";
 import { kindOf } from "../platforms.js";
 import { normalizeFigure, unlistedFigures, type DraftFigure } from "../generator/figures.js";
-import { buildSystemPrompt, buildUserPrompt, brandFromSlug } from "../generator/prompts.js";
+import { activeFacts, buildSystemPrompt, buildUserPrompt, brandFromSlug } from "../generator/prompts.js";
 import { buildResearchPrompts } from "../generator/research-prompts.js";
-import { runResearch, type ResearchRunner } from "../generator/research.js";
+import { researchVerdict, runResearch, type ResearchRunner } from "../generator/research.js";
 import { wantsResearch, type ResearchBrief } from "../generator/research-types.js";
-import { mapDraftSources } from "../generator/source-map.js";
-import { DEFAULT_STYLE_PACK_DIR, loadStylePack } from "../generator/style-pack.js";
+import { addReviewerNotes, allowedLinkKeys, factFigures, loadFacts, mapDraftSources } from "../generator/source-map.js";
+import { DEFAULT_STYLE_PACK_DIR, loadStylePack, todayOf } from "../generator/style-pack.js";
 import { buildRepairPrompt, mergeRepairs } from "../generator/repair.js";
 import { boundDraftForSite } from "../generator/wire-bounds.js";
+
+/** Article platforms whose post needs a canonical URL on our blog. */
+const CANONICAL_PLATFORMS = ["devto", "hashnode", "medium"];
 
 export function startGeneratorLoop() {
   let running = false;
@@ -34,15 +37,32 @@ export function startGeneratorLoop() {
   return () => clearInterval(timer);
 }
 
-export function validateDraft(draft: any, i: number, brandSlug: string, input: any = {}, research?: ResearchBrief): {
+/** Figures of the verified facts the writer was given (those valid today, or on input.today). */
+const verifiedFactFigures = (input: any): string[] => factFigures(activeFacts(loadFacts(), todayOf(input)));
+
+/** `facts`: the verified figures of a research request; tests pass their own. */
+export function validateDraft(draft: any, i: number, brandSlug: string, input: any = {}, research?: ResearchBrief, facts?: readonly string[]): {
   client_ref: string; figures: DraftFigure[]; validation_errors: ValidationError[]; [key: string]: any;
 } {
   const errors: ValidationError[] = [];
+  const articleUrl: string | undefined = input.source?.type === "article" && typeof input.source.url === "string" ? input.source.url : undefined;
+  // devto, hashnode and medium need a canonical URL on our blog, which only an article request has.
+  // Drop them up front (with a note) rather than fail CANONICAL_MISSING after a paid repair.
+  const sourceType = input.source?.type;
+  if (sourceType && sourceType !== "article" && Array.isArray(draft.variants)) {
+    const kept = draft.variants.filter((v: any) => !CANONICAL_PLATFORMS.includes(String(v?.platform).toLowerCase()));
+    if (kept.length < draft.variants.length) {
+      const dropped = [...new Set(draft.variants.filter((v: any) => !kept.includes(v)).map((v: any) => String(v.platform).toLowerCase()))];
+      draft = addReviewerNotes({ ...draft, variants: kept }, [`Variantele ${dropped.join(", ")} au fost scoase: au nevoie de URL canonic pe blogul nostru, iar cererea nu porneste de la un articol.`]);
+    }
+  }
   // Source ids become the URLs the search found (amendment 07), then the wire limits apply to them.
-  const mapped = mapDraftSources(draft, research, wantsResearch(input));
+  const researching = wantsResearch(input);
+  const mapped = mapDraftSources(draft, research, researching, { articleUrl, facts: researching ? facts ?? verifiedFactFigures(input) : [] });
   errors.push(...mapped.errors);
   draft = boundDraftForSite(mapped.draft, errors);
-  const sourceUrl = draft.source_url || (input.source?.type === "article" ? input.source.url : null);
+  const allowedLinks = researching ? allowedLinkKeys(research, articleUrl) : undefined;
+  const sourceUrl = draft.source_url || articleUrl || null;
   // title and link are model-side helpers; the site gets them as settings.
   const variants = (draft.variants ?? []).map(({ title, link, ...v }: any) => {
     const platform = String(v.platform).toLowerCase();
@@ -62,6 +82,7 @@ export function validateDraft(draft: any, i: number, brandSlug: string, input: a
     const actual = v.text || (v.platform === "producthunt" ? launch?.description : kindOf(v.platform) === "article" ? article?.body_markdown : "") || "";
     texts.push(actual);
     errors.push(...validateContent(actual, v.platform).map(e => ({ ...e, field: `variants.${v.platform}` })));
+    if (allowedLinks) errors.push(...validateLinksFromSearch(actual, allowedLinks).map(e => ({ ...e, field: `variants.${v.platform}` })));
   }
   for (const v of variantFields) {
     errors.push(...validateVariantFields(v.platform, v));
@@ -96,7 +117,7 @@ export function validateDraft(draft: any, i: number, brandSlug: string, input: a
     if (!tagline.trim()) add("PH_TAGLINE_MISSING", "Product Hunt needs launch.tagline", "launch.tagline");
     else if (Array.from(tagline).length > PH_TAGLINE_MAX) add("PH_TAGLINE_TOO_LONG", `Tagline has ${Array.from(tagline).length} of ${PH_TAGLINE_MAX} characters`, "launch.tagline");
   }
-  for (const platform of ["devto", "hashnode", "medium"]) {
+  for (const platform of CANONICAL_PLATFORMS) {
     if (!platforms.has(platform)) continue;
     const canonical: string | undefined = article?.canonical_url;
     if (!canonical?.trim()) add("CANONICAL_MISSING", `${platform} needs article.canonical_url on our blog`, "article.canonical_url");
@@ -195,9 +216,14 @@ export async function processGenerationRequest(req: GenerationRequest, deps: {
       if (found.sources.length === 0) {
         throw new AiOutputError("RESEARCH_EMPTY", `The web search found no sources (${found.searches} searches), so nothing was written`);
       }
-      // research.md: nothing passed the audit. Skip the paid writer call and show the near misses.
-      if (/^\W*no qualifying story/i.test(found.text)) {
+      // research.md: nothing passed the audit, or (topic and article research) nothing was found.
+      // The verdict may follow a line of narration. Skip the paid writer call and show the notes.
+      const verdict = researchVerdict(found.text, input?.source?.type);
+      if (verdict === "no_story") {
         throw new AiOutputError("RESEARCH_NO_STORY", `No story passed the audit, so nothing was written. ${found.text.trim().slice(0, 1500)}`);
+      }
+      if (verdict === "no_sources") {
+        throw new AiOutputError("RESEARCH_EMPTY", `The research found nothing to write from, so nothing was written. ${found.text.trim().slice(0, 1500)}`);
       }
     }
     const system = buildSystemPrompt(brand, input, style);

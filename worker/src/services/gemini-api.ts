@@ -39,8 +39,17 @@ function retryDelayMs(status: number, body: any, attempt: number): number | unde
 
 type GeminiOpts = { fetch?: typeof fetch; signal?: AbortSignal; sleep?: (ms: number, signal?: AbortSignal) => Promise<void> };
 
-/** POST models.generateContent with the retry policy above; returns the parsed body of a 2xx answer. */
-async function generate(model: string, payload: object, opts: GeminiOpts): Promise<any> {
+/** An abort or a timeout, however it reached us (the signal's reason, or a DOMException from the body stream). */
+function isAbortOrTimeout(err: unknown): boolean {
+  const name = (err as { name?: unknown } | null)?.name;
+  return name === "AbortError" || name === "TimeoutError";
+}
+
+/**
+ * POST models.generateContent with the retry policy above; returns the parsed body of a 2xx answer
+ * and how many HTTP attempts it took (each one counts against the quota, failed ones included).
+ */
+async function generate(model: string, payload: object, opts: GeminiOpts): Promise<{ body: any; attempts: number }> {
   if (!config.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY is not set");
   }
@@ -50,16 +59,24 @@ async function generate(model: string, payload: object, opts: GeminiOpts): Promi
   const started = Date.now();
   let res!: Response;
   let body: any;
+  let attempts = 0;
   for (let attempt = 0; ; attempt++) {
     const attemptMs = Math.min(ATTEMPT_TIMEOUT_MS, Math.max(1, TOTAL_BUDGET_MS - (Date.now() - started)));
+    const signal = opts.signal ? AbortSignal.any([opts.signal, AbortSignal.timeout(attemptMs)]) : AbortSignal.timeout(attemptMs);
+    attempts++;
     res = await (opts.fetch ?? fetch)(url, {
       method: "POST",
       // Key in a header, never in the URL, so it can't end up in a logged URL.
       headers: { "Content-Type": "application/json", "x-goog-api-key": config.GEMINI_API_KEY },
       body: request,
-      signal: opts.signal ? AbortSignal.any([opts.signal, AbortSignal.timeout(attemptMs)]) : AbortSignal.timeout(attemptMs),
+      signal,
     });
-    body = await res.json().catch(() => ({}));
+    // A body that is not JSON reads as empty (the status decides). An abort or a timeout while the
+    // body is read is not that: rethrow it so the caller classifies it (lease lost, research timeout).
+    body = await res.json().catch((err: unknown) => {
+      if (signal.aborted || isAbortOrTimeout(err)) throw err;
+      return {};
+    });
     const delayMs = res.ok ? undefined : retryDelayMs(res.status, body, attempt);
     // A retry needs its wait plus at least a minute to answer.
     if (delayMs === undefined || Date.now() - started + delayMs + 60_000 > TOTAL_BUDGET_MS) break;
@@ -69,7 +86,7 @@ async function generate(model: string, payload: object, opts: GeminiOpts): Promi
   if (!res.ok) {
     throw new Error(`Gemini API ${res.status}: ${body?.error?.message || res.statusText}`);
   }
-  return body;
+  return { body, attempts };
 }
 
 /** The first candidate and its answer text; throws on a blocked prompt, a bad stop or no text. */
@@ -108,7 +125,7 @@ export async function generateDrafts(
   }
   logger.info("Calling Gemini API", { model });
 
-  const body = await generate(model, {
+  const { body } = await generate(model, {
     // camelCase like every other field here (the API reference name).
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents: [{ role: "user", parts: [{ text: userPrompt }] }],
@@ -135,6 +152,8 @@ export interface GeminiSearchResult {
   /** Offsets are UTF-8 bytes inside parts[partIndex]; chunks index into `chunks`. */
   supports: Array<{ partIndex: number; start: number; end: number; text: string; chunks: number[] }>;
   queries: string[];
+  /** HTTP attempts it took, retries included. */
+  calls: number;
 }
 
 /**
@@ -152,7 +171,7 @@ export async function searchWeb(
     throw new Error("GEMINI_API_KEY is not set");
   }
   logger.info("Calling Gemini API", { model, purpose: "research" });
-  const body = await generate(model, {
+  const { body, attempts } = await generate(model, {
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents: [{ role: "user", parts: [{ text: userPrompt }] }],
     tools: [{ google_search: {} }],
@@ -173,5 +192,6 @@ export async function searchWeb(
       chunks: (Array.isArray(s?.groundingChunkIndices) ? s.groundingChunkIndices : []).filter((i: unknown) => Number.isInteger(i)),
     })),
     queries: (meta.webSearchQueries ?? []).filter((q: unknown) => typeof q === "string"),
+    calls: attempts,
   };
 }

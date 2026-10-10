@@ -14,6 +14,9 @@ const envBool = (fallback: boolean) => z.preprocess(blankToUndefined, z.stringbo
 const envInt = (fallback: number) =>
   z.preprocess(blankToUndefined, z.coerce.number().int().positive().optional()).transform((v) => v ?? fallback);
 
+/** Upper bound of RESEARCH_TIMEOUT_MS: inside the 10 minute generation lease. */
+export const RESEARCH_TIMEOUT_MAX_MS = 540_000;
+
 const schema = z.object({
   SITE_BASE_URL: z.string().url().default("http://localhost:3000"),
   WORKER_TOKEN: z.string().min(32),
@@ -41,7 +44,9 @@ const schema = z.object({
   // max_uses; Gemini is only asked to stay within it). Claude bills $10 per 1,000 searches.
   RESEARCH_MAX_SEARCHES: z.preprocess(blankToUndefined, z.coerce.number().int().min(1).max(20).default(5)),
   // Time limit for the whole research step, continuations included. Blank = 300000 (5 minutes).
-  RESEARCH_TIMEOUT_MS: z.preprocess(blankToUndefined, z.coerce.number().int().positive().optional()),
+  // At most 540000 (9 minutes): inside the 10 minute generation lease, and the same total budget as
+  // Gemini's retries (services/gemini-api.ts).
+  RESEARCH_TIMEOUT_MS: z.preprocess(blankToUndefined, z.coerce.number().int().positive().max(RESEARCH_TIMEOUT_MAX_MS).optional()),
 
   // Private style pack for the generator (amendment 06). Blank means <repo>/prompts/private.
   STYLE_PACK_DIR: z.preprocess(blankToUndefined, z.string().optional()),
