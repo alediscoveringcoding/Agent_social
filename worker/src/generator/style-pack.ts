@@ -28,6 +28,8 @@ const brandSchema = z.object({
   emoji: z.enum(["none", "bullets-only", "light"]),
   avoid: z.array(z.string()),
   disclaimer: z.string(),
+  /** Search themes for the news research step. */
+  news_topics: z.array(z.string()),
 }).partial().strict();
 
 export type BrandProfile = z.infer<typeof brandSchema>;
@@ -39,15 +41,31 @@ export interface StylePack {
   platformNotes: Record<string, string>;
   /** Examples by playbook key, sorted by file name. */
   examples: Record<string, StyleExample[]>;
+  /** The owner's original brief per playbook key (original/<key>.md), each cut at ORIGINAL_MAX_CHARS. */
+  originals: Record<string, string>;
 }
 
 export const EXAMPLE_GUARD = "EXAMPLES (copy structure, rhythm and voice only; never reuse their facts, numbers, names, dates or sentences):";
 export const EXAMPLES_PER_PLATFORM = 2;
 export const EXAMPLES_BUDGET = 8000;
+/** About 6,000 tokens: one original brief per targeted platform. */
+export const ORIGINAL_MAX_CHARS = 24000;
+const TRUNCATED = "\n[brief cut here: too long]";
 
 /** linkedin-page shares the linkedin playbook, notes and examples. */
 export function playbookKey(platform: string): string {
   return platform === "linkedin-page" ? "linkedin" : platform;
+}
+
+/**
+ * prompts/style/content-types.md, split at its "## News" heading: `base` is always
+ * in the writer's prompt, `news` only for research and news requests. A file with
+ * no such heading has an empty `news`.
+ */
+export function loadContentTypes(publicDir = PROMPTS_DIR): { base: string; news: string } {
+  const text = fs.readFileSync(path.join(publicDir, "style", "content-types.md"), "utf8").replace(/\r\n/g, "\n").trim();
+  const at = text.search(/^## News\b/m);
+  return at < 0 ? { base: text, news: "" } : { base: text.slice(0, at).trim(), news: text.slice(at).trim() };
 }
 
 function readYamlBrand(file: string): BrandProfile | null {
@@ -63,14 +81,28 @@ function readYamlBrand(file: string): BrandProfile | null {
   }
 }
 
+/** Public list first, then the private additions, without repeats (case-insensitive). */
+function mergeTopics(base: string[] | undefined, over: string[] | undefined): string[] | undefined {
+  if (!base && !over) return undefined;
+  const seen = new Set<string>();
+  return [...(base ?? []), ...(over ?? [])].filter(t => {
+    const key = t.trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function mergeBrand(base: BrandProfile | null, over: BrandProfile | null): BrandProfile | null {
   if (!base) return over;
   if (!over) return base;
+  const news_topics = mergeTopics(base.news_topics, over.news_topics);
   return {
     ...base, ...over,
     language: { ...base.language, ...over.language, platforms: { ...base.language?.platforms, ...over.language?.platforms } },
     cta: { ...base.cta, ...over.cta },
     hashtags: { ...base.hashtags, ...over.hashtags },
+    ...(news_topics ? { news_topics } : {}),
   };
 }
 
@@ -95,6 +127,26 @@ function parseExample(file: string): StyleExample {
 const sortedFiles = (dir: string, ext: string): string[] =>
   fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith(ext)).sort() : [];
 
+/** Cut at the last paragraph break that fits, so a brief never ends mid-sentence. */
+export function capOriginal(text: string, max = ORIGINAL_MAX_CHARS): string {
+  if (text.length <= max) return text;
+  const room = max - TRUNCATED.length;
+  const head = text.slice(0, room);
+  const para = head.lastIndexOf("\n\n");
+  return `${(para > room / 2 ? head.slice(0, para) : head).trimEnd()}${TRUNCATED}`;
+}
+
+/** original/<key>.md by playbook key; README.md is documentation, not a brief. */
+function readOriginals(dir: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of sortedFiles(dir, ".md")) {
+    if (f.toLowerCase() === "readme.md") continue;
+    const text = fs.readFileSync(path.join(dir, f), "utf8").replace(/^﻿/, "").replace(/\r\n/g, "\n").trim();
+    if (text) out[playbookKey(f.slice(0, -3))] = capOriginal(text);
+  }
+  return out;
+}
+
 /**
  * Load the public brand profile, merge the private one over it and read the
  * private notes and examples. A missing pack or brand folder means generic only;
@@ -103,7 +155,7 @@ const sortedFiles = (dir: string, ext: string): string[] =>
 export function loadStylePack(slug: string, dir: string = DEFAULT_STYLE_PACK_DIR, publicDir = PROMPTS_DIR): StylePack {
   const publicBrand = loadPublicBrand(slug, publicDir);
   const root = path.join(dir, slug);
-  if (!fs.existsSync(root)) return { brand: publicBrand, platformNotes: {}, examples: {} };
+  if (!fs.existsSync(root)) return { brand: publicBrand, platformNotes: {}, examples: {}, originals: {} };
   const brand = mergeBrand(publicBrand, readYamlBrand(path.join(root, "brand.yaml")));
   const platformNotes: Record<string, string> = {};
   for (const f of sortedFiles(path.join(root, "platforms"), ".md")) {
@@ -119,7 +171,7 @@ export function loadStylePack(slug: string, dir: string = DEFAULT_STYLE_PACK_DIR
       if (list.length) examples[p] = list;
     }
   }
-  return { brand, platformNotes, examples };
+  return { brand, platformNotes, examples, originals: readOriginals(path.join(root, "original")) };
 }
 
 /** At most 2 per targeted playbook, in request order; later files drop first once over budget. */

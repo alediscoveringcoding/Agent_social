@@ -19,3 +19,5 @@ bullet: "-"
 emoji: none
 avoid: ["[Overused phrase]"]
 disclaimer: ""
+# Search themes added to the public list for news research.
+news_topics: ["[Search theme]"]

@@ -7,3 +7,5 @@ Before you answer, check each draft:
 - Card headline is the hook compressed; its figure matches the text.
 - Each variant uses its platform's language; Romanian text has no diacritics.
 - Same facts in every variant; limits respected.
+- Sources, when a research brief is given: each draft lists in `sources` the ids it relies on, and only ids from the brief. Every figure taken from the web has its `source_id` and is `unverified`. Every claim traces to the brief or to the verified facts, never to memory.
+- No URL in a LinkedIn or Instagram body, nor in any text whose platform rules ask for none.

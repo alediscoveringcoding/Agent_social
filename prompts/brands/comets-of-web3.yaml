@@ -17,3 +17,13 @@ bullet: "-"
 emoji: none
 avoid: []
 disclaimer: ""
+# Search themes for the news research step (a private brand.yaml adds to this list).
+news_topics:
+  - "MiCA licences granted, withdrawn or refused for exchanges and stablecoin issuers in the EU"
+  - "stablecoin delistings and which stablecoins are compliant in the EU"
+  - "crypto firms pivoting to AI or traditional finance, and the reverse"
+  - "banks, card networks and payment firms adopting stablecoins or tokenised settlement"
+  - "central bank projects for wholesale settlement and the digital euro"
+  - "crypto security and infrastructure acquisitions by financial groups"
+  - "regulatory deadlines: MiCA review, DAC8 reporting, consultations by the European Commission and ESMA"
+  - "enforcement actions on anti-money-laundering rules for crypto firms"

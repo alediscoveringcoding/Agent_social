@@ -1,3 +1,4 @@
 - 150-220 words. Paragraphs of 1-2 lines, separated by blank lines.
 - Order: hook; dated context; a list title ending in a colon; exactly three bullets, each with a number or a name; a quotable line; a relevance line or a question; the brand line; then the CTA.
 - No emoji, no links in the body, 1-3 inline hashtags. Write company names in full.
+- News posts (from a research brief): the hook is a duel or a before/after, entity first, two short sentences; a report on anonymous sources is attributed in the hook and the other side's position goes in the context. The context carries an absolute date. Each of the three points holds a figure or a name from a source listed in `sources`. Company tags (`@Name`) only when the brand notes ask for them. Sources never go in the body.

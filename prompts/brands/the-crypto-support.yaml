@@ -18,3 +18,13 @@ bullet: "-"
 emoji: none
 avoid: []
 disclaimer: ""
+# Search themes for the news research step (a private brand.yaml adds to this list).
+news_topics:
+  - "crypto taxation in Romania: rates, thresholds and filing deadlines"
+  - "DAC8 crypto reporting in the EU and what reaches the Romanian tax authority"
+  - "ANAF guidance, decisions and enforcement on crypto income"
+  - "MiCA for retail users: which platforms are licensed and what changes in the apps they use"
+  - "stablecoin delistings and migrations affecting EU retail users"
+  - "tax treatment of staking, airdrops and DeFi income in the EU"
+  - "exchange and broker tax reports for customers in Romania"
+  - "large institutions entering crypto, with the consequence for a Romanian holder"

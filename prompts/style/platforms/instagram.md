@@ -1,4 +1,5 @@
-- Line 1 is the hook and equals the card headline; it must be clear without context and free of acronyms.
+- Line 1 is the hook; the card headline is that hook compressed to 70 characters, with the same entity and figure. It must be clear without context and free of acronyms.
 - Then context, a line like "Ce se intampla de fapt:" followed by three bullets, one "so what" line, and a question about the reader's own money or app.
 - Then the brand CTA, then the hashtags at the very end.
 - 1,200-1,500 characters. No URLs in the caption.
+- News posts (from a research brief): pick stories that change something in the reader's own app, money or tax position, or that start with a household name; leave business-to-business stories out. Open with that name, define every technical term in plain words before using it, give dates in absolute form, and name the source inside the sentence ("conform ...") instead of a link. End with a question about the reader's own situation.
