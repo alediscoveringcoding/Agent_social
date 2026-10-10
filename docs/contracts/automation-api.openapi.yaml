@@ -62,7 +62,9 @@ paths:
       description: |
         `social_events` oldest first, strictly after `after`. Keep `next_after` and send it back as `after`
         on the next poll (every 5 minutes). When there is nothing new, `events` is empty and `next_after`
-        equals the `after` that was sent. Reading marks nothing as seen. Event types: `delivery_failed`,
+        equals the `after` that was sent. `latest_id` is the highest event id in the outbox (0 when it is
+        empty); a stored cursor above it means the database was reset since the last poll. Reading marks
+        nothing as seen. Event types: `delivery_failed`,
         `delivery_stale`, `account_reconnect_required`, `manual_due`, `drafts_ready`, `generation_failed`,
         `foreign_post`, `worker_silent`.
       parameters:
@@ -82,7 +84,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [events, next_after]
+                required: [events, next_after, latest_id]
                 properties:
                   events:
                     type: array
@@ -90,6 +92,10 @@ paths:
                   next_after:
                     type: integer
                     description: The id of the last event returned, or `after` when there are none.
+                  latest_id:
+                    type: integer
+                    minimum: 0
+                    description: The highest event id in the outbox, or 0 when it is empty. A cursor above it means the database was reset.
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422':
           description: '`after` or `limit` is not a valid integer in range (code INVALID_QUERY)'

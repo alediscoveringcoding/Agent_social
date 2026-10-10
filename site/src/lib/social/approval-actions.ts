@@ -77,6 +77,7 @@ const SQL_ERRORS: Record<string, string> = {
   SOCIAL_ACCOUNT_NOT_FOUND: 'Unul dintre conturi nu mai exista.',
   SOCIAL_REVISION_FROZEN: 'O revizie aprobata nu se mai schimba; se face o revizie noua.',
   SOCIAL_SOURCES_NOT_VERIFIED: 'Verifica toate sursele (bifeaza "Verificat") inainte de aprobare.',
+  SOCIAL_SOURCES_MISSING: 'Ciorna vine din cautare pe web dar nu are surse; nu poate fi aprobata. Genereaza din nou sau anuleaz-o.',
   SOCIAL_SOURCES_FROZEN: 'Postarea e aprobata si sursele ei nu se mai schimba. Editeaz-o ca sa faci o revizie noua.',
 }
 
@@ -216,6 +217,22 @@ async function saveTimesRevision(
   })
 }
 
+/**
+ * Did the generation request behind this post ask for a web search (research
+ * on, or a news source)? Same test as social_approve_revision (0013). A post
+ * that was not generated has no request, so no.
+ */
+async function askedForResearch(db: Db, postId: string): Promise<boolean> {
+  const { data: post, error: postError } = await db.from('social_posts').select('generation_request_id').eq('id', postId).maybeSingle()
+  if (postError) throw new Error(postError.message)
+  const requestId = (post as { generation_request_id: string | null } | null)?.generation_request_id
+  if (!requestId) return false
+  const { data: request, error: requestError } = await db.from('social_generation_requests').select('input').eq('id', requestId).maybeSingle()
+  if (requestError) throw new Error(requestError.message)
+  const input = (request as { input: { research?: unknown; source?: { type?: unknown } | null } | null } | null)?.input
+  return input?.research === true || input?.research === 'true' || input?.source?.type === 'news'
+}
+
 // ---------------------------------------------------------------------------
 // Approve (F5)
 // ---------------------------------------------------------------------------
@@ -258,14 +275,14 @@ export async function approvePost(
       return fail(SQL_ERRORS.SOCIAL_FIGURES_NOT_CHECKED)
     }
     // Amendment 07: refuse before a time revision is written (the database checks again).
-    const { data: openSources, error: sourcesError } = await db
+    const { data: postSources, error: sourcesError } = await db
       .from('social_post_sources')
-      .select('id')
+      .select('id, verified_at')
       .eq('post_id', post.id)
-      .is('verified_at', null)
-      .limit(1)
     if (sourcesError) throw new Error(sourcesError.message)
-    if (openSources?.length) return fail(SQL_ERRORS.SOCIAL_SOURCES_NOT_VERIFIED)
+    // A draft that came from a web search must carry its sources, or there is nothing to verify.
+    if (!postSources?.length && (await askedForResearch(db, post.id))) return fail(SQL_ERRORS.SOCIAL_SOURCES_MISSING)
+    if (postSources?.some((s) => s.verified_at === null)) return fail(SQL_ERRORS.SOCIAL_SOURCES_NOT_VERIFIED)
 
     // 2. Daily cap per Bucharest day (the database checks again, under a lock).
     const cap = await capError(db, post, planned)

@@ -241,9 +241,9 @@ describe('automation API (PRD 10.4)', () => {
       assert.equal(p3.json.next_after, ids[4])
 
       const none = await send(eventsRoute.GET, 'GET', `/events?after=${p3.json.next_after}`)
-      assert.deepEqual(none.json, { events: [], next_after: ids[4] }, 'nothing new: the cursor stays')
+      assert.deepEqual(none.json, { events: [], next_after: ids[4], latest_id: ids[4] }, 'nothing new: the cursor stays')
       const ahead = await send(eventsRoute.GET, 'GET', '/events?after=999999')
-      assert.deepEqual(ahead.json, { events: [], next_after: 999999 })
+      assert.deepEqual(ahead.json, { events: [], next_after: 999999, latest_id: ids[4] }, 'a cursor above latest_id is a reset database')
 
       await emit(1)
       const fresh = await send(eventsRoute.GET, 'GET', `/events?after=${ids[4]}`)

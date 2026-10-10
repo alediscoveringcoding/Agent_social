@@ -63,9 +63,45 @@ interface SourcePost {
 }
 
 /**
+ * The sources of a copy could not be written: cancel the copy (the same
+ * social_cancel the "Anuleaza postarea" button uses), leave a row in the
+ * activity log, and return the refusal to throw. Never throws itself.
+ */
+async function discardCopy(
+  db: ReturnType<typeof createAdminClient>,
+  actor: { userId: string; email: string },
+  copyId: string,
+  sourcePostId: string,
+  cause: unknown
+): Promise<ActionRefusal> {
+  console.error('[social/duplicatePost] the sources were not copied; cancelling the copy:', cause)
+  let cancelled = false
+  try {
+    await callRpc(db, 'social_cancel', { p_post: copyId, p_job: null, p_actor: actor.userId })
+    cancelled = true
+  } catch (e) {
+    console.error('[social/duplicatePost] the copy could not be cancelled:', e)
+  }
+  await logActivity(db, actor, {
+    action: 'social.post_duplicate_failed',
+    status: 'error',
+    postId: copyId,
+    details: { source_post_id: sourcePostId, reason: 'sources_not_copied', cancelled },
+  })
+  revalidatePath('/admin/social')
+  revalidatePath('/admin/social/ciorne')
+  return new ActionRefusal(
+    cancelled
+      ? 'Nu am putut copia sursele postarii, asa ca copia a fost anulata. Incearca din nou.'
+      : 'Nu am putut copia sursele postarii, iar copia ramasa nu a putut fi anulata. Anuleaz-o din lista de ciorne.'
+  )
+}
+
+/**
  * A new draft with the post's current content: same brand, texts, settings,
  * figures and images; no times, no approval. Destinations on accounts that
- * left the brand are dropped. Validation is recomputed.
+ * left the brand are dropped. Validation is recomputed. If the web sources
+ * cannot be copied too, the new draft is cancelled and the action fails.
  */
 export async function duplicatePost(postId: string): Promise<ActionResult<{ postId: string; dropped: number }>> {
   return runAdminAction<{ postId: string; dropped: number }>('duplicatePost', MESSAGES, async (actor) => {
@@ -155,7 +191,16 @@ export async function duplicatePost(postId: string): Promise<ActionResult<{ post
       .order('position', { ascending: true })
     if (sourceError) throw new Error(sourceError.message)
     const sources = (sourceRows ?? []) as Array<Record<string, unknown>>
-    if (sources.length) await callRpc<number>(db, 'social_add_post_sources', { p_post: newId, p_sources: sources })
+    if (sources.length) {
+      try {
+        const copied = await callRpc<number>(db, 'social_add_post_sources', { p_post: newId, p_sources: sources })
+        if (copied !== sources.length) throw new Error(`only ${copied} of ${sources.length} sources were copied`)
+      } catch (e) {
+        // A copy without its sources would look like a clean draft, and nothing
+        // would ask for the verification the original needed: cancel it.
+        throw await discardCopy(db, actor, newId, post.id, e)
+      }
+    }
 
     await logActivity(db, actor, {
       action: 'social.post_duplicated',
