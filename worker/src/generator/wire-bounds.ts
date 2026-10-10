@@ -1,4 +1,5 @@
 import type { ValidationError } from './validators.js';
+import { PLATFORMS } from '../platforms.js';
 
 /** Keep one oversized field from 422-ing an entire otherwise usable batch.
  * Content limits still go through repair; wire limits retain a review error.
@@ -17,7 +18,7 @@ export function boundDraftForSite(input: any, errors: ValidationError[]): any {
     if (Array.isArray(object?.[key]) && object[key].length > max) { issue(field); object[key] = object[key].slice(0, max); }
   };
   for (const [key, max] of [['title', 300], ['canonical_text', 100000], ['source_url', 2048], ['notes', 4000]] as const) text(draft, key, max, key);
-  list(draft, 'variants', 20, 'variants');
+  list(draft, 'variants', PLATFORMS.length, 'variants');
   for (const variant of draft.variants ?? []) {
     text(variant, 'text', 100000, `variants.${variant.platform}`);
     text(variant, 'title', 300, `variants.${variant.platform}.title`);

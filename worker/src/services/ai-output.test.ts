@@ -8,10 +8,10 @@ import { draftSchema, parseModelResponse } from "../generator/schema.js";
 import { modelDraft } from "../test-support/drafts.js";
 
 const batch = { drafts: [modelDraft()] };
-function claudeClient(stop: Anthropic.Message["stop_reason"], text = JSON.stringify(batch), inspect?: (params: ClaudeRequest) => void): ClaudeClient {
+function claudeClient(stop: Anthropic.Message["stop_reason"], text = JSON.stringify(batch), inspect?: (params: ClaudeRequest) => void, answered?: string): ClaudeClient {
   return { beta: { messages: { stream(params) {
     inspect?.(params);
-    return { finalMessage: async () => ({ stop_reason: stop, content: [{ type: "text", text, citations: [] }] }) };
+    return { finalMessage: async () => ({ model: answered ?? params.model, stop_reason: stop, content: [{ type: "text", text, citations: [] }] }) };
   } } } };
 }
 const response = (finishReason = "STOP", text = JSON.stringify(batch)) => ({ candidates: [{ finishReason, content: { parts: [{ text }] } }] });

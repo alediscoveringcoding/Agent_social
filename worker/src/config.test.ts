@@ -40,3 +40,16 @@ test("AI defaults: Claude Opus 5.5 at medium effort, blank keys are unset", () =
   assert.equal(c.GEMINI_API_KEY, undefined);
   assert.equal(parseConfig({ ...base, GENERATOR_EFFORT: "high" }).GENERATOR_EFFORT, "high");
 });
+
+test("GENERATION_REPAIR and CLAUDE_SERVER_FALLBACK default to true and parse like the other booleans", () => {
+  assert.equal(parseConfig(base).GENERATION_REPAIR, true);
+  assert.equal(parseConfig(base).CLAUDE_SERVER_FALLBACK, true);
+  assert.equal(parseConfig({ ...base, GENERATION_REPAIR: "false", CLAUDE_SERVER_FALLBACK: "off" }).GENERATION_REPAIR, false);
+  assert.equal(parseConfig({ ...base, GENERATION_REPAIR: "false", CLAUDE_SERVER_FALLBACK: "off" }).CLAUDE_SERVER_FALLBACK, false);
+  assert.equal(parseConfig({ ...base, GENERATION_REPAIR: "" }).GENERATION_REPAIR, true);
+});
+
+test("a blank WORKER_ID keeps the default", () => {
+  assert.equal(parseConfig({ ...base, WORKER_ID: "" }).WORKER_ID, "worker-local-01");
+  assert.equal(parseConfig({ ...base, WORKER_ID: "w2" }).WORKER_ID, "w2");
+});

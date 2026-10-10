@@ -7,6 +7,7 @@ import { buildRepairPrompt, mergeRepairs } from "./repair.js";
 import { buildSystemPrompt, buildUserPrompt } from "./prompts.js";
 import { detectFigures, unlistedFigures } from "./figures.js";
 import { modelDraft, variant } from "../test-support/drafts.js";
+import { PLATFORMS } from "../platforms.js";
 
 test("URLs without paths are allowed; standalone brand domains fail", () => {
   for (const text of ["https://taxes.support", "https://thecrypto.support.", "www.taxes.support", "https://taxes.support/2026"]) {
@@ -62,12 +63,12 @@ test("provider wire overflows remain reviewable instead of losing the draft batc
   const draft = validateDraft(modelDraft({
     notes: 'n'.repeat(4100),
     article: { title: 'Article', subtitle: 's'.repeat(510), body_markdown: 'Text', tags: [], canonical_url: '' },
-    variants: Array.from({ length: 21 }, () => variant("x", "Text")),
+    variants: Array.from({ length: PLATFORMS.length + 1 }, () => variant("x", "Text")),
     figures: [{ value: '', context: '', source: 'unverified' }, { value: '16%', context: 'c'.repeat(510), source: 'facts' }],
   }), 0, 'taxes-support');
   assert.equal(draft.notes.length, 4000);
   assert.equal(draft.article.subtitle.length, 500);
-  assert.equal(draft.variants.length, 20);
+  assert.equal(draft.variants.length, PLATFORMS.length);
   assert.equal(draft.figures.length, 1);
   assert.equal(draft.figures[0].context?.length, 500);
   assert.ok(draft.validation_errors.some(e => e.rule === 'wire_limit'));

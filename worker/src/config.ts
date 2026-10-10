@@ -17,7 +17,7 @@ const envInt = (fallback: number) =>
 const schema = z.object({
   SITE_BASE_URL: z.string().url().default("http://localhost:3000"),
   WORKER_TOKEN: z.string().min(32),
-  WORKER_ID: z.string().default("worker-local-01"),
+  WORKER_ID: z.preprocess(blankToUndefined, z.string().default("worker-local-01")),
 
   POSTIZ_BASE_URL: z.string().url().default("http://localhost:4007"),
   POSTIZ_API_KEY: z.string().min(1),
@@ -30,6 +30,10 @@ const schema = z.object({
   GENERATOR_MODEL: z.preprocess(blankToUndefined, z.string().default("claude-opus-5-5")),
   // PRD F2: effort set explicitly (Claude Opus 5.5 defaults to medium anyway).
   GENERATOR_EFFORT: z.preprocess(blankToUndefined, z.enum(["low", "medium", "high", "xhigh", "max"]).default("medium")),
+  // Server-side model fallback (still one HTTP call). Set false to fail instead of silently using another model.
+  CLAUDE_SERVER_FALLBACK: envBool(true),
+  // One repair call when a batch has validation errors. Set false to post drafts with their errors and spend nothing extra.
+  GENERATION_REPAIR: envBool(true),
   GEMINI_API_KEY: z.preprocess(blankToUndefined, z.string().optional()),
   GEMINI_MODEL: z.preprocess(blankToUndefined, z.string().default("gemini-3.8-flash")),
 

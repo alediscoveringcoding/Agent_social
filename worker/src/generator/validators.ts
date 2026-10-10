@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { findBareDomains } from "./content-rules.js";
+import { findBannedPhrases, findBareDomains, findUrls, maskUrls } from "./content-rules.js";
 import { measurePlatformLength, utf8Length } from "./text-length.js";
 import { detectFigures } from "./figures.js";
 
@@ -32,6 +32,7 @@ const DIACRITICS = /[ăâîșşțţĂÂÎȘŞȚŢ]/;
 /** Text limits per platform, in the unit measurePlatformLength counts (PRD section 5). */
 export const LENGTH_LIMITS: Record<string, number> = {
   x: 280,
+  producthunt: 260,
   facebook: 63206,
   "linkedin-page": 3000,
   instagram: 2200,
@@ -83,6 +84,9 @@ export const INDIEHACKERS_TITLE_MAX = 150;
 export const SE_TITLE_MIN = 15;
 export const SE_TITLE_MAX = 150;
 export const MEDIUM_MAX_TAGS = 3;
+export const DEVTO_MAX_TAGS = 4;
+export const HASHNODE_MAX_TAGS = 5;
+export const PH_TAGLINE_MAX = 60;
 export const MEDIUM_TAG_MAX = 25;
 
 /** Titles and links the platforms need next to the text (reddit, pinterest, lemmy). */
@@ -144,14 +148,11 @@ export function validateContent(text: string, platform: string): ValidationError
   }
 
   // Banned phrases
-  const lower = text.toLowerCase();
-  for (const phrase of bannedPhrases) {
-    if (lower.includes(phrase)) {
-      errors.push({
-        rule: "banned_phrase",
-        message: `Text contains banned phrase: "${phrase}"`,
-      });
-    }
+  for (const phrase of findBannedPhrases(text, bannedPhrases)) {
+    errors.push({
+      rule: "banned_phrase",
+      message: `Text contains banned phrase: "${phrase}"`,
+    });
   }
 
   // Bare domain check (domain outside of a URL)
@@ -175,14 +176,14 @@ export function validateContent(text: string, platform: string): ValidationError
   }
 
   // Instagram: no URLs in caption
-  if (platform === "instagram" && /https?:\/\//.test(text)) {
+  if (platform === "instagram" && findUrls(text).length > 0) {
     errors.push({
       rule: "instagram_no_urls",
       message: "Instagram captions should not contain URLs (they are not clickable)",
     });
   }
 
-  if (platform === "instagram" && (text.match(/(?:^|\s)#[\p{L}\p{N}_]+/gu) ?? []).length > 30) {
+  if (platform === "instagram" && (maskUrls(text).match(/(?:^|\s)#[\p{L}\p{N}_]+/gu) ?? []).length > 30) {
     errors.push({ rule: "instagram_hashtags", message: "Instagram allows at most 30 hashtags" });
   }
 

@@ -14,6 +14,11 @@ const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 // per-minute limit); a daily quota says "retry in 12h" and fails at once.
 const RETRY_DELAYS_MS = [5_000, 15_000];
 const MAX_WAIT_MS = 30_000;
+// Per attempt, and for all attempts with their waits together. The total stays under the 10 minute
+// generation lease (loops/generator.ts extends it by heartbeat): a retry that cannot finish in the
+// budget is not started, and the last attempt gets only what is left.
+const ATTEMPT_TIMEOUT_MS = 300_000;
+const TOTAL_BUDGET_MS = 540_000;
 
 /** Google's suggested wait (google.rpc.RetryInfo, e.g. "12s"), in ms. */
 function suggestedDelayMs(body: any): number | undefined {
@@ -56,19 +61,22 @@ export async function generateDrafts(
     },
   });
 
+  const started = Date.now();
   let res!: Response;
   let body: any;
   for (let attempt = 0; ; attempt++) {
+    const attemptMs = Math.min(ATTEMPT_TIMEOUT_MS, Math.max(1, TOTAL_BUDGET_MS - (Date.now() - started)));
     res = await (opts.fetch ?? fetch)(url, {
       method: "POST",
       // Key in a header, never in the URL, so it can't end up in a logged URL.
       headers: { "Content-Type": "application/json", "x-goog-api-key": config.GEMINI_API_KEY },
       body: request,
-      signal: opts.signal ? AbortSignal.any([opts.signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000),
+      signal: opts.signal ? AbortSignal.any([opts.signal, AbortSignal.timeout(attemptMs)]) : AbortSignal.timeout(attemptMs),
     });
     body = await res.json().catch(() => ({}));
     const delayMs = res.ok ? undefined : retryDelayMs(res.status, body, attempt);
-    if (delayMs === undefined) break;
+    // A retry needs its wait plus at least a minute to answer.
+    if (delayMs === undefined || Date.now() - started + delayMs + 60_000 > TOTAL_BUDGET_MS) break;
     logger.warn("Gemini busy, retrying", { status: res.status, attempt: attempt + 1, delayMs });
     await (opts.sleep ?? ((ms, signal) => delay(ms, undefined, { signal })))(delayMs, opts.signal);
   }
@@ -99,7 +107,7 @@ export async function generateDrafts(
 
   try {
     return { drafts: parseModelResponse(text), stopReason };
-  } catch {
-    throw new AiOutputError("AI_BAD_OUTPUT", "Gemini returned an invalid draft batch");
+  } catch (err) {
+    throw new AiOutputError("AI_BAD_OUTPUT", `Gemini returned an invalid draft batch: ${String(err).slice(0, 300)}`);
   }
 }
