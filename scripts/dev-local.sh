@@ -50,20 +50,29 @@ echo "Publishing: SOCIAL_PUBLISHING_ENABLED=$(env_value "$ROOT/site/.env.local" 
 $SITE_ONLY || echo "Worker:     WORKER_DRY_RUN=$(env_value "$ROOT/worker/.env" WORKER_DRY_RUN) (true = nothing is posted)"
 
 PIDS=()
+NAMES=()
+# $! is the setsid job itself (the sed in the process substitution is a separate
+# process), and setsid execs npm in place, so $! is the pid of the child to watch.
 start() { # name, dir, command: own session so Ctrl+C stops npm and its children
   local name="$1" dir="$2"; shift 2
   setsid bash -c 'cd "$1" && shift && exec "$@"' _ "$dir" "$@" \
     > >(sed -u "s/^/[$name] /") 2>&1 &
   PIDS+=("$!")
+  NAMES+=("${name%% *}")
 }
+STOPPING=false
 stop() {
-  trap - INT TERM EXIT
+  $STOPPING && return 0
+  STOPPING=true
+  trap '' INT TERM # a second Ctrl+C must not interrupt the shutdown
   echo; echo "Stopping..."
-  for pid in "${PIDS[@]}"; do kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true; done
+  for pid in ${PIDS[@]+"${PIDS[@]}"}; do kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true; done
   wait 2>/dev/null || true
   echo "Stopped."
 }
-trap stop INT TERM EXIT
+on_signal() { stop; exit 130; }
+trap on_signal INT TERM
+trap stop EXIT
 
 start "site  " "$ROOT/site" npm run dev
 for _ in $(seq 1 120); do port_busy 3000 && break; sleep 1; done
@@ -76,4 +85,13 @@ echo "Site:   http://localhost:3000/admin/social (login: http://localhost:3000/l
 $SITE_ONLY || echo "Worker: health on http://localhost:8787; drafts requested in Genereaza appear in Ciorne"
 echo "Ctrl+C stops everything."
 echo
-wait
+# Block until either child exits; then stop everything with a non-zero code.
+while :; do
+  wait -n "${PIDS[@]}" 2>/dev/null || true
+  for i in "${!PIDS[@]}"; do
+    if ! kill -0 "${PIDS[$i]}" 2>/dev/null; then
+      echo "dev-local: ${NAMES[$i]} stopped; stopping everything." >&2
+      exit 1 # the EXIT trap runs stop
+    fi
+  done
+done

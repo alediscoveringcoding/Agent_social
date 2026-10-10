@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 // Cross-platform startup script. Starts the Postiz stack in order and
-// prints a health summary. Run the worker and mock-site separately
+// prints a health summary. Run the site and worker separately (scripts/dev-local.sh)
 // (see README) so their logs stay visible.
 
 import { execSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const localDir = join(dirname(fileURLToPath(import.meta.url)), "..", "local");
 
 const isWindows = process.platform === "win32";
 
@@ -33,12 +37,17 @@ async function main() {
   console.log("\n1. Checking Docker...");
   if (!run("docker info", { stdio: "ignore" })) {
     console.error("Docker is not running. Start Docker Desktop first.");
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
   console.log("   Docker OK");
 
   console.log("\n2. Starting Postiz stack...");
-  run("docker compose up -d", { cwd: "local" });
+  if (!run("docker compose up -d", { cwd: localDir })) {
+    console.error("\n`docker compose up -d` failed. The Postiz stack did not start.");
+    process.exitCode = 1;
+    return;
+  }
 
   console.log("\n3. Waiting for Postiz to be ready...");
   let postizReady = false;
@@ -54,6 +63,7 @@ async function main() {
     process.stdout.write(".");
   }
   console.log(postizReady ? "\n   Postiz ready" : "\n   Postiz not ready (check logs)");
+  if (!postizReady) process.exitCode = 1;
 
   console.log("\n=== Health Summary ===");
   const services = [
@@ -65,9 +75,11 @@ async function main() {
     console.log(`  ${up ? "OK" : "DOWN"} ${svc.name} (${svc.url})`);
   }
 
-  console.log(`\n  Next: node worker/test/mock-site.mjs   (until the real site exists)`);
-  console.log(`        cd worker && npm run dev           (the worker)`);
+  console.log(`  Next: bash scripts/dev-local.sh      (site + worker, in WSL)`);
   console.log(`  To stop: node scripts/dev-down.mjs`);
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});

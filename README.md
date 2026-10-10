@@ -237,7 +237,7 @@ Data rules:
 
 ## Backups and restore
 
-The local Postiz backup helper is `scripts/backup-local.mjs`. Site data and private images live under `site/.local-db/` (or `LOCAL_DB_DIR`); stop the site before copying them together. Automated VPS backups and a clean-machine restore drill remain pending before real accounts are enabled.
+`node scripts/backup-local.mjs` (run it in WSL with the site and worker stopped) copies `site/.local-db/` (site data and private images) and dumps the local Postiz database into `~/agent-social-backups/<timestamp>/`; it refuses while the site holds the database and exits non-zero when a part fails. Automated VPS backups and a clean-machine restore drill remain pending before real accounts are enabled.
 
 ## Implementation phases
 

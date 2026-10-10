@@ -54,7 +54,13 @@ run() {
 }
 
 rand_hex() { node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"; }
-env_get() { grep -E "^$2=" "$1" 2>/dev/null | tail -n 1 | cut -d= -f2-; }
+env_get() { # file, key: last value, without CR and surrounding quotes
+  local v
+  v=$(grep -E "^$2=" "$1" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d '\r') || true
+  v="${v#\"}"; v="${v%\"}"; v="${v#\'}"; v="${v%\'}"
+  printf '%s\n' "$v"
+}
+port_busy() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 
 # ---------------------------------------------------------------------------
 bold "Environment"
@@ -85,6 +91,12 @@ fi
 
 # ---------------------------------------------------------------------------
 bold "Dependencies"
+# npm ci replaces node_modules: never under a running site or worker.
+for p in 3000 8787; do
+  if port_busy "$p"; then
+    die "port $p is in use: the site or worker is running. Stop them first (e.g. Ctrl+C in the dev-local.sh terminal), then run this again."
+  fi
+done
 # Reinstall when the lockfile, the OS/CPU or the Node ABI changed.
 install_deps() {
   local dir="$1"
