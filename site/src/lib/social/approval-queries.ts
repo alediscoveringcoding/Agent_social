@@ -259,13 +259,31 @@ interface JobRow {
   cancelled_at: string | null
 }
 
+/** Ids per `.in()` call, so the request URL and the 1000-row cap stay safe in Supabase mode. */
+const ID_CHUNK = 100
+
+function chunks<T>(items: readonly T[], size = ID_CHUNK): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+/** Run one query per chunk of ids and concatenate the rows (in chunk order). */
+async function inChunks<R>(ids: readonly string[], run: (chunk: string[]) => PromiseLike<{ data: unknown; error: { message: string } | null }>, what: string, size = ID_CHUNK): Promise<R[]> {
+  const out: R[] = []
+  for (const chunk of chunks(ids, size)) out.push(...(must<R[]>(await run(chunk), what) ?? []))
+  return out
+}
+
+const byPlatform = <T extends { platform: string }>(rows: T[]): T[] => rows.sort((a, b) => (a.platform < b.platform ? -1 : a.platform > b.platform ? 1 : 0))
+
 const JOB_COLUMNS =
   'id, destination_id, account_id, status, run_at, attempts, remote_url, published_at, last_error_code, last_error_message, manual_done_at, cancelled_at'
 
 /** Jobs of these destinations. */
 export async function jobsForDestinations(db: Db, destinationIds: readonly string[]): Promise<JobRow[]> {
   if (!destinationIds.length) return []
-  return must<JobRow[]>(await db.from('social_delivery_jobs').select(JOB_COLUMNS).in('destination_id', destinationIds), 'jobs') ?? []
+  return inChunks<JobRow>(destinationIds, (ids) => db.from('social_delivery_jobs').select(JOB_COLUMNS).in('destination_id', ids), 'jobs')
 }
 
 /**
@@ -330,19 +348,26 @@ export async function listPosts(filter: PostFilter = 'active', limit = 200): Pro
   ) ?? []
   if (!posts.length) return []
 
-  const revisions = must<Array<{ id: string; post_id: string; number: number }>>(
-    await db.from('social_post_revisions').select('id, post_id, number').in('post_id', posts.map((p) => p.id)),
-    'revisions'
-  ) ?? []
+  const revisions = await inChunks<{ id: string; post_id: string; number: number }>(
+    posts.map((p) => p.id),
+    (ids) => db.from('social_post_revisions').select('id, post_id, number').in('post_id', ids),
+    'revisions',
+    50
+  )
   const revById = new Map(revisions.map((r) => [r.id, r]))
-  const dests = must<Array<{ id: string; revision_id: string; account_id: string; platform: Platform; scheduled_at: string | null; account: { display_name: string } | null }>>(
-    await db
-      .from('social_destinations')
-      .select('id, revision_id, account_id, platform, scheduled_at, account:social_accounts(display_name)')
-      .in('revision_id', revisions.map((r) => r.id))
-      .order('platform'),
-    'destinations'
-  ) ?? []
+  const dests = byPlatform(
+    await inChunks<{ id: string; revision_id: string; account_id: string; platform: Platform; scheduled_at: string | null; account: { display_name: string } | null }>(
+      revisions.map((r) => r.id),
+      (ids) =>
+        db
+          .from('social_destinations')
+          .select('id, revision_id, account_id, platform, scheduled_at, account:social_accounts(display_name)')
+          .in('revision_id', ids)
+          .order('platform'),
+      'destinations',
+      50
+    )
+  )
   const jobs = await jobsForDestinations(db, dests.map((d) => d.id))
   const jobByDest = new Map(jobs.map((j) => [j.destination_id, j]))
 
@@ -416,18 +441,23 @@ export async function getPost(postId: string): Promise<PostDetail | null> {
   const revisionIds = revisions.map((r) => r.id)
 
   const [approvals, allDests] = await Promise.all([
-    db
-      .from('social_approvals')
-      .select('id, revision_id, approved_by_email, approved_at, approval_hash, figures_checked, revoked_at, revoked_reason')
-      .in('revision_id', revisionIds)
-      .order('approved_at', { ascending: false })
-      .then((r) => must<Array<Omit<PostApprovalView, 'revision_number'>>>(r, 'approvals') ?? []),
-    db
-      .from('social_destinations')
-      .select(DESTINATION_COLUMNS)
-      .in('revision_id', revisionIds)
-      .order('platform')
-      .then((r) => must<DestinationRow[]>(r, 'destinations') ?? []),
+    inChunks<Omit<PostApprovalView, 'revision_number'>>(
+      revisionIds,
+      (ids) =>
+        db
+          .from('social_approvals')
+          .select('id, revision_id, approved_by_email, approved_at, approval_hash, figures_checked, revoked_at, revoked_reason')
+          .in('revision_id', ids)
+          .order('approved_at', { ascending: false }),
+      'approvals',
+      50
+    ).then((rows) => rows.sort((a, b) => (a.approved_at < b.approved_at ? 1 : a.approved_at > b.approved_at ? -1 : 0))),
+    inChunks<DestinationRow>(
+      revisionIds,
+      (ids) => db.from('social_destinations').select(DESTINATION_COLUMNS).in('revision_id', ids).order('platform'),
+      'destinations',
+      50
+    ).then(byPlatform),
   ])
   const jobs = await jobsForDestinations(db, allDests.map((d) => d.id))
   const jobByDest = new Map(jobs.map((j) => [j.destination_id, j]))

@@ -57,6 +57,33 @@ interface DraftDestinationRow {
   } | null
 }
 
+/**
+ * Scheduled destinations of the current revision of each live draft post in
+ * the window. The current revisions are picked first, so old revisions never
+ * crowd the limit out.
+ */
+async function draftDestinations(admin: ReturnType<typeof createAdminClient>, from: string, to: string): Promise<DraftDestinationRow[]> {
+  const posts = await admin.from('social_posts').select('id, current_revision_id').eq('status', 'draft').is('cancelled_at', null).limit(2000)
+  if (posts.error) throw new Error(`posts: ${posts.error.message}`)
+  const revisionIds = ((posts.data ?? []) as Array<{ current_revision_id: string | null }>).map((p) => p.current_revision_id).filter((id): id is string => !!id)
+  const out: DraftDestinationRow[] = []
+  for (let i = 0; i < revisionIds.length; i += 100) {
+    const r = await admin
+      .from('social_destinations')
+      .select(
+        'id, platform, scheduled_at, revision_id, account:social_accounts(display_name, mode), revision:social_post_revisions(post:social_posts!social_post_revisions_post_id_fkey(id, title, status, current_revision_id, cancelled_at, brand:social_brands(name)))'
+      )
+      .in('revision_id', revisionIds.slice(i, i + 100))
+      .gte('scheduled_at', from)
+      .lt('scheduled_at', to)
+      .order('scheduled_at')
+      .limit(500)
+    if (r.error) throw new Error(`destinations: ${r.error.message}`)
+    out.push(...((r.data ?? []) as unknown as DraftDestinationRow[]))
+  }
+  return out.sort((x, y) => (x.scheduled_at < y.scheduled_at ? -1 : x.scheduled_at > y.scheduled_at ? 1 : 0)).slice(0, 500)
+}
+
 export async function getCalendarWeek(monday: string, opts: { cancelled?: boolean } = {}): Promise<CalendarWeek> {
   const admin = createAdminClient()
   const { start, end } = weekBoundsUtc(monday)
@@ -67,19 +94,7 @@ export async function getCalendarWeek(monday: string, opts: { cancelled?: boolea
       excludeStatuses: opts.cancelled ? [] : ['cancelled'],
       limit: 500,
     }),
-    admin
-      .from('social_destinations')
-      .select(
-        'id, platform, scheduled_at, revision_id, account:social_accounts(display_name, mode), revision:social_post_revisions(post:social_posts!social_post_revisions_post_id_fkey(id, title, status, current_revision_id, cancelled_at, brand:social_brands(name)))'
-      )
-      .gte('scheduled_at', start.toISOString())
-      .lt('scheduled_at', end.toISOString())
-      .order('scheduled_at')
-      .limit(500)
-      .then((r) => {
-        if (r.error) throw new Error(`destinations: ${r.error.message}`)
-        return (r.data ?? []) as unknown as DraftDestinationRow[]
-      }),
+    draftDestinations(admin, start.toISOString(), end.toISOString()),
   ])
 
   const entries: CalendarEntry[] = jobs.map((j) => ({

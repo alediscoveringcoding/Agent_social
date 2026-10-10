@@ -84,7 +84,25 @@ export function unverifiedFigures(figures: ReadonlyArray<DraftFigure>): DraftFig
 }
 
 function normalizeFigure(value: string): string {
-  return value.toLowerCase().replace(/\s+/g, '').replace(',', '.')
+  return value
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/,/g, '.')
+    .replace(/(\d)\.(\d*[1-9])?0+(?=\D|$)/g, (_m, a: string, b?: string) => (b ? a + '.' + b : a))
+}
+
+/** The number inside a normalized figure ('15%' gives '15'), or null when it has none. */
+function figureNumber(normalized: string): string | null {
+  return normalized.match(/\d+(?:\.\d+)?/)?.[0] ?? null
+}
+
+/** Equal after normalization, or one side is a bare number equal to the other side's number. */
+function sameFigure(a: string, b: string): boolean {
+  if (a === b) return true
+  const bare = /^\d+(?:\.\d+)?$/
+  if (bare.test(a) && figureNumber(b) === a) return true
+  if (bare.test(b) && figureNumber(a) === b) return true
+  return false
 }
 
 /**
@@ -96,6 +114,6 @@ export function unlistedFigures(text: string, listed: ReadonlyArray<DraftFigure>
   return detectFigures(text).filter((m) => {
     if (m.kind === 'number' && m.value.length <= 1) return false
     const v = normalizeFigure(m.value)
-    return !known.some((k) => k.includes(v) || v.includes(k))
+    return !known.some((k) => sameFigure(k, v))
   })
 }

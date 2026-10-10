@@ -230,8 +230,8 @@ const ARTICLE_BODY_LABELS: Partial<Record<Platform, string>> = {
   github: 'Descriere',
 }
 
-function articleLike(platform: Platform, kind: PostKind): boolean {
-  return PLATFORM_KIND[platform] === 'article' || (kind === 'article' && platform !== 'producthunt')
+function articleLike(platform: Platform, _kind: PostKind): boolean {
+  return platform !== 'producthunt' && PLATFORM_KIND[platform] === 'article'
 }
 
 export function buildHandoff(input: HandoffInput): Handoff {

@@ -53,13 +53,13 @@ function revalidateAccounts() {
   revalidatePath('/admin/social/conturi')
 }
 
-const HTTP = /^https?:\/\/[^\s]+$/i
+const HTTPS = /^https:\/\/[^\s]+$/i
 
 function cleanUrl(v: unknown, what: string): string | null {
   if (v === null || v === undefined) return null
   const s = String(v).trim()
   if (!s) return null
-  if (!HTTP.test(s) || s.length > 2048) throw new ActionRefusal(`${what} trebuie sa inceapa cu https://.`)
+  if (!HTTPS.test(s) || s.length > 2048) throw new ActionRefusal(`${what} trebuie sa inceapa cu https://.`)
   return s
 }
 

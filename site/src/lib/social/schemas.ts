@@ -141,7 +141,7 @@ export const DraftSchema = z.object({
   title: z.string().max(300).nullish(),
   canonical_text: z.string().max(100_000),
   source_url: draftUrl,
-  variants: z.array(VariantSchema).max(20),
+  variants: z.array(VariantSchema).max(PLATFORMS.length),
   article: ArticleSchema.nullish(),
   launch: LaunchSchema.nullish(),
   card: CardSpecSchema.nullish(),

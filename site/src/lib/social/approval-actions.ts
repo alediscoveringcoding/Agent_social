@@ -72,6 +72,8 @@ const SQL_ERRORS: Record<string, string> = {
   SOCIAL_NOT_CANCELLABLE: 'Destinatia a plecat deja spre platforma si nu mai poate fi anulata.',
   SOCIAL_DESTINATION_IN_FLIGHT: 'O destinatie tocmai a plecat spre platforma. Reincarca pagina si incearca din nou.',
   SOCIAL_ACCOUNT_OTHER_BRAND: 'Unul dintre conturi nu apartine brandului postarii.',
+  SOCIAL_BRAND_MISMATCH: 'Unul dintre conturi a fost mutat la alt brand. Scoate destinatia sau alege alt cont.',
+  SOCIAL_SCHEDULE_STALE: 'Ora unei destinatii a trecut de mai mult de 2 ore. Alege o ora noua.',
   SOCIAL_ACCOUNT_NOT_FOUND: 'Unul dintre conturi nu mai exista.',
   SOCIAL_REVISION_FROZEN: 'O revizie aprobata nu se mai schimba; se face o revizie noua.',
 }
@@ -154,7 +156,9 @@ function wantedTimes(rows: ReadonlyArray<ApprovalDestination>, times: Record<str
   const out = new Map<string, string | null>()
   for (const r of rows) {
     const asked = times?.[r.account_id]
-    const at = asked ? localToInstant(asked) : r.scheduled_at ? new Date(r.scheduled_at) : null
+    // An empty or half-filled date/time keeps the stored time instead of clearing it.
+    const given = asked && asked.date && asked.time ? localToInstant(asked) : null
+    const at = given ?? (r.scheduled_at ? new Date(r.scheduled_at) : null)
     out.set(r.account_id, at ? at.toISOString() : null)
   }
   return out
@@ -337,6 +341,7 @@ export async function reschedulePost(
     const times = wantedTimes(movable, input.times)
     for (const r of movable) {
       const at = times.get(r.account_id)
+      if (!at && r.scheduled_at) return fail(`Alege data si ora pentru ${r.account.display_name}.`)
       if (at && new Date(at).getTime() < now.getTime() - 60_000) {
         return fail(`Ora pentru ${r.account.display_name} (${formatBucharest(at)}) a trecut deja.`)
       }

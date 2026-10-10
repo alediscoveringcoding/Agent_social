@@ -1012,3 +1012,12 @@ export function validateCardSpec(card: CardSpec, legalNames: ReadonlyArray<strin
   }
   return issues
 }
+
+/** https only: for links a person opens or follows (editor and profile URLs, published links). */
+export function isHttpsUrl(v: string): boolean {
+  try {
+    return new URL(v).protocol === 'https:'
+  } catch {
+    return false
+  }
+}

@@ -142,13 +142,23 @@ export function reconcileFigures(
   actorEmail: string,
   now: Date
 ): EditFigure[] {
-  const before = new Map(base.map((f) => [figureKey(f), f]))
+  // Base figures by value, in order: two figures with the same value (different sources) are matched one by one.
+  const before = new Map<string, EditFigure[]>()
+  for (const f of base) before.set(figureKey(f), [...(before.get(figureKey(f)) ?? []), f])
+  const take = (f: EditFigure): EditFigure | undefined => {
+    const queue = before.get(figureKey(f))
+    if (!queue?.length) return undefined
+    const wanted = (f.context ?? null) === null ? -1 : queue.findIndex((q) => (q.context ?? null) === f.context)
+    const sameSource = queue.findIndex((q) => q.source === f.source)
+    const at = wanted >= 0 ? wanted : sameSource >= 0 ? sameSource : 0
+    return queue.splice(at, 1)[0]
+  }
   const out: EditFigure[] = []
   for (const f of edited) {
     const value = f.value.trim().slice(0, 100)
     if (!value) continue
     if (!(FIGURE_SOURCES as readonly string[]).includes(f.source)) throw new DraftEditError(`Sursa cifrei "${value}" nu e valida.`)
-    const prev = before.get(figureKey(f))
+    const prev = take(f)
     const context = (f.context ?? prev?.context ?? null)?.slice(0, 500) ?? null
     if (!prev) {
       // A figure a person adds is either confirmed by them or left unverified.

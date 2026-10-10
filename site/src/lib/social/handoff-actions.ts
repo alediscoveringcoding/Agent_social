@@ -22,13 +22,13 @@ const MESSAGES: SqlMessages = {
   SOCIAL_ACCOUNT_NOT_FOUND: 'Unul dintre conturi nu mai exista.',
 }
 
-const HTTP = /^https?:\/\/[^\s]+$/i
+const HTTPS = /^https:\/\/[^\s]+$/i
 
 export async function markManualPublished(jobId: string, url: string): Promise<ActionResult<{ alreadyDone: boolean }>> {
   return runAdminAction<{ alreadyDone: boolean }>('markManualPublished', MESSAGES, async (actor) => {
     if (!isUuid(jobId)) return { ok: false, error: MESSAGES.SOCIAL_JOB_NOT_FOUND as string }
     const link = String(url ?? '').trim()
-    if (!HTTP.test(link) || link.length > 2048) return { ok: false, error: MESSAGES.SOCIAL_URL_REQUIRED as string }
+    if (!HTTPS.test(link) || link.length > 2048) return { ok: false, error: MESSAGES.SOCIAL_URL_REQUIRED as string }
     const db = createAdminClient()
     const result = await callRpc<{ ok: boolean; idempotent?: boolean }>(db, 'social_mark_manual_done', {
       p_job: jobId,
