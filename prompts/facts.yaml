@@ -1,5 +1,11 @@
 # Verified facts for the generator. Each fact has a fiscal year or validity range.
 # Only the generator uses these. A human maintains this file.
+#
+# The generator ignores a fact whose valid_to is before today or whose valid_from is after
+# today (dates in Europe/Bucharest, YYYY-MM-DD). Facts without dates always apply.
+# An expired fact is NOT replaced automatically: the owner must add the current year's rates
+# below (with their own valid_from and valid_to) at the start of each fiscal year, or the
+# generator has no verified rate to quote and will leave rates out.
 
 tax_rates:
   - fact: "Impozitul pe castigurile din criptomonede este 10%"
@@ -21,5 +27,5 @@ thresholds:
     source: "Codul Fiscal"
 
 product:
-  - fact: "The Crypto Support calculeaza automat impozitul pe tranzactiile crypto conform regulilor ANAF"
+  - fact: "Taxes Support calculeaza automat impozitul pe tranzactiile crypto conform regulilor ANAF"
   - fact: "Suporta importul de tranzactii de pe Binance, Coinbase, Kraken si alte exchange-uri"

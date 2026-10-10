@@ -37,11 +37,11 @@ export type BrandProfile = z.infer<typeof brandSchema>;
 export interface StyleExample { file: string; content_type?: string; note?: string; text: string }
 export interface StylePack {
   brand: BrandProfile | null;
-  /** Brand notes appended after the public playbook, by playbook key (linkedin, instagram...). */
+  /** Brand notes appended after the public playbook, by file name (linkedin, linkedin-page, instagram...). */
   platformNotes: Record<string, string>;
-  /** Examples by playbook key, sorted by file name. */
+  /** Examples by folder name, each list sorted by file name. */
   examples: Record<string, StyleExample[]>;
-  /** The owner's original brief per playbook key (original/<key>.md), each cut at ORIGINAL_MAX_CHARS. */
+  /** The owner's original brief per file name (original/<name>.md), each cut at ORIGINAL_MAX_CHARS. */
   originals: Record<string, string>;
 }
 
@@ -57,6 +57,56 @@ export function playbookKey(platform: string): string {
   return platform === "linkedin-page" ? "linkedin" : platform;
 }
 
+/** True when a LinkedIn post (profile or company page) is among the targets. */
+export function targetsLinkedin(platforms: readonly string[]): boolean {
+  return platforms.some(p => playbookKey(p) === "linkedin");
+}
+
+/**
+ * The key of a platform's entry in a style-pack map (notes, examples, originals): its own
+ * file first, then its playbook's. So `linkedin-page` uses `linkedin-page` when the pack has
+ * it and `linkedin` otherwise; `linkedin` never picks up `linkedin-page`.
+ */
+export function packKey(map: Record<string, unknown> | undefined, platform: string): string | undefined {
+  if (!map) return undefined;
+  if (Object.hasOwn(map, platform)) return platform;
+  const shared = playbookKey(platform);
+  return Object.hasOwn(map, shared) ? shared : undefined;
+}
+
+export function packEntry<T>(map: Record<string, T> | undefined, platform: string): T | undefined {
+  const key = packKey(map, platform);
+  return key === undefined ? undefined : map![key];
+}
+
+/** Europe/Bucharest: the calendar the brands, the deadlines and the facts use. */
+export const PROMPT_TIME_ZONE = "Europe/Bucharest";
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Calendar date (YYYY-MM-DD) of an instant in Europe/Bucharest. */
+export function bucharestDay(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: PROMPT_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const part = (type: string) => parts.find(p => p.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+/** `input.today` (a real YYYY-MM-DD date) pins the date for tests; otherwise today in Europe/Bucharest. */
+export function todayOf(input: any, now: Date = new Date()): string {
+  const pinned = input?.today;
+  if (typeof pinned === "string" && DAY_PATTERN.test(pinned)) {
+    const at = new Date(`${pinned}T00:00:00Z`);
+    if (!Number.isNaN(at.getTime()) && at.toISOString().slice(0, 10) === pinned) return pinned;
+  }
+  return bucharestDay(now);
+}
+
+/** A YYYY-MM-DD date moved by whole days (calendar arithmetic, no time zone involved). */
+export function addDays(day: string, days: number): string {
+  const at = new Date(`${day}T00:00:00Z`);
+  at.setUTCDate(at.getUTCDate() + days);
+  return at.toISOString().slice(0, 10);
+}
+
 /**
  * prompts/style/content-types.md, split at its "## News" heading: `base` is always
  * in the writer's prompt, `news` only for research and news requests. A file with
@@ -66,6 +116,33 @@ export function loadContentTypes(publicDir = PROMPTS_DIR): { base: string; news:
   const text = fs.readFileSync(path.join(publicDir, "style", "content-types.md"), "utf8").replace(/\r\n/g, "\n").trim();
   const at = text.search(/^## News\b/m);
   return at < 0 ? { base: text, news: "" } : { base: text.slice(0, at).trim(), news: text.slice(at).trim() };
+}
+
+/** The parts of the News section of content-types.md, so a request gets only what applies to it. */
+export interface NewsParts {
+  /** Story types, what to leave out and the audit, without the LinkedIn-only criterion. */
+  audit: string;
+  /** The "Taggable entities (LinkedIn)" audit criterion, or "". */
+  linkedinCriterion: string;
+  /** Hook shapes. */
+  hooks: string;
+  /** The LinkedIn news post structure, or "". */
+  linkedinPost: string;
+}
+
+export function splitNews(news: string): NewsParts {
+  const hooksAt = news.search(/^Hooks:/m);
+  const postAt = news.search(/^LinkedIn news post\b/m);
+  const auditEnd = hooksAt >= 0 ? hooksAt : postAt >= 0 ? postAt : news.length;
+  const hooksEnd = hooksAt >= 0 && postAt > hooksAt ? postAt : news.length;
+  const auditLines = news.slice(0, auditEnd).trim().split("\n");
+  const isCriterion = (line: string) => /^- Taggable entities\b/.test(line);
+  return {
+    audit: auditLines.filter(l => !isCriterion(l)).join("\n").trim(),
+    linkedinCriterion: auditLines.filter(isCriterion).join("\n").trim(),
+    hooks: hooksAt >= 0 ? news.slice(hooksAt, hooksEnd).trim() : "",
+    linkedinPost: postAt >= 0 ? news.slice(postAt).trim() : "",
+  };
 }
 
 function readYamlBrand(file: string): BrandProfile | null {
@@ -81,11 +158,18 @@ function readYamlBrand(file: string): BrandProfile | null {
   }
 }
 
-/** Public list first, then the private additions, without repeats (case-insensitive). */
-function mergeTopics(base: string[] | undefined, over: string[] | undefined): string[] | undefined {
+/** The research call gets at most this many search themes. */
+export const MAX_TOPICS = 14;
+
+/**
+ * The private additions first (the owner's own priorities), then the public list, without
+ * repeats (case-insensitive; the first spelling wins). The research prompt cuts the list at
+ * MAX_TOPICS, so what the owner added is never what gets dropped.
+ */
+export function mergeTopics(base: string[] | undefined, over: string[] | undefined): string[] | undefined {
   if (!base && !over) return undefined;
   const seen = new Set<string>();
-  return [...(base ?? []), ...(over ?? [])].filter(t => {
+  return [...(over ?? []), ...(base ?? [])].filter(t => {
     const key = t.trim().toLowerCase();
     if (!key || seen.has(key)) return false;
     seen.add(key);
@@ -136,13 +220,17 @@ export function capOriginal(text: string, max = ORIGINAL_MAX_CHARS): string {
   return `${(para > room / 2 ? head.slice(0, para) : head).trimEnd()}${TRUNCATED}`;
 }
 
-/** original/<key>.md by playbook key; README.md is documentation, not a brief. */
+/**
+ * original/<name>.md by file name, so original/linkedin-page.md and original/linkedin.md both
+ * survive; a platform finds its own file first, then its playbook's (packEntry).
+ * README.md is documentation, not a brief.
+ */
 function readOriginals(dir: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const f of sortedFiles(dir, ".md")) {
     if (f.toLowerCase() === "readme.md") continue;
     const text = fs.readFileSync(path.join(dir, f), "utf8").replace(/^﻿/, "").replace(/\r\n/g, "\n").trim();
-    if (text) out[playbookKey(f.slice(0, -3))] = capOriginal(text);
+    if (text) out[f.slice(0, -3)] = capOriginal(text);
   }
   return out;
 }
@@ -174,9 +262,12 @@ export function loadStylePack(slug: string, dir: string = DEFAULT_STYLE_PACK_DIR
   return { brand, platformNotes, examples, originals: readOriginals(path.join(root, "original")) };
 }
 
-/** At most 2 per targeted playbook, in request order; later files drop first once over budget. */
+/**
+ * At most 2 per example folder in use, in request order: a platform uses its own folder
+ * first, then its playbook's. Later files drop first once over budget.
+ */
 export function selectExamples(style: StylePack, platforms: readonly string[], budget = EXAMPLES_BUDGET): { platform: string; example: StyleExample }[] {
-  const keys = [...new Set(platforms.map(playbookKey))];
+  const keys = [...new Set(platforms.flatMap(p => packKey(style.examples, p) ?? []))];
   const picked = keys.flatMap(k => (style.examples[k] ?? []).slice(0, EXAMPLES_PER_PLATFORM).map(example => ({ platform: k, example })));
   const out: typeof picked = [];
   let used = 0;

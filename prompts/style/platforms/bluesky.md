@@ -1,1 +1,2 @@
-- Like X, with a little more context. The link goes last.
+- Like X, with a little more context.
+- The link, when the request offers one (see LINKS), goes last as the only URL in the text: the article URL for an article request, the most relevant source URL from the brief for a research request. Otherwise no URL.

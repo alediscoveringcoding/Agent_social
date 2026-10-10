@@ -1,1 +1,2 @@
-- The full version, with line breaks and bullets. The link on its own line. No hashtags.
+- The full version, with line breaks and bullets. No hashtags.
+- The link, when the request offers one (see LINKS), goes on its own line as the only URL in the text: the article URL for an article request, the most relevant source URL from the brief for a research request. Otherwise no URL.

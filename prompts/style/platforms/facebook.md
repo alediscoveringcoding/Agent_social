@@ -1,1 +1,2 @@
-- The list structure with short bullets, then a conversational question. The link sits in the text. At most 2 hashtags.
+- The list structure with short bullets, then a conversational question. At most 2 hashtags.
+- The link, when the request offers one (see LINKS), sits in the text as its only URL: the article URL for an article request, the most relevant source URL from the brief for a research request. Otherwise no URL.

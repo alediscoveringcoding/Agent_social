@@ -8,4 +8,6 @@ Before you answer, check each draft:
 - Each variant uses its platform's language; Romanian text has no diacritics.
 - Same facts in every variant; limits respected.
 - Sources, when a research brief is given: each draft lists in `sources` the ids it relies on, and only ids from the brief. Every figure taken from the web has its `source_id` and is `unverified`. Every claim traces to the brief or to the verified facts, never to memory.
-- No URL in a LinkedIn or Instagram body, nor in any text whose platform rules ask for none.
+- URLs (LINKS): the text of LinkedIn, Instagram and every platform not named below has no URL. The text of X, Facebook, Telegram and Bluesky has at most one URL, and it is the article URL of an article request or the most relevant source URL from the research brief, copied exactly; no other URL, none from memory. article.canonical_url, when you fill it, is the request's article URL exactly, or "" when there is none.
+- Threads: no CTA line. devto, hashnode and medium without an article request: no variant, and a note saying so.
+- Draft count: with a research brief, up to the requested number, one per story or angle from the brief; fewer is fine when fewer qualify, with the reason in notes.

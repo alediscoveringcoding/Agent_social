@@ -7,7 +7,10 @@ import * as path from "node:path";
 import { PLATFORMS } from "../platforms.js";
 import { PLATFORM_RULES, buildSystemPrompt, buildUserPrompt } from "./prompts.js";
 import type { ResearchBrief } from "./research-types.js";
-import { EXAMPLE_GUARD, ORIGINAL_MAX_CHARS, capOriginal, loadContentTypes, loadPublicBrand, loadStylePack, selectExamples } from "./style-pack.js";
+import {
+  EXAMPLE_GUARD, MAX_TOPICS, ORIGINAL_MAX_CHARS, bucharestDay, capOriginal, loadContentTypes, loadPublicBrand, loadStylePack, mergeTopics,
+  packEntry, packKey, selectExamples, todayOf,
+} from "./style-pack.js";
 
 const brand = { slug: "taxes-support", name: "Taxes Support" };
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "style-pack-"));
@@ -154,7 +157,10 @@ test("originals load by playbook key; README is ignored; BOM and CRLF are normal
   assert.equal(style.originals.linkedin, "LI BRIEF\nline two");
   const page = tmp();
   write(page, "taxes-support/original/linkedin-page.md", "PAGE BRIEF");
-  assert.deepEqual(loadStylePack("taxes-support", page).originals, { linkedin: "PAGE BRIEF" }, "linkedin-page maps to linkedin");
+  const pageOnly = loadStylePack("taxes-support", page);
+  assert.deepEqual(pageOnly.originals, { "linkedin-page": "PAGE BRIEF" }, "kept under its own name, not merged into linkedin");
+  assert.equal(packEntry(pageOnly.originals, "linkedin-page"), "PAGE BRIEF");
+  assert.equal(packEntry(pageOnly.originals, "linkedin"), undefined, "a page brief never serves the personal profile");
   assert.deepEqual(loadStylePack("taxes-support", path.join(dir, "none")).originals, {});
   assert.deepEqual(loadStylePack("taxes-support", tmp()).originals, {}, "brand folder missing");
 });
@@ -199,12 +205,12 @@ test("each original is cut at the cap, at a paragraph break", () => {
   assert.ok(capOriginal("x".repeat(200), 100).length <= 100, "no paragraph break: still capped");
 });
 
-test("news_topics: public list first, private additions after, no repeats", () => {
+test("news_topics: private additions first, then the public list, no repeats", () => {
   const pub = tmp();
   write(pub, "brands/topical.yaml", "name: Topical\nnews_topics:\n  - Topic A\n  - Topic B\n");
   const priv = tmp();
   write(priv, "topical/brand.yaml", "news_topics:\n  - topic b\n  - Topic C\n");
-  assert.deepEqual(loadStylePack("topical", priv, pub).brand?.news_topics, ["Topic A", "Topic B", "Topic C"]);
+  assert.deepEqual(loadStylePack("topical", priv, pub).brand?.news_topics, ["topic b", "Topic C", "Topic A"], "first spelling wins");
   assert.deepEqual(loadStylePack("topical", path.join(priv, "none"), pub).brand?.news_topics, ["Topic A", "Topic B"], "public only");
   const onlyPrivate = tmp();
   write(onlyPrivate, "topical/brand.yaml", "news_topics: [Only private]\n");
@@ -223,7 +229,22 @@ test("the news section of the content types is added for research and news reque
   const forNews = buildSystemPrompt(brand, { platforms: ["linkedin"], source: { type: "news", topic: "", window_days: 7 } });
   assert.ok(forNews.includes("## News") && forNews.indexOf("## News") < forNews.indexOf("PLATFORMS ("));
   const forTopic = buildSystemPrompt(brand, { platforms: ["linkedin"], research: true, source: { type: "topic", topic: "t" } });
-  assert.ok(forTopic.includes("## News"));
+  assert.ok(!forTopic.includes("## News") && !forTopic.includes("Story types, strongest first") && !forTopic.includes("keep only 9 or 10"), "no news audit for a topic");
+  assert.ok(forTopic.includes("There is no story audit") && forTopic.includes("Hooks:"), "hooks still serve research posts");
+});
+
+test("the LinkedIn parts of the news section need a LinkedIn target", () => {
+  const news = { source: { type: "news", topic: "", window_days: 7 } };
+  const li = buildSystemPrompt(brand, { ...news, platforms: ["linkedin"] });
+  assert.ok(li.includes("Taggable entities") && li.includes("LinkedIn news post, in this order"));
+  const page = buildSystemPrompt(brand, { ...news, platforms: ["linkedin-page"] });
+  assert.ok(page.includes("Taggable entities") && page.includes("LinkedIn news post, in this order"));
+  const x = buildSystemPrompt(brand, { ...news, platforms: ["x", "instagram"] });
+  assert.ok(!x.includes("Taggable entities") && !x.includes("LinkedIn news post"), "no LinkedIn target, no LinkedIn parts");
+  assert.ok(x.includes("Entity clarity") && x.includes("Hooks:"), "the audit and the hooks stay for news");
+  const topicLi = buildSystemPrompt(brand, { research: true, source: { type: "topic", topic: "t" }, platforms: ["linkedin"] });
+  assert.ok(topicLi.includes("LinkedIn news post, in this order") && !topicLi.includes("Taggable entities"));
+  assert.ok(!buildSystemPrompt(brand, { source: { type: "topic", topic: "t" }, platforms: ["linkedin"] }).includes("LinkedIn news post"), "no research, no news section");
 });
 
 test("the user prompt renders the research brief, its sources and the source rules", () => {
@@ -232,16 +253,90 @@ test("the user prompt renders the research brief, its sources and the source rul
   assert.ok(p.includes("RESEARCH BRIEF") && p.includes("Example Corp withdrew on 3 May 2027 [S1]"));
   assert.ok(p.includes("S1: Example Corp statement (Example Corp, 3 May 2027) https://example.com/release"));
   assert.ok(p.includes("S2: Users leave https://news.example.org/a"), "empty publisher and date are left out");
-  for (const rule of ["Cite only ids listed above", "source_id", '"unverified"', "Never write a URL in post text", "primary sources", "absolute dates"]) {
+  for (const rule of ["Cite only ids listed above", "source_id", '"unverified"', "Never any other URL in post text", "primary sources", "absolute dates"]) {
     assert.ok(p.includes(rule), rule);
   }
-  assert.match(p, /one draft per story[^\n]*at most 3/);
+  assert.match(p, /up to 3 drafts, one per story or angle from the research brief/);
+  assert.ok(!/exactly 3/.test(p));
   assert.ok(p.indexOf("RESEARCH BRIEF") < p.indexOf("SOURCES (") && p.indexOf("SOURCES (") < p.indexOf("SOURCE RULES"));
   const topic = buildUserPrompt({ source: { type: "topic", topic: "T", hooks: [] }, platforms: ["x"], count: 2 }, research);
-  assert.match(topic, /Create exactly 2 drafts/);
+  assert.match(topic, /Create up to 2 drafts, one per story or angle/);
+  assert.ok(!topic.includes("exactly 2"));
   assert.ok(topic.includes("SOURCE RULES"));
   const noSources = buildUserPrompt(input, { ...research, sources: [] });
   assert.ok(noSources.includes("the search returned none") && !noSources.includes("SOURCES (cite only"));
+});
+
+test("mergeTopics puts the private additions first and the cap keeps them", () => {
+  assert.equal(MAX_TOPICS, 14);
+  const pub = Array.from({ length: 12 }, (_, i) => `Public ${i + 1}`);
+  const priv = ["Private 1", "public 2", "Private 2", "Private 3"];
+  const merged = mergeTopics(pub, priv)!;
+  assert.deepEqual(merged.slice(0, 4), ["Private 1", "public 2", "Private 2", "Private 3"], "private first, in the owner's order");
+  assert.equal(merged.length, 15, "the repeat (case-insensitive) is dropped once");
+  assert.ok(!merged.includes("Public 2"), "the first spelling wins");
+  const kept = merged.slice(0, MAX_TOPICS);
+  for (const t of priv) assert.ok(kept.includes(t), `${t} survives the cap`);
+  assert.deepEqual(mergeTopics(undefined, undefined), undefined);
+  assert.deepEqual(mergeTopics(["A", " ", "a"], undefined), ["A"], "blank entries and repeats go");
+});
+
+test("platform keys: a platform uses its own pack file first, then its playbook's", () => {
+  assert.equal(packKey({ linkedin: 1 }, "linkedin-page"), "linkedin");
+  assert.equal(packKey({ linkedin: 1, "linkedin-page": 2 }, "linkedin-page"), "linkedin-page");
+  assert.equal(packKey({ "linkedin-page": 2 }, "linkedin"), undefined, "linkedin never picks up the page file");
+  assert.equal(packKey({ x: 1 }, "threads"), undefined);
+  assert.equal(packKey({}, "constructor"), undefined, "prototype members are not entries");
+  assert.equal(packEntry(undefined, "x"), undefined);
+});
+
+test("linkedin-page files in the pack are used, and they do not overwrite the linkedin ones", () => {
+  const dir = tmp();
+  write(dir, "taxes-support/platforms/linkedin.md", "PROFILE NOTE");
+  write(dir, "taxes-support/platforms/linkedin-page.md", "PAGE NOTE");
+  write(dir, "taxes-support/original/linkedin.md", "PROFILE BRIEF");
+  write(dir, "taxes-support/original/linkedin-page.md", "PAGE BRIEF");
+  write(dir, "taxes-support/examples/linkedin/01.md", "PROFILE EXAMPLE");
+  write(dir, "taxes-support/examples/linkedin-page/01.md", "PAGE EXAMPLE");
+  const style = loadStylePack("taxes-support", dir);
+  assert.deepEqual(Object.keys(style.originals).sort(), ["linkedin", "linkedin-page"], "both briefs survive");
+  assert.deepEqual(Object.keys(style.platformNotes).sort(), ["linkedin", "linkedin-page"]);
+
+  const page = buildSystemPrompt(brand, { platforms: ["linkedin-page"] }, style);
+  assert.ok(page.includes("PAGE NOTE") && !page.includes("PROFILE NOTE"));
+  assert.ok(page.includes("PAGE BRIEF") && !page.includes("PROFILE BRIEF"));
+  assert.ok(page.includes("PAGE EXAMPLE") && !page.includes("PROFILE EXAMPLE"));
+  const profile = buildSystemPrompt(brand, { platforms: ["linkedin"] }, style);
+  assert.ok(profile.includes("PROFILE NOTE") && profile.includes("PROFILE BRIEF") && profile.includes("PROFILE EXAMPLE"));
+  assert.ok(!profile.includes("PAGE NOTE") && !profile.includes("PAGE BRIEF") && !profile.includes("PAGE EXAMPLE"));
+  const both = buildSystemPrompt(brand, { platforms: ["linkedin", "linkedin-page"] }, style);
+  assert.ok(both.includes("OWNER'S ORIGINAL BRIEF FOR linkedin (") && both.includes("OWNER'S ORIGINAL BRIEF FOR linkedin-page ("));
+  assert.ok(both.includes("PROFILE EXAMPLE") && both.includes("PAGE EXAMPLE"));
+
+  // Only page files in the pack: the page uses them, the profile has none.
+  const only = tmp();
+  write(only, "taxes-support/platforms/linkedin-page.md", "PAGE NOTE");
+  write(only, "taxes-support/examples/linkedin-page/01.md", "PAGE EXAMPLE");
+  const lone = loadStylePack("taxes-support", only);
+  assert.ok(buildSystemPrompt(brand, { platforms: ["linkedin-page"] }, lone).includes("PAGE NOTE"));
+  assert.ok(!buildSystemPrompt(brand, { platforms: ["linkedin"] }, lone).includes("PAGE NOTE"));
+  assert.deepEqual(selectExamples(lone, ["linkedin-page"]).map(x => x.platform), ["linkedin-page"]);
+  assert.deepEqual(selectExamples(lone, ["linkedin"]), []);
+  // linkedin files alone still serve both platforms, once.
+  const shared = tmp();
+  write(shared, "taxes-support/examples/linkedin/01.md", "SHARED EXAMPLE");
+  const s = loadStylePack("taxes-support", shared);
+  assert.equal(selectExamples(s, ["linkedin", "linkedin-page"]).length, 1, "one example folder, listed once");
+});
+
+test("dates: the Bucharest calendar day, the pinned override and day arithmetic", () => {
+  assert.equal(bucharestDay(new Date("2027-01-14T22:30:00Z")), "2027-01-15", "UTC evening is already the next day in Bucharest (UTC+2)");
+  assert.equal(bucharestDay(new Date("2027-07-14T21:30:00Z")), "2027-07-15", "summer time (UTC+3)");
+  assert.equal(bucharestDay(new Date("2027-07-14T20:30:00Z")), "2027-07-14");
+  assert.equal(todayOf({ today: "2027-03-01" }), "2027-03-01");
+  assert.equal(todayOf({ today: "2027-02-31" }, new Date("2027-01-14T22:30:00Z")), "2027-01-15", "not a real date: the clock wins");
+  assert.equal(todayOf({ today: "tomorrow" }, new Date("2027-01-14T10:00:00Z")), "2027-01-14");
+  assert.equal(todayOf(undefined, new Date("2027-01-14T10:00:00Z")), "2027-01-14");
 });
 
 test("a news request with no brief says so plainly; other requests are unchanged", () => {
