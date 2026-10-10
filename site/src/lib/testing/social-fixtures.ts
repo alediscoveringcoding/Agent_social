@@ -73,7 +73,9 @@ export async function scheduleAndApprove(
   db: PGlite,
   post: string,
   user: string,
-  at: Date = new Date(Date.now() - 5_000)
+  at: Date = new Date(Date.now() - 5_000),
+  /** When the approval happens; a fixed date in the past needs an approval before it (0011 refuses stale times). */
+  approvedAt?: Date
 ): Promise<{ revision: string; jobs: string[] }> {
   at.setMilliseconds(0)
   const [p] = await rows(db, `select current_revision_id from social_posts where id = $1`, [post])
@@ -110,12 +112,13 @@ export async function scheduleAndApprove(
       media: d.media,
     }),
   }))
-  await rows(db, `select social_approve_revision($1, $2, $3, 'admin@example.test', $4, true, $5::jsonb, now() - interval '1 minute')`, [
+  await rows(db, `select social_approve_revision($1, $2, $3, 'admin@example.test', $4, true, $5::jsonb, coalesce($6::timestamptz, now() - interval '1 minute'))`, [
     post,
     revision,
     user,
     approvalHash({ post_id: post, revision_id: revision, destinations: hashes }),
     JSON.stringify(hashes.map((h) => ({ ...h, contains_figures: true }))),
+    approvedAt?.toISOString() ?? null,
   ])
   const jobs = await rows(
     db,

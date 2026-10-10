@@ -130,7 +130,7 @@ describe('overview, manual handoff and duplicate (W3)', () => {
       const current = await draft([x], { scheduledAt: instant }); const old = await draft([x], { scheduledAt: instant })
       const [p] = await rows(db, `select current_revision_id from social_posts where id=$1`, [old])
       await rows(db, `select social_save_revision($1,$2,$3,'{}'::jsonb,$4::jsonb,'test edit')`, [old, p.current_revision_id, admin.userId, JSON.stringify([{ account_id:x,text:'Actualizat',settings:{}, scheduled_at:null }])])
-      const cancelled = await draft([x]); const approval = await scheduleAndApprove(db, cancelled, admin.userId, new Date(instant))
+      const cancelled = await draft([x]); const approval = await scheduleAndApprove(db, cancelled, admin.userId, new Date(instant), new Date(Date.parse(instant) - 3600_000))
       await rows(db, `update social_delivery_jobs set status='cancelled' where id=$1`, [approval.jobs[0]])
       const week = await getCalendarWeek(monday)
       assert.equal(week.days[6].hours, hours); assert.equal(week.total, 1)

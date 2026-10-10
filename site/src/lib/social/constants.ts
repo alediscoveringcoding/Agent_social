@@ -299,6 +299,13 @@ export const ERROR_CODE_LABELS: Record<string, string> = {
   STALE: 'Ora a trecut de mai mult de 2 ore',
   RECONCILE_MISS: 'Postarea nu a fost gasita la verificare',
   LEASE_EXPIRED: 'Workerul nu a raspuns la timp',
+  POLL_TIMEOUT: 'Niciun rezultat dupa 24 de ore. Verifica pe platforma inainte de reincercare: postarea poate fi deja publicata',
+  POSTIZ_UNAUTHORIZED: 'Postiz a refuzat cheia workerului (verifica POSTIZ_API_KEY)',
+  POSTIZ_FORBIDDEN: 'Postiz a refuzat cererea',
+  POSTIZ_REJECTED: 'Postiz a refuzat postarea',
+  INTEGRATION_NOT_FOUND: 'Canalul nu mai exista in Postiz',
+  HASHNODE_CONFIG_MISSING: 'Lipseste publicatia Hashnode',
+  DRAFTS_POST_UNCERTAIN: 'Ciornele poate au fost salvate; verifica Ciorne inainte sa generezi din nou',
 }
 
 export const DELIVERY_OUTCOMES = ['published', 'failed', 'retry', 'reconciling', 'not_found'] as const
