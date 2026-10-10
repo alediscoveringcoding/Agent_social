@@ -11,6 +11,14 @@ import { markdownToPostizHtml } from "./markdown-html.js";
 
 type Neutral = Record<string, unknown>;
 
+/** A post that can never be built; `code` is the error code the worker reports (a definite failure, no retry). */
+export class PostizPayloadError extends Error {
+  constructor(message: string, readonly code: string = "VALIDATION_REJECTED") {
+    super(message);
+    this.name = "PostizPayloadError";
+  }
+}
+
 export interface UploadedMedia {
   /** The site's media id (the neutral `cover_media_id` refers to it). */
   media_id?: string;
@@ -51,6 +59,9 @@ function tagList(s: Neutral): string[] {
 
 /** Medium and Hashnode take tags as {value, label}; dev.to's value is a number, and only its label is used. */
 const labelled = (tags: string[]) => tags.map((label) => ({ value: label, label }));
+/** Hashnode tag ids are 24-character ObjectIds; labels would be rejected by Postiz, so they are left out. */
+const hashnodeTagIds = (tags: string[]) =>
+  tags.length > 0 && tags.every((t) => /^[a-f0-9]{24}$/i.test(t)) ? tags.map((id) => ({ value: id, label: id })) : undefined;
 const numbered = (tags: string[]) => tags.map((label, i) => ({ value: i + 1, label }));
 
 function mainImage(s: Neutral, media: UploadedMedia[]) {
@@ -80,12 +91,18 @@ export function postizSettings(platform: string, s: Neutral, media: UploadedMedi
       return { __type, post_type: str(s, "post_type") === "story" ? "story" : "post" };
     case "devto":
       return omitEmpty({ __type, title: str(s, "title"), canonical: str(s, "canonical_url"), tags: numbered(tagList(s)), ...mainImage(s, media) });
-    case "hashnode":
-      // HashnodeSettingsDto also needs `publication` (an id) and tag ids from Postiz's own list.
+    case "hashnode": {
+      // HashnodeSettingsDto needs `publication` (an id); without it Postiz fails after the call. Tags are
+      // ids from Postiz's own list (hashnode.tags.ts): labels are left out rather than sent as ids.
+      const publication = str(s, "publication");
+      if (!publication) {
+        throw new PostizPayloadError("Hashnode needs a publication id in the destination settings", "HASHNODE_CONFIG_MISSING");
+      }
       return omitEmpty({
         __type, title: str(s, "title"), subtitle: str(s, "subtitle"), canonical: str(s, "canonical_url"),
-        publication: str(s, "publication"), tags: labelled(tagList(s)), ...mainImage(s, media),
+        publication, tags: hashnodeTagIds(tagList(s)), ...mainImage(s, media),
       });
+    }
     case "medium":
       // MediumSettingsDto: title and subtitle are required; at most four tags (Medium uses three).
       return omitEmpty({

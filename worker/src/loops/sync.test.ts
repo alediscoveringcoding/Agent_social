@@ -37,6 +37,13 @@ test("the provider field is `identifier` in Postiz's public API; providerIdentif
   assert.equal(platformForProvider(undefined), null);
 });
 
+test("refresh_needed is only sent when Postiz said something", () => {
+  assert.equal(mapIntegration({ id: "1", identifier: "x" }).refresh_needed, undefined);
+  assert.equal(mapIntegration({ id: "1", identifier: "x", refreshNeeded: true }).refresh_needed, true);
+  assert.equal(mapIntegration({ id: "1", identifier: "x", refreshNeeded: false }).refresh_needed, false);
+  assert.equal(mapIntegration({ id: "1", identifier: "x", tokenExpired: true }).refresh_needed, true);
+});
+
 test("the sync body keeps unknown providers for the site to ignore, and reads the channel of a recent post", () => {
   const body = buildSyncPayload(
     [{ id: "1", name: "Bluesky", identifier: "bluesky" }, { id: "2", name: "Un canal video", identifier: "vimeo" }],

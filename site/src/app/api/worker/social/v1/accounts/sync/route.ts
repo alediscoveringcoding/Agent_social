@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       // W3: refresh_needed cannot put a manual account into an auto-only state.
       const status = before?.mode === 'manual'
         ? (before.status === 'approval_pending' ? 'approval_pending' : 'manual')
-        : syncedStatus(before?.status ?? null, integration.refresh_needed === true)
+        : syncedStatus(before?.status ?? null, integration.refresh_needed)
       const fields = {
         postiz_provider: integration.provider,
         postiz_disabled: integration.disabled === true,

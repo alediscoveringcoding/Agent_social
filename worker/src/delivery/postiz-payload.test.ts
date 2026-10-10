@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildPostizPost, postIdFromCreate, postizContent, postizSettings, type UploadedMedia } from "./postiz-payload.js";
+import { buildPostizPost, postIdFromCreate, postizContent, postizSettings, PostizPayloadError, type UploadedMedia } from "./postiz-payload.js";
 import { MANUAL_ONLY_PLATFORMS, PLATFORMS, POSTIZ_PROVIDER } from "../platforms.js";
 import { markdownToPostizHtml } from "./markdown-html.js";
 
@@ -11,11 +11,25 @@ test("every automatic platform yields settings tagged with its identifier; manua
     if (MANUAL_ONLY_PLATFORMS.includes(platform)) {
       assert.throws(() => postizSettings(platform, {}), /manual handoff only/, platform);
     } else {
-      assert.equal(postizSettings(platform, {}, [image]).__type, POSTIZ_PROVIDER[platform], platform);
+      // Hashnode refuses a post without its publication id.
+      assert.equal(postizSettings(platform, { publication: "pub-1" }, [image]).__type, POSTIZ_PROVIDER[platform], platform);
     }
   }
   assert.equal(POSTIZ_PROVIDER.youtube, "youtube", "the channel syncs; the post is never built");
   assert.throws(() => postizSettings("vimeo", {}), /No Postiz provider/);
+});
+
+test("Hashnode needs a publication id and sends tags only when they are ids", () => {
+  assert.throws(
+    () => postizSettings("hashnode", { title: "T", tags: "a,b" }),
+    (e: any) => e instanceof PostizPayloadError && e.code === "HASHNODE_CONFIG_MISSING",
+  );
+  const labels = postizSettings("hashnode", { title: "T", publication: "pub-1", tags: "fiscal, taxe" });
+  assert.equal(labels.publication, "pub-1");
+  assert.equal("tags" in labels, false);
+  const id = "507f1f77bcf86cd799439011";
+  assert.deepEqual(postizSettings("hashnode", { publication: "pub-1", tags: id }).tags, [{ value: id, label: id }]);
+  assert.equal("tags" in postizSettings("hashnode", { publication: "pub-1", tags: `${id}, fiscal` }), false);
 });
 
 test("Postiz identifiers of the new platforms (v2.25.0)", () => {

@@ -11,6 +11,18 @@ import { platformForProvider } from "../platforms.js";
  * (PROVIDER_TO_PLATFORM in site/src/lib/social/constants.ts, which this worker's
  * platforms.ts mirrors) and ignores providers it does not know.
  */
+/**
+ * Whether Postiz asks for a reconnect: true or false when Postiz said so, undefined when
+ * the answer has no such field (v2.25.0's public list is {id, name, identifier, picture,
+ * disabled, profile, customer}). The site reads a missing value as "no news", so it never
+ * clears reconnect_required on silence.
+ */
+export function refreshSignal(i: any): boolean | undefined {
+  if (i.refreshNeeded === true || i.tokenExpired === true) return true;
+  if (i.refreshNeeded === false || i.tokenExpired === false) return false;
+  return undefined;
+}
+
 export function mapIntegration(i: any) {
   return {
     postiz_integration_id: i.id,
@@ -19,7 +31,7 @@ export function mapIntegration(i: any) {
     picture_url: i.picture || i.profilePicture || null,
     profile_url: i.profileUrl || null,
     disabled: i.disabled || false,
-    refresh_needed: i.refreshNeeded || i.tokenExpired || false,
+    refresh_needed: refreshSignal(i),
     rules: i.settings || {},
   };
 }

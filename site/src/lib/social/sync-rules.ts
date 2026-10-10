@@ -14,9 +14,16 @@ export function platformForProvider(provider: string): Platform | null {
   return PROVIDER_TO_PLATFORM[provider.trim().toLowerCase()] ?? null
 }
 
-export function syncedStatus(current: AccountStatus | null, refreshNeeded: boolean): AccountStatus {
-  if (refreshNeeded) return current === 'manual' ? 'manual' : 'reconnect_required'
-  if (current === null || current === 'reconnect_required') return 'connected'
+/**
+ * `refreshNeeded` is tri-state: true (Postiz asks for a reconnect), false (Postiz says the
+ * channel is fine) or undefined (Postiz said nothing; v2.25.0's public list has no such field).
+ * Silence is not good news: an account in reconnect_required (set by an AUTH_EXPIRED result
+ * or an earlier sync) only goes back to connected on an explicit false.
+ */
+export function syncedStatus(current: AccountStatus | null, refreshNeeded: boolean | undefined): AccountStatus {
+  if (refreshNeeded === true) return current === 'manual' ? 'manual' : 'reconnect_required'
+  if (current === null) return 'connected'
+  if (current === 'reconnect_required') return refreshNeeded === false ? 'connected' : current
   return current
 }
 

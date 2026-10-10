@@ -429,6 +429,8 @@ const server = createServer(async (req, res) => {
         destination: j.destination,
         media: j.media,
         postiz: j.postiz || null,
+        // The real claim sends the attempt's start for poll/reconcile jobs (submitting_at or started_at).
+        attempt_started_at: j.kind === "publish" ? null : j.attempt_started_at || null,
       })),
     });
   }
@@ -453,7 +455,8 @@ const server = createServer(async (req, res) => {
       return send(res, 200, {});
     }
     if (action === "result") {
-      const { outcome, remote_url, error_code, error_message } = body;
+      const { outcome, remote_url, error_code, error_message, retry_after_seconds } = body;
+      if (retry_after_seconds !== undefined) job.retry_after_seconds = retry_after_seconds;
       if (outcome === "published") {
         job.status = "published";
         job.remote_url = remote_url;

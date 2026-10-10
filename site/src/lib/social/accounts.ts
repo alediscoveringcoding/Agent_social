@@ -29,7 +29,7 @@ export const ACCOUNT_STATUS_TONES: Record<AccountStatus, 'accent' | 'danger' | '
 /** What each status asks of a person, in one line. */
 export const ACCOUNT_STATUS_HINTS: Record<AccountStatus, string> = {
   connected: 'Publica automat prin Postiz.',
-  reconnect_required: 'Reconecteaza canalul in Postiz; urmatoarea sincronizare il marcheaza conectat.',
+  reconnect_required: 'Reconecteaza canalul in Postiz. Dupa aceea, alege starea "Conectat" si salveaza.',
   developer_setup_required: 'Lipsesc permisiuni sau aplicatia de developer. Dupa rezolvare, marcheaza-l conectat.',
   approval_pending: 'Platforma nu a aprobat inca accesul. Pana atunci, publica manual.',
   manual: 'Publicare manuala: la ora programata apare in Publicare manuala.',
