@@ -49,13 +49,15 @@ const state = {
   workers: new Map(),
 };
 
-function seedAccount({ platform, display_name, postiz_integration_id }) {
+function seedAccount({ platform, display_name, native_provider_account_id }) {
   const id = randomUUID();
   state.accounts.set(id, {
     id,
     platform,
     display_name,
-    postiz_integration_id,
+    // Amendment 10: every automatic account is directly connected; the site publishes it.
+    publishing_backend: "native",
+    native_provider_account_id,
     status: "connected",
   });
   return id;
@@ -115,7 +117,7 @@ function seed() {
   const devtoAccount = seedAccount({
     platform: "devto",
     display_name: "dev.to (throwaway)",
-    postiz_integration_id: "mock-devto-1",
+    native_provider_account_id: "mock-devto-1",
   });
 
   seedDeliveryJob({
@@ -124,28 +126,16 @@ function seed() {
     scheduledAt: new Date().toISOString(),
   });
 
-  // Amendment 04: two of the newer platforms, so the worker's per-provider
-  // Postiz settings can be tried (a Bluesky text post and a Reddit text post).
+  // Amendment 04: one of the newer platforms.
   const blueskyAccount = seedAccount({
     platform: "bluesky",
     display_name: "Bluesky (throwaway)",
-    postiz_integration_id: "mock-bluesky-1",
+    native_provider_account_id: "mock-bluesky-1",
   });
   seedDeliveryJob({
     accountId: blueskyAccount,
     text: "Ai pana pe 25 mai sa depui Declaratia Unica. Iti explicam calm, pas cu pas.",
     scheduledAt: new Date().toISOString(),
-  });
-  const redditAccount = seedAccount({
-    platform: "reddit",
-    display_name: "Reddit (throwaway)",
-    postiz_integration_id: "mock-reddit-1",
-  });
-  seedDeliveryJob({
-    accountId: redditAccount,
-    text: "Termenul pentru Declaratia Unica este 25 mai. Am adunat pasii intr-un ghid.",
-    scheduledAt: new Date().toISOString(),
-    settings: { subreddit: "r/test", title: "Declaratia Unica: termenul este 25 mai", post_type: "self" },
   });
 
   seedGenerationRequest({
@@ -362,13 +352,12 @@ const server = createServer(async (req, res) => {
       });
     }
     if (req.method === "POST" && segments[1] === "account") {
-      // Register the REAL Postiz integration id so a delivery job can
-      // publish for real, instead of the fake seeded "mock-devto-1".
+      // Register an account for a delivery job (the mock never publishes).
       const body = await readBody(req);
       const id = seedAccount({
         platform: body.platform,
         display_name: body.display_name || body.platform,
-        postiz_integration_id: body.postiz_integration_id,
+        native_provider_account_id: body.native_provider_account_id || `mock-${body.platform}`,
       });
       return send(res, 201, { account_id: id });
     }
@@ -428,14 +417,13 @@ const server = createServer(async (req, res) => {
         account: j.account,
         destination: j.destination,
         media: j.media,
-        postiz: j.postiz || null,
         // The real claim sends the attempt's start for poll/reconcile jobs (submitting_at or started_at).
         attempt_started_at: j.kind === "publish" ? null : j.attempt_started_at || null,
       })),
     });
   }
 
-  const deliveryMatch = route.match(/^\/deliveries\/([^/]+)\/(heartbeat|submitting|submitted|result)$/);
+  const deliveryMatch = route.match(/^\/deliveries\/([^/]+)\/(heartbeat|submitting|native|result)$/);
   if (deliveryMatch && req.method === "POST") {
     const [, jobId, action] = deliveryMatch;
     const job = state.deliveryJobs.get(jobId);
@@ -449,10 +437,11 @@ const server = createServer(async (req, res) => {
       job.status = "submitting";
       return send(res, 200, {});
     }
-    if (action === "submitted") {
-      job.status = "submitted";
-      job.postiz = { post_id: body.postiz_post_id, group: body.postiz_group };
-      return send(res, 200, {});
+    if (action === "native") {
+      // The real site publishes through its own adapters; the mock publishes a fake URL.
+      job.status = "published";
+      job.remote_url = `https://example.com/mock/${job.job_id}`;
+      return send(res, 200, { ok: true, status: "published" });
     }
     if (action === "result") {
       const { outcome, remote_url, error_code, error_message, retry_after_seconds } = body;
@@ -541,20 +530,6 @@ const server = createServer(async (req, res) => {
     req_.status = "failed";
     req_.error_code = body.error_code;
     req_.error_message = body.error_message;
-    return send(res, 200, {});
-  }
-
-  // --- Account sync ---
-  if (route === "/accounts/sync" && req.method === "POST") {
-    // The real site maps each provider identifier to a platform and ignores the
-    // ones it does not know; the mock only logs what it received.
-    console.log(
-      JSON.stringify({
-        msg: "accounts synced",
-        count: (body.integrations || []).length,
-        providers: (body.integrations || []).map((i) => i.provider),
-      }),
-    );
     return send(res, 200, {});
   }
 

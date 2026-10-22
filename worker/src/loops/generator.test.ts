@@ -13,7 +13,7 @@ let api: typeof import('../services/site-api.js');
 const input = { source: { type: "topic", topic: "Declaratia" }, platforms: ["x"], kinds: ["social"], count: 2 };
 
 before(async () => {
-  child = spawn(process.execPath, ["test/mock-site.mjs"], {
+  child = spawn(process.execPath, ["--import", "tsx", "test/mock-site.ts"], {
     cwd: new URL("../..", import.meta.url), env: { ...process.env, MOCK_SITE_PORT: "0", MOCK_SITE_NO_SEED: "true", MOCK_SITE_LEASE_MS: "1500" }, stdio: ["ignore", "pipe", "pipe"],
   });
   const port = await new Promise<number>((resolve, reject) => {

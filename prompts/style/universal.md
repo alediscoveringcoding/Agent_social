@@ -1,4 +1,4 @@
-- Hook: name the entity first, then a contrast, an irony or a surprising number. Two short sentences, each with a subject and a verb; the second turns the first. Use short, physical verbs. Never open with "X announced Y".
+- Hook (the opening of the post, never the whole post): name the entity first, then a contrast, an irony or a surprising number. Two short sentences, each with a subject and a verb; the second turns the first. Use short, physical verbs. Never open with "X announced Y". The rest of the post develops the hook to the request's LENGTH.
 - Dates are explicit and absolute ("12 March 2027"), never "today" or "this week". Keep proposed apart from approved, and applied apart from licensed. Make no causal claim the source does not make. At most one evaluative word per post.
 - Define every acronym or technical term once, in plain words. Write institution and company names in full.
 - Include one quotable sentence. End the body with a relevance line OR a question for the reader, never both.

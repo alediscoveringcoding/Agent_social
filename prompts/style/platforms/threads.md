@@ -1,1 +1,0 @@
-- A conversational hook, one figure and a direct question. No bullets, no hashtags, no CTA line.

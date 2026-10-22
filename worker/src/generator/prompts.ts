@@ -3,7 +3,8 @@ import * as path from "node:path";
 import * as yaml from "yaml";
 import { draftSchema } from "./schema.js";
 import { wantsResearch, type ResearchBrief } from "./research-types.js";
-import { PLATFORMS, type Platform } from "../platforms.js";
+import { WRITABLE_PLATFORMS, isWritablePlatform, type WritablePlatform } from "../platforms.js";
+import { LENGTH_TARGETS, lengthTarget, postLengthOf, type PostLength } from "./length.js";
 import {
   EXAMPLE_GUARD, PROMPTS_DIR, PROMPT_TIME_ZONE, loadContentTypes, loadPublicBrand, packEntry, packKey, playbookKey, selectExamples, splitNews,
   targetsLinkedin, todayOf, type BrandProfile, type StylePack,
@@ -64,35 +65,21 @@ function playbookFile(key: string): string {
 const playbook = (platform: string): string => playbookFile(platform) || playbookFile(playbookKey(platform));
 
 const ARTICLE = 'article destination: fill article (see KINDS); variant text is "".';
-/** Limits per platform (the worker enforces them). {brand} is replaced by the brand name. */
-export const PLATFORM_RULES: Record<Platform, string> = {
+/** Limits per platform (the worker enforces them). {brand} is replaced by the brand name. Dropped platforms (amendment 10) have none. */
+export const PLATFORM_RULES: Record<WritablePlatform, string> = {
   x: "at most 280 weighted characters (URL=23, emoji/CJK=2).",
   instagram: "at most 2200 characters and 30 hashtags, no caption URLs.",
   facebook: "long text is fine.",
   "linkedin-page": "company page, at most 3000 characters.",
   linkedin: "personal profile, at most 3000 characters.",
-  threads: "at most 500 characters.",
   bluesky: "at most 300 graphemes (counted characters), URLs included.",
-  mastodon: "at most 500 characters, every URL counts 23.",
-  reddit: "variant.title (at most 300 characters) plus a body in text (at most 10000).",
-  pinterest: "variant.title (at most 100) and text as the pin description (at most 500); variant.link is the destination URL.",
-  telegram: "at most 4096 characters, but keep it under 1000 because an image turns the text into its caption.",
-  discord: "at most 1980 characters, a short announcement.",
+  telegram: "at most 1024 characters: the card or image turns the text into its caption.",
   farcaster: "at most 320 bytes of text (ASCII, so 320 characters).",
-  nostr: "plain text, no markup.",
   lemmy: "variant.title (3 to 200 characters, one line) and a markdown body in text (at most 10000); variant.link is optional.",
-  slack: "at most 40000 characters, a short team message.",
-  vk: "at most 2048.",
+  slack: "at most 40000 characters, a message to the team channel.",
   mewe: "plain text.",
-  moltbook: "at most 300 characters.",
-  kick: "a chat message of at most 500 characters, text only, no links needed.",
-  twitch: "a chat message of at most 500 characters, text only, no links needed.",
-  gmb: "Google Business post, at most 1500 characters, about the business offer or help, one image at most.",
-  tumblr: "a post of at most 32768 characters; variant.title optional, variant.link optional.",
-  dribbble: "variant.title and a short description in text (the image is the card).",
   skool: "variant.title and a community post in text (at most 5000 characters).",
-  whop: "variant.title and a community post in text (at most 50000).",
-  tiktok: "a photo post. variant.title at most 90 characters and a description in text of at most 2000.",
+  tiktok: "a photo or video post. variant.title at most 90 characters and a description in text of at most 2000.",
   youtube: "a video platform: write variant.title (at most 100 characters) and the video description (at most 5000) in text; a person adds the video.",
   quora: "manual: an answer to a question or a post in a Space (helpful first, at most 20000 characters, link only when it adds something).",
   tradingview: "manual: an Idea with variant.title (at most 100) and a short market-neutral description (at most 10000), no price targets or advice.",
@@ -100,21 +87,19 @@ export const PLATFORM_RULES: Record<Platform, string> = {
   indiehackers: "manual: variant.title (at most 150) and a founder-style post (at most 20000).",
   forum: 'manual: a post of at most 20000 characters; variant.title only when it opens a new thread, "" for a reply.',
   stackexchange: 'manual: a factual answer or question body of 30 to 30000 characters; for a question variant.title (15 to 150 characters), otherwise ""; our brand is mentioned only when relevant and the text MUST disclose the affiliation plainly (for example "Sunt afiliat cu {brand}"), as the site\'s self-promotion rules require.',
-  devto: ARTICLE, hashnode: ARTICLE, substack: ARTICLE, medium: ARTICLE, wordpress: ARTICLE, listmonk: ARTICLE,
+  devto: ARTICLE, hashnode: ARTICLE, substack: ARTICLE, medium: ARTICLE, listmonk: ARTICLE,
   "linkedin-article": 'article destination: a native LinkedIn article or newsletter issue, title at most 100 characters; variant text is "".',
   github: 'article destination: a release note or Discussion for our own repository, body at most 125000 characters, plain and factual; variant text is "".',
   press: 'article destination: a press release; variant text is "".',
   producthunt: 'launch destination: fill launch (see KINDS); variant text is "".',
 };
 
-const KINDS_SOCIAL = "- social: fill canonical_text and platform variant text.";
-const KINDS_ARTICLE = `- article (devto, hashnode, substack, medium, wordpress, listmonk): fill article.title, subtitle, body_markdown, tags (at most four; at most three of at most 25 characters each when medium is a target), canonical_url. For these destinations variant text is ""; the worker uses body_markdown. canonical_url is the request's article URL on our blog, copied exactly as given, or "" when the request has no article URL; never a URL from the research brief or from memory. devto, hashnode and medium require that canonical_url, which only an article request supplies: when the request's source is not an article, write no variant for them and say in notes that they were left out. Medium needs a nonempty subtitle. For listmonk the title becomes the e-mail subject and the subtitle its one-line preview.
+const KINDS_SOCIAL = "- social: fill canonical_text and platform variant text, each a complete post in the LENGTH form.";
+const KINDS_ARTICLE = `- article (devto, hashnode, substack, medium, listmonk): fill article.title, subtitle, body_markdown, tags (at most four; at most three of at most 25 characters each when medium is a target), canonical_url. For these destinations variant text is ""; the worker uses body_markdown. canonical_url is the request's article URL on our blog, copied exactly as given, or "" when the request has no article URL; never a URL from the research brief or from memory. devto, hashnode and medium require that canonical_url, which only an article request supplies: when the request's source is not an article, write no variant for them and say in notes that they were left out. Medium needs a nonempty subtitle. For listmonk the title becomes the e-mail subject and the subtitle its one-line preview.
 - article also covers linkedin-article (a native LinkedIn article or newsletter issue, title at most 100 characters), github (a release note or Discussion for our own repository, body at most 125000 characters, plain and factual) and press (a press release for a news outlet). Write a press release as: article.title, article.subtitle as the lead (one sentence with who, what, when), body_markdown with the facts and one quote-free body, ending with a short "Despre" paragraph about the brand. Variant text is "" for these too.`;
 const KINDS_LAUNCH = '- launch (producthunt): fill launch.name, tagline (at most 60 characters), description (at most 260), maker_comment. Product Hunt variant text is ""; the worker uses description. This is a manual launch kit.';
 
 const LANG_NAME = { ro: "Romanian without diacritics", en: "English" } as const;
-/** Platforms whose playbook says "no CTA line": the brand's CTA never applies to them. */
-const NO_CTA = new Set(["threads"]);
 /** Platforms whose playbook asks for the link in the post text (one URL, see linksSection). */
 export const LINK_IN_TEXT = ["x", "facebook", "telegram", "bluesky"] as const;
 /** Article destinations that need article.canonical_url, which only an article request can supply. */
@@ -126,7 +111,7 @@ const lookup = packEntry;
 
 function brandSection(b: BrandProfile, platforms: readonly string[]): string {
   const lines = [`VOICE:\n${(b.voice ?? DEFAULT_VOICE).trim()}`];
-  const cta = platforms.map(p => [p, NO_CTA.has(playbookKey(p)) ? "" : lookup(b.cta, p) ?? b.cta?.default] as const).filter(([, c]) => c !== undefined);
+  const cta = platforms.map(p => [p, lookup(b.cta, p) ?? b.cta?.default] as const).filter(([, c]) => c !== undefined);
   if (cta.length) lines.push(`CTA per platform (text or an instruction):\n${cta.map(([p, c]) => `- ${p}: ${c === "" ? "(no CTA)" : c}`).join("\n")}`);
   const tags = platforms.map(p => [p, lookup(b.hashtags, p) ?? b.hashtags?.default] as const).filter(([, t]) => t && t.length);
   if (tags.length) lines.push(`Fixed hashtags (add 2-3 topical ones only where the platform uses hashtags):\n${tags.map(([p, t]) => `- ${p}: ${t!.join(" ")}`).join("\n")}`);
@@ -186,6 +171,28 @@ function newsSection(input: any, platforms: readonly string[]): string {
   return parts.length ? `\n\n${parts.join("\n\n")}` : "";
 }
 
+const STRUCTURE: Record<PostLength, string> = {
+  long: "the hook (two short sentences) opens the post; then the context with an absolute date and the key figure; three points, each with a figure or a name; what it means for the reader; one quotable line; then the CTA. Fill the space with substance from the source, the brief and the verified facts.",
+  short: "the hook (two short sentences), one or two sentences of context with the key figure, the takeaway for the reader, then the CTA.",
+};
+
+/**
+ * Amendment 10: one length per request, the same on every platform. It comes after the playbooks,
+ * brand notes, examples and the owner's brief, and wins over any length they give.
+ */
+function lengthSection(length: PostLength, platforms: readonly string[]): string {
+  const { min, max, words } = LENGTH_TARGETS[length];
+  const capped = platforms.flatMap(p => {
+    const target = lengthTarget(p, length);
+    return target && (target.min !== min || target.max !== max) ? [`${p}: ${target.min}-${target.max}`] : [];
+  });
+  return `LENGTH (${length} form, the same on every platform; it wins over any length in the playbooks, brand notes, examples or the owner's brief):
+- canonical_text and every social variant text: ${min}-${max} characters (${words}). A text outside its range is sent back for a rewrite.${capped.length ? `\n- Platforms with a lower limit, in their own unit: ${capped.join(", ")}.` : ""}
+- Structure: ${STRUCTURE[length]}
+- Never pad, repeat the hook or invent: when the source holds less, use the verified facts, explain the terms and the consequence for the reader.
+- Article and launch fields follow KINDS, not this rule.`;
+}
+
 const linkList = (platforms: readonly string[]) => LINK_IN_TEXT.filter(p => platforms.includes(p));
 
 /**
@@ -208,7 +215,7 @@ function linksSection(platforms: readonly string[]): string {
  */
 export function buildSystemPrompt(brand: { slug: string; name: string }, input: any, style?: StylePack): string {
   const requested: string[] | undefined = Array.isArray(input?.platforms) && input.platforms.length ? input.platforms : undefined;
-  const platforms = (requested ?? [...PLATFORMS]).filter((p): p is Platform => (PLATFORMS as readonly string[]).includes(p));
+  const platforms = (requested ?? [...WRITABLE_PLATFORMS]).filter(isWritablePlatform);
   const kinds: string[] | undefined = Array.isArray(input?.kinds) && input.kinds.length ? input.kinds : undefined;
   const pack: StylePack = style ?? { brand: loadPublicBrand(brand.slug), platformNotes: {}, examples: {}, originals: {} };
   const news = newsSection(input, platforms);
@@ -246,9 +253,10 @@ Keep verified facts as source "facts", numbers actually present in the source as
 Do not invent facts from an article URL when no source contents are available. Mark unverifiable claims "unverified" or omit them.`,
     `KINDS:\n${kindLines.join("\n")}\nUse null only for article or launch when absent. All other optional strings use "".`,
     `CONTENT TYPES:\n${contentTypes}${b.content_types?.length ? `\nPreferred for this brand, in order: ${b.content_types.join(", ")}.` : ""}${news}`,
-    `PLATFORMS (social variants; the worker enforces these limits):\n${platformLines.join("\n")}\nVARIANT FIELDS: variant.title and variant.link are "" for every platform not named above. The worker adds subreddit, board, channel and community: never invent them.`,
+    `PLATFORMS (social variants; the worker enforces these limits):\n${platformLines.join("\n")}\nVARIANT FIELDS: variant.title and variant.link are "" for every platform not named above. The worker adds channel, community and list: never invent them.`,
     ...originalSections(pack, platforms),
     exampleSection,
+    lengthSection(postLengthOf(input), platforms),
     linksSection(platforms),
     `CARDS: headline at most 70, keyword must occur in headline, stat at most 8, subline at most 110, accessible nonempty alt_text. Vary light/dark/mint templates.
 Card craft: the headline is at most 8 words and uses the same entities and figure as the hook; keyword is the single accent (the winning entity or the number); the subline is the consequence, not a date or a source; use full institution names, no acronyms.
@@ -285,8 +293,19 @@ function briefSection(source: any, research?: ResearchBrief): string {
   return `\n\nRESEARCH BRIEF (notes from a web search; each fact is followed by the [S#] ids of the sources that support it):\n${research.text.trim()}\n\n${list}\n\n${SOURCE_RULES}`;
 }
 
-export function buildUserPrompt(input: any, research?: ResearchBrief): string {
-  const { source, platforms, count, templates, kinds } = input;
+/** A draft an earlier batch of the same request already wrote (amendment 10), so the next batch picks other stories. */
+export interface WrittenDraft { headline: string; opening: string }
+
+function writtenSection(written: readonly WrittenDraft[]): string {
+  if (!written.length) return "";
+  const lines = written.map(w => `- ${[w.headline, w.opening].filter(Boolean).join(": ")}`);
+  return `\nAlready written for this request in an earlier call (pick other stories and angles; do not repeat these):\n${lines.join("\n")}`;
+}
+
+export function buildUserPrompt(input: any, research?: ResearchBrief, written: readonly WrittenDraft[] = []): string {
+  const { source, count, templates, kinds } = input;
+  const platforms = (input.platforms as string[]).filter(isWritablePlatform);
+  const length = postLengthOf(input);
   const news = source.type === "news";
   const article = source.type === "article";
   const subject = article ? `Source article: ${source.url}\nUse exactly this URL as article.canonical_url and, where LINKS allows a link in the text, as its one URL.`
@@ -297,9 +316,10 @@ export function buildUserPrompt(input: any, research?: ResearchBrief): string {
     ? `Create up to ${count} drafts, one per story or angle from the research brief${news ? ", strongest first" : ""}. Each draft covers a different story or angle${news ? " and uses the hook shape that fits it (duel or before/after)" : "; give each a different content type when the brief allows and prefer the brand's content_types"}. If fewer than ${count} qualify, write fewer drafts and say why in notes.`
     : `Create exactly ${count} drafts with distinct angles. Give each draft a different content type when the source allows; prefer the brand's content_types.`;
   // devto, hashnode and medium need article.canonical_url, which only an article request supplies.
-  const noCanonical = article ? [] : (platforms as string[]).filter(p => (NEEDS_CANONICAL as readonly string[]).includes(p));
+  const noCanonical = article ? [] : platforms.filter(p => (NEEDS_CANONICAL as readonly string[]).includes(p));
   const leaveOut = noCanonical.length
     ? `\nLeave out ${noCanonical.join(", ")}: each needs an article URL for canonical_url, and this request has none. Write no variant for ${noCanonical.length > 1 ? "them" : "it"} and say in notes that ${noCanonical.length > 1 ? "they were" : "it was"} left out.`
     : "";
-  return `${task}\n${subject}\nTarget platforms: ${platforms.join(", ")}${leaveOut}\nKinds: ${(kinds ?? ["social"]).join(", ")}\nPreferred templates: ${(templates ?? ["dark", "light", "mint"]).join(", ")}\nUse unique client_ref values. Fill the article or launch object for those kinds.${briefSection(source, research)}`;
+  const { min, max } = LENGTH_TARGETS[length];
+  return `${task}\n${subject}\nTarget platforms: ${platforms.join(", ")}${leaveOut}\nLength: ${length} form, ${min}-${max} characters for canonical_text and every social variant (see LENGTH).\nKinds: ${(kinds ?? ["social"]).join(", ")}\nPreferred templates: ${(templates ?? ["dark", "light", "mint"]).join(", ")}\nUse unique client_ref values. Fill the article or launch object for those kinds.${writtenSection(written)}${briefSection(source, research)}`;
 }

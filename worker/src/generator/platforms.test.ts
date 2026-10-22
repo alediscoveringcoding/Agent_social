@@ -2,7 +2,7 @@ import "../test-support/env.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { MANUAL_ONLY_PLATFORMS, PLATFORMS, PLATFORM_KIND, POSTIZ_PROVIDER, PROVIDER_TO_PLATFORM } from "../platforms.js";
+import { DROPPED_PLATFORMS, PLATFORMS, PLATFORM_KIND, WRITABLE_PLATFORMS } from "../platforms.js";
 import { ModelDraftSchema, draftSchema, parseModelResponse } from "./schema.js";
 import { LENGTH_LIMITS, validateContent, validateVariantFields } from "./validators.js";
 import { measurePlatformLength } from "./text-length.js";
@@ -13,7 +13,7 @@ import { modelDraft, variant } from "../test-support/drafts.js";
 const NEW_PLATFORMS = ["threads", "bluesky", "mastodon", "linkedin", "reddit", "pinterest", "telegram", "discord", "medium", "farcaster", "nostr", "lemmy"] as const;
 const BATCH2 = ["slack", "wordpress", "listmonk", "vk", "gmb", "tumblr", "dribbble", "mewe", "skool", "whop", "moltbook", "kick", "twitch", "tiktok", "youtube"] as const;
 const BATCH3 = ["quora", "linkedin-article", "tradingview", "investing", "indiehackers", "stackexchange", "github", "forum", "press"] as const;
-const MANUAL_NO_PROVIDER: readonly string[] = ["substack", "producthunt", ...BATCH3];
+const isDropped = (p: string) => (DROPPED_PLATFORMS as readonly string[]).includes(p);
 
 /** Claude structured outputs: at most 24 optional parameters and 16 union-type parameters in the whole schema. */
 function schemaStats(node: unknown): { optional: number; unions: number; maxLength: number } {
@@ -33,19 +33,16 @@ function schemaStats(node: unknown): { optional: number; unions: number; maxLeng
   return stats;
 }
 
-test("the generator schema lists every platform, and the worker's tables agree with each other", () => {
+test("the generator schema lists the platforms that were kept, and the worker's tables agree with each other", () => {
   const platformSchema = (draftSchema as any).properties.drafts.items.properties.variants.items.properties.platform;
-  assert.deepEqual([...platformSchema.enum].sort(), [...PLATFORMS].sort());
-  for (const p of NEW_PLATFORMS) assert.ok((PLATFORMS as readonly string[]).includes(p), p);
-  assert.equal(PLATFORMS.length, 44);
-  for (const p of BATCH2) assert.ok((PLATFORMS as readonly string[]).includes(p), p);
+  assert.deepEqual([...platformSchema.enum].sort(), [...WRITABLE_PLATFORMS].sort());
+  assert.equal(PLATFORMS.length, 44, "older drafts may still name a dropped platform");
+  assert.deepEqual([...DROPPED_PLATFORMS], ["threads", "reddit", "pinterest", "nostr", "vk", "gmb", "tumblr", "dribbble", "whop", "moltbook", "kick", "twitch", "wordpress", "discord", "mastodon"]);
+  assert.equal(WRITABLE_PLATFORMS.length, 29);
+  for (const p of PLATFORMS) assert.equal((WRITABLE_PLATFORMS as readonly string[]).includes(p), !isDropped(p), p);
   assert.deepEqual(Object.keys(PLATFORM_KIND).sort(), [...PLATFORMS].sort());
   assert.equal(PLATFORM_KIND.medium, "article");
   for (const p of NEW_PLATFORMS) if (p !== "medium") assert.equal(PLATFORM_KIND[p], "social", p);
-  // Every automatic platform has a Postiz provider; the two manual-only ones do not.
-  for (const p of PLATFORMS) assert.equal(POSTIZ_PROVIDER[p] === undefined, MANUAL_NO_PROVIDER.includes(p), p);
-  assert.deepEqual([...MANUAL_ONLY_PLATFORMS], ["substack", "producthunt", "youtube", ...BATCH3], "YouTube needs video; amendment 05 adds nine manual channels");
-  assert.equal(PLATFORM_KIND.wordpress, "article");
   assert.equal(PLATFORM_KIND.listmonk, "article");
 });
 
@@ -58,17 +55,18 @@ test("the schema stays inside the Claude structured-output limits and has no max
   assert.equal(stats.maxLength, 0, "Gemini responseJsonSchema rejects maxLength");
 });
 
-test("a draft with a variant for every platform parses, and the model's title and link become settings", () => {
-  const variants = PLATFORMS.map((p) => variant(p, PLATFORM_KIND[p] !== "social" ? "" : "Text scurt", p === "reddit" ? { title: "Un titlu pentru Reddit" } : p === "pinterest" ? { title: "Un titlu de pin", link: "https://thecrypto.support/ghid/x" } : p === "lemmy" ? { title: "Un titlu pentru Lemmy" } : {}));
+test("a draft with a variant for every kept platform parses, and the model's title and link become settings", () => {
+  const variants = WRITABLE_PLATFORMS.map((p) => variant(p, PLATFORM_KIND[p] !== "social" ? "" : "Text scurt", p === "lemmy" ? { title: "Un titlu pentru Lemmy" } : {}));
   const model = modelDraft({ variants });
   assert.doesNotThrow(() => ModelDraftSchema.parse(model));
   const parsed = parseModelResponse(JSON.stringify({ drafts: [{ ...model, variants: variants.map((v) => ({ ...v, platform: v.platform.toUpperCase() })) }] }));
-  assert.equal(parsed[0].variants.length, 44);
+  assert.equal(parsed[0].variants.length, 29);
+  for (const p of DROPPED_PLATFORMS) {
+    assert.throws(() => ModelDraftSchema.parse(modelDraft({ variants: [variant(p as any, "Text")] })), p);
+  }
 
   const draft = validateDraft({ ...model, kind: "social", article: null, launch: null }, 0, "taxes-support");
   const by = (platform: string) => draft.variants.find((v: any) => v.platform === platform);
-  assert.deepEqual(by("reddit").settings, { post_type: "self", title: "Un titlu pentru Reddit" });
-  assert.deepEqual(by("pinterest").settings, { title: "Un titlu de pin", link: "https://thecrypto.support/ghid/x" });
   assert.deepEqual(by("lemmy").settings, { title: "Un titlu pentru Lemmy" });
   assert.deepEqual(by("instagram").settings, { post_type: "post" });
   assert.deepEqual(by("x").settings, { who_can_reply: "everyone" });
@@ -76,7 +74,7 @@ test("a draft with a variant for every platform parses, and the model's title an
   for (const v of draft.variants) assert.ok(!("title" in v) && !("link" in v), "title and link are not sent as variant fields");
 });
 
-test("the worker's platform list, kinds, provider map and limits mirror the site", () => {
+test("the worker's platform list, dropped list, kinds and limits mirror the site", () => {
   const constants = readFileSync(new URL("../../../site/src/lib/social/constants.ts", import.meta.url), "utf8");
   const block = (name: string, open = "[", close = "]") => {
     const start = constants.indexOf(`export const ${name}`);
@@ -86,8 +84,8 @@ test("the worker's platform list, kinds, provider map and limits mirror the site
   };
   const sitePlatforms = [...block("PLATFORMS").matchAll(/'([\w-]+)'/g)].map((m) => m[1]);
   assert.deepEqual(sitePlatforms, [...PLATFORMS]);
-  const siteProviders = Object.fromEntries([...block("PROVIDER_TO_PLATFORM", "{", "\n}").matchAll(/^\s*'?([\w.-]+)'?:\s*'([\w-]+)',?\s*$/gm)].map((m) => [m[1], m[2]]));
-  assert.deepEqual(siteProviders, PROVIDER_TO_PLATFORM);
+  const siteDropped = [...block("DROPPED_PLATFORMS").matchAll(/'([\w-]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(siteDropped, [...DROPPED_PLATFORMS], "the dropped list matches the site");
   const siteKinds = Object.fromEntries([...block("PLATFORM_KIND", "{", "\n}").matchAll(/^\s*'?([\w-]+)'?:\s*'(\w+)',?\s*$/gm)].map((m) => [m[1], m[2]]));
   assert.deepEqual(siteKinds, PLATFORM_KIND);
 
@@ -98,8 +96,6 @@ test("the worker's platform list, kinds, provider map and limits mirror the site
   for (const [platform, limit] of Object.entries(siteLimits)) if (platform !== "producthunt") assert.equal(LENGTH_LIMITS[platform], limit, `limit of ${platform}`);
   for (const p of NEW_PLATFORMS) assert.ok(p in siteLimits, `site limit for ${p}`);
   for (const p of BATCH2) if (p !== "listmonk") assert.ok(p in siteLimits, `site limit for ${p}`);
-  const manual = [...block("MANUAL_ONLY_PLATFORMS").matchAll(/'([\w-]+)'/g)].map((m) => m[1]);
-  assert.deepEqual(manual, [...MANUAL_ONLY_PLATFORMS], "the manual-only list matches the site");
 });
 
 test("text limits per new platform, counted the platform's way", () => {
@@ -155,12 +151,16 @@ test("medium is an article: it needs a subtitle and at most three tags of 25 cha
   assert.equal(ok.variants[0].platform, "medium");
 });
 
-test("the system prompt covers the new platforms and kinds", () => {
+test("the system prompt covers the kept platforms and kinds, and no dropped platform", () => {
   const system = buildSystemPrompt({ slug: "taxes-support", name: "Taxes Support" }, {});
-  for (const p of NEW_PLATFORMS) assert.ok(system.includes(p), `prompt mentions ${p}`);
-  assert.ok(system.includes("article (devto, hashnode, substack, medium, wordpress, listmonk)"));
-  for (const p of BATCH2) assert.ok(system.includes(p), `prompt mentions ${p}`);
+  const section = system.slice(system.indexOf("PLATFORMS (social variants"), system.indexOf("VARIANT FIELDS"));
+  for (const p of WRITABLE_PLATFORMS) assert.ok(section.includes(`- ${p}:`), `prompt describes ${p}`);
+  for (const p of DROPPED_PLATFORMS) assert.ok(!section.includes(`- ${p}:`), `prompt leaves out ${p}`);
+  assert.ok(system.includes("article (devto, hashnode, substack, medium, listmonk)"));
   assert.ok(system.includes("variant.title") && system.includes("variant.link"));
+  // A request that still names a dropped platform gets no rules for it.
+  const old = buildSystemPrompt({ slug: "taxes-support", name: "Taxes Support" }, { platforms: ["reddit", "x"] });
+  assert.ok(old.includes("- x:") && !old.includes("- reddit:"));
 });
 
 test("second batch: text limits per platform, in the platform's own unit", () => {
@@ -203,10 +203,9 @@ test("second batch: a draft with titles keeps them as settings; WordPress and Li
   assert.deepEqual(ok.validation_errors, []);
 });
 
-test("manual channels (amendment 05): kinds, no Postiz post, limits and the title rules", () => {
+test("manual channels (amendment 05): kinds, limits and the title rules", () => {
   for (const p of BATCH3) {
-    assert.ok(MANUAL_ONLY_PLATFORMS.includes(p), p);
-    assert.equal(POSTIZ_PROVIDER[p], undefined, p);
+    assert.ok((WRITABLE_PLATFORMS as readonly string[]).includes(p), p);
     assert.equal(PLATFORM_KIND[p], ["linkedin-article", "github", "press"].includes(p) ? "article" : "social", p);
   }
   const over = (platform: string, text: string) => validateContent(text, platform).some((e) => e.rule === "length");

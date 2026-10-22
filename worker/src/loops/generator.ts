@@ -16,9 +16,29 @@ import { addReviewerNotes, allowedLinkKeys, factFigures, loadFacts, mapDraftSour
 import { DEFAULT_STYLE_PACK_DIR, loadStylePack, todayOf } from "../generator/style-pack.js";
 import { buildRepairPrompt, mergeRepairs } from "../generator/repair.js";
 import { boundDraftForSite } from "../generator/wire-bounds.js";
+import { DRAFTS_PER_CALL, draftBatches, postLengthOf, validateCanonicalLength, validateLength } from "../generator/length.js";
+import type { ModelDraft } from "../generator/schema.js";
 
 /** Article platforms whose post needs a canonical URL on our blog. */
 const CANONICAL_PLATFORMS = ["devto", "hashnode", "medium"];
+
+/** The first sentence of a draft (at most 160 characters), to tell the next batch what is taken. */
+export function opening(text: unknown): string {
+  const first = String(text ?? "").trim().split(/(?<=[.!?])\s/)[0] ?? "";
+  return first.length > 160 ? `${first.slice(0, 157)}...` : first;
+}
+
+/** Each batch numbers its drafts from 1: later batches get a prefix, so client_ref stays unique in the request. */
+export function uniqueRefs(part: ModelDraft[], taken: readonly ModelDraft[], index: number): ModelDraft[] {
+  const used = new Set(taken.map(d => d.client_ref));
+  return part.map(d => {
+    let ref = d.client_ref;
+    if (index > 0 || used.has(ref)) ref = `b${index + 1}-${ref}`.slice(0, 64);
+    for (let n = 2; used.has(ref); n++) ref = `b${index + 1}-${n}-${d.client_ref}`.slice(0, 64);
+    used.add(ref);
+    return { ...d, client_ref: ref };
+  });
+}
 
 export function startGeneratorLoop() {
   let running = false;
@@ -83,6 +103,11 @@ export function validateDraft(draft: any, i: number, brandSlug: string, input: a
     texts.push(actual);
     errors.push(...validateContent(actual, v.platform).map(e => ({ ...e, field: `variants.${v.platform}` })));
     if (allowedLinks) errors.push(...validateLinksFromSearch(actual, allowedLinks).map(e => ({ ...e, field: `variants.${v.platform}` })));
+  }
+  // Amendment 10: the length picked for the request. A request from before it has no length field and no such check.
+  if (input.length === "short" || input.length === "long") {
+    if (draft.kind === "social") errors.push(...validateCanonicalLength(String(draft.canonical_text ?? ""), input.length).map(e => ({ ...e, field: "canonical_text" })));
+    for (const v of variants) errors.push(...validateLength(v.text ?? "", v.platform, input.length).map(e => ({ ...e, field: `variants.${v.platform}` })));
   }
   for (const v of variantFields) {
     errors.push(...validateVariantFields(v.platform, v));
@@ -227,20 +252,45 @@ export async function processGenerationRequest(req: GenerationRequest, deps: {
       }
     }
     const system = buildSystemPrompt(brand, input, style);
-    const { drafts } = await generate(system, buildUserPrompt(input, brief), choice, { signal: controller.signal });
-    checkLease();
-    const validated = drafts.map((d, i) => validateDraft(d, i, brandSlug, input, brief));
-    let finalDrafts = validated;
-    if ((deps.repair ?? config.GENERATION_REPAIR) && validated.some(d => d.validation_errors.length > 0)) {
+    // Amendment 10: long drafts are written a few per call, so one answer stays well inside its
+    // token and time limits. Each call is told what the earlier ones wrote.
+    const perCall = DRAFTS_PER_CALL[postLengthOf(input)];
+    const drafts: ModelDraft[] = [];
+    let shortfall: string | undefined;
+    for (const [index, size] of draftBatches(input?.count, postLengthOf(input)).entries()) {
+      const written = drafts.map(d => ({ headline: d.card?.headline ?? "", opening: opening(d.canonical_text) }));
       try {
-        const repaired = await generate(system, buildRepairPrompt(validated, brief), choice, { signal: controller.signal });
+        const part = await generate(system, buildUserPrompt({ ...input, count: size }, brief, written), choice, { signal: controller.signal });
         checkLease();
-        finalDrafts = mergeRepairs(validated, repaired.drafts.map((d, i) => validateDraft(d, i, brandSlug, input, brief)));
+        drafts.push(...uniqueRefs(part.drafts as ModelDraft[], drafts, index));
+        // The brief ran out of stories: another call would only repeat them.
+        if (brief && part.drafts.length < size) break;
       } catch (err) {
+        // Nothing written yet, or the lease is gone: the request fails as before.
+        if (index === 0 || lost(err) || controller.signal.aborted) throw err;
         checkLease();
-        logger.warn("Repair failed, keeping original drafts", { requestId: request_id, error: String(err) });
+        const code = err instanceof AiOutputError ? err.code : "GENERATION_ERROR";
+        shortfall = `Doar ${drafts.length} din ${input?.count} ciorne au fost scrise: un apel AI ulterior a esuat (${code}).`;
+        logger.warn("A later draft batch failed, keeping the drafts already written", { requestId: request_id, written: drafts.length, error: String(err) });
+        break;
       }
     }
+    const validated = drafts.map((d, i) => validateDraft(d, i, brandSlug, input, brief));
+    let finalDrafts = validated;
+    if (deps.repair ?? config.GENERATION_REPAIR) {
+      const failing = validated.filter(d => d.validation_errors.length > 0);
+      for (let at = 0; at < failing.length; at += perCall) {
+        try {
+          const repaired = await generate(system, buildRepairPrompt(failing.slice(at, at + perCall), brief), choice, { signal: controller.signal });
+          checkLease();
+          finalDrafts = mergeRepairs(finalDrafts, repaired.drafts.map((d, i) => validateDraft(d, i, brandSlug, input, brief)));
+        } catch (err) {
+          checkLease();
+          logger.warn("Repair failed, keeping original drafts", { requestId: request_id, error: String(err) });
+        }
+      }
+    }
+    if (shortfall) finalDrafts = finalDrafts.map(d => ({ ...d, ...addReviewerNotes({ notes: d.notes }, [shortfall!]) }));
     checkLease();
     let result;
     posting = true;

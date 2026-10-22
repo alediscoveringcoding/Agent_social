@@ -1,169 +1,158 @@
 import "../test-support/env.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { processJob } from "./delivery.js";
 import { destinationHash } from "../delivery/hash.js";
-import { siteApi } from "../services/site-api.js";
-import { postizApi } from "../services/postiz-api.js";
-import { startSyncLoop } from "./sync.js";
+import { siteApi, LeaseLostError } from "../services/site-api.js";
 import { config } from "../config.js";
 
-function fixture() {
-  const bytes = Buffer.from("test-image");
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
-  const account = { id: randomUUID(), platform: "x", postiz_integration_id: "mock-x" };
-  const destination = { text: "Taxes Support", settings: {}, scheduled_at: new Date().toISOString(), destination_hash: "" };
-  const media = [{ media_id: randomUUID(), sha256, alt_text: "Card", url: "http://local.test/media", mime: "image/png" }];
-  destination.destination_hash = destinationHash({ account_id: account.id, platform: account.platform, ...destination, media });
-  return { bytes, job: { job_id: randomUUID(), kind: "publish", attempt_no: 1, account, destination, media } };
-}
+// The worker schedules; the site publishes through its own adapters (amendments 08 and 10).
 
-test("native publishing uses the site's durable endpoint without Postiz or platform credentials", async t => {
-  const { job } = fixture();
-  const native = { ...job, account: { ...job.account, publishing_backend: "native", postiz_integration_id: null } };
-  const order: string[] = [];
-  t.mock.method(siteApi, "submitting", async () => { order.push("submitting"); return {}; });
-  const send = t.mock.method(siteApi, "nativeDelivery", async () => { order.push("native"); return { ok: true }; });
-  const create = t.mock.method(postizApi, "createPost", async () => { throw new Error("Unexpected legacy publication"); });
-  const upload = t.mock.method(postizApi, "uploadMedia", async () => { throw new Error("Unexpected legacy upload"); });
-  const previous = config.POSTIZ_API_KEY;
-  const previousCompat = config.POSTIZ_COMPAT_ENABLED;
-  config.POSTIZ_API_KEY = "";
-  config.POSTIZ_COMPAT_ENABLED = false;
-  try { await live(() => processJob(native)); } finally {
-    config.POSTIZ_API_KEY = previous;
-    config.POSTIZ_COMPAT_ENABLED = previousCompat;
-  }
-  assert.deepEqual(order, ["submitting", "native"]);
-  assert.deepEqual(send.mock.calls[0].arguments, [job.job_id, 1, "publish"]);
-  assert.equal(create.mock.callCount(), 0); assert.equal(upload.mock.callCount(), 0);
-});
-
-test("a lost native response requests reconciliation and never retries the platform create", async t => {
-  const { job } = fixture();
-  const native = { ...job, account: { ...job.account, publishing_backend: "native", postiz_integration_id: null } };
-  t.mock.method(siteApi, "submitting", async () => ({}));
-  const send = t.mock.method(siteApi, "nativeDelivery", async () => { throw new TypeError("fetch failed"); });
-  const result = t.mock.method(siteApi, "result", async () => ({}));
-  await live(() => processJob(native));
-  assert.equal(send.mock.callCount(), 1);
-  assert.equal(result.mock.calls[0].arguments[1]?.outcome, "reconciling");
-});
-
-test("native poll and reconcile recover by journal instead of text matching in Postiz", async t => {
-  const { job } = fixture();
-  const native = { ...job, account: { ...job.account, publishing_backend: "native", postiz_integration_id: null } };
-  const check = t.mock.method(siteApi, "nativeDelivery", async () => ({}));
-  const list = t.mock.method(postizApi, "listPosts", async () => { throw new Error("Unexpected legacy lookup"); });
-  await live(() => processJob({ ...native, kind: "poll" }));
-  await live(() => processJob({ ...native, kind: "reconcile" }));
-  assert.equal(check.mock.callCount(), 2);
-  assert.ok(check.mock.calls.every(call => call.arguments[2] === "check"));
-  assert.equal(list.mock.callCount(), 0);
-});
-
-test("dry run never invokes native publishing even for directly connected accounts", async t => {
-  const { bytes, job } = fixture();
-  t.mock.method(globalThis, "fetch", async () => new Response(bytes));
-  t.mock.method(siteApi, "submitting", async () => ({}));
-  const result = t.mock.method(siteApi, "result", async () => ({}));
-  const send = t.mock.method(siteApi, "nativeDelivery", async () => { throw new Error("Unexpected real publication"); });
-  await processJob({ ...job, account: { ...job.account, publishing_backend: "native", postiz_integration_id: null } });
-  assert.equal(send.mock.callCount(), 0);
-  assert.equal(result.mock.calls[0].arguments[1]?.outcome, "published");
-});
-
-test("disabled historical compatibility holds uncertain jobs without Postiz lookups or absence reports", async t => {
-  const { job } = fixture();
-  const list = t.mock.method(postizApi, "listPosts", async () => { throw new Error("Unexpected legacy lookup"); });
-  const result = t.mock.method(siteApi, "result", async () => ({}));
-  const previous = config.POSTIZ_COMPAT_ENABLED;
-  config.POSTIZ_COMPAT_ENABLED = false;
-  try {
-    await live(() => processJob({ ...job, kind: "poll", postiz: { post_id: "historical" } }));
-    await live(() => processJob({ ...job, kind: "reconcile" }));
-  } finally { config.POSTIZ_COMPAT_ENABLED = previous; }
-  assert.equal(list.mock.callCount(), 0);
-  assert.equal(result.mock.callCount(), 0);
-});
-test("dry run downloads and checks media, submits a result without contacting Postiz", async t => {
-  const { bytes, job } = fixture();
-  t.mock.method(globalThis, "fetch", async () => new Response(bytes));
-  const upload = t.mock.method(postizApi, "uploadMedia", async () => { throw new Error("Unexpected Postiz upload"); });
-  const create = t.mock.method(postizApi, "createPost", async () => { throw new Error("Unexpected Postiz publish"); });
-  t.mock.method(siteApi, "submitting", async () => ({}));
-  const result = t.mock.method(siteApi, "result", async () => ({}));
-  await processJob(job);
-  assert.equal(upload.mock.callCount(), 0);
-  assert.equal(create.mock.callCount(), 0);
-  assert.equal(result.mock.calls[0].arguments[1]?.outcome, "published");
-});
-test("media bytes that do not match approved SHA retry instead of publishing", async t => {
-  const { job } = fixture();
-  t.mock.method(globalThis, "fetch", async () => new Response("tampered"));
-  const result = t.mock.method(siteApi, "result", async () => ({}));
-  const submitting = t.mock.method(siteApi, "submitting", async () => ({}));
-  await processJob(job);
-  assert.equal(submitting.mock.callCount(), 0);
-  assert.equal(result.mock.calls[0].arguments[1]?.outcome, "retry");
-  assert.equal(result.mock.calls[0].arguments[1]?.error_code, "MEDIA_FETCH_FAILED");
-});
-test("dry run poll, reconciliation and sync never call Postiz", async t => {
-  const list = t.mock.method(postizApi, "listPosts", async () => { throw new Error("Unexpected Postiz read"); });
-  const integrations = t.mock.method(postizApi, "listIntegrations", async () => { throw new Error("Unexpected Postiz sync"); });
-  const { job } = fixture();
-  await processJob({ ...job, kind: "poll", postiz: { post_id: "existing" } });
-  await processJob({ ...job, kind: "reconcile" });
-  startSyncLoop();
-  assert.equal(list.mock.callCount(), 0);
-  assert.equal(integrations.mock.callCount(), 0);
-});
-
-// Amendment 04: the live path (not a dry run) builds Postiz's own request body per platform.
 async function live<T>(run: () => Promise<T>): Promise<T> {
   const previous = config.WORKER_DRY_RUN;
   config.WORKER_DRY_RUN = false;
   try { return await run(); } finally { config.WORKER_DRY_RUN = previous; }
 }
-function jobFor(platform: string, text: string, settings: Record<string, unknown>) {
-  const account = { id: randomUUID(), platform, postiz_integration_id: `mock-${platform}` };
-  const destination = { text, settings, scheduled_at: new Date().toISOString(), destination_hash: "" };
-  destination.destination_hash = destinationHash({ account_id: account.id, platform, ...destination, media: [] });
-  return { job_id: randomUUID(), kind: "publish", attempt_no: 1, account, destination, media: [] as unknown[] };
+
+function jobFor(kind = "publish", backend: string | null = "native") {
+  const account = { id: randomUUID(), platform: "bluesky", publishing_backend: backend, native_provider_account_id: "did:plc:test" };
+  const destination = { text: "Taxes Support", settings: {}, scheduled_at: new Date().toISOString(), destination_hash: "" };
+  const media = [{ media_id: randomUUID(), sha256: "a".repeat(64), alt_text: "Card", mime: "image/png" }];
+  destination.destination_hash = destinationHash({ account_id: account.id, platform: account.platform, ...destination, media });
+  return { job_id: randomUUID(), kind, attempt_no: 1, account, destination, media };
 }
-test("a Reddit post goes to Postiz as a CreatePostDto with the subreddit list", async t => {
-  const job = jobFor("reddit", "Termenul este 25 mai.", { subreddit: "r/taxes_ro", title: "Un titlu", post_type: "self" });
-  t.mock.method(siteApi, "submitting", async () => ({}));
-  const create = t.mock.method(postizApi, "createPost", async () => [{ postId: "post-77", integration: "mock-reddit" }]);
-  const submitted = t.mock.method(siteApi, "submitted", async () => ({}));
-  await live(() => processJob(job));
-  const body = create.mock.calls[0].arguments[0]!;
-  assert.equal(body.type, "now");
-  assert.deepEqual(body.posts[0].integration, { id: "mock-reddit" });
-  assert.equal(body.posts[0].value[0].content, "Termenul este 25 mai.");
-  assert.deepEqual(body.posts[0].settings, {
-    __type: "reddit",
-    subreddit: [{ value: { subreddit: "r/taxes_ro", title: "Un titlu", type: "self", url: "", is_flair_required: false } }],
-  });
-  assert.deepEqual(submitted.mock.calls[0].arguments, [job.job_id, 1, "post-77", "post-77"]);
-});
-test("a Bluesky post needs no settings; the answer's postId is kept", async t => {
-  const job = jobFor("bluesky", "Ai pana pe 25 mai.", {});
-  t.mock.method(siteApi, "submitting", async () => ({}));
-  const create = t.mock.method(postizApi, "createPost", async () => [{ postId: "post-5", integration: "mock-bluesky" }]);
-  const submitted = t.mock.method(siteApi, "submitted", async () => ({}));
-  await live(() => processJob(job));
-  assert.deepEqual(create.mock.calls[0].arguments[0]!.posts[0]!.settings, { __type: "bluesky" });
-  assert.equal(submitted.mock.calls[0].arguments[2], "post-5");
-});
-test("a manual-only platform that reaches the worker fails without calling Postiz", async t => {
-  const job = jobFor("substack", "Un articol", { title: "T" });
-  t.mock.method(siteApi, "submitting", async () => ({}));
-  const create = t.mock.method(postizApi, "createPost", async () => { throw new Error("Unexpected Postiz publish"); });
+
+/** The site's 409 error, with the code of the body (site-api.ts carries it on `code`). */
+const lease = (code?: string) => Object.assign(new LeaseLostError(), code ? { code } : {});
+
+test("publish marks the attempt, then asks the site to publish; the worker gets no platform credential", async t => {
+  const job = jobFor();
+  const order: string[] = [];
+  t.mock.method(siteApi, "submitting", async () => { order.push("submitting"); return {}; });
+  const send = t.mock.method(siteApi, "nativeDelivery", async () => { order.push("native"); return { ok: true }; });
   const result = t.mock.method(siteApi, "result", async () => ({}));
   await live(() => processJob(job));
-  assert.equal(create.mock.callCount(), 0);
+  assert.deepEqual(order, ["submitting", "native"]);
+  assert.deepEqual(send.mock.calls[0].arguments, [job.job_id, 1, "publish"]);
+  assert.equal(result.mock.callCount(), 0, "the site records the outcome itself");
+  assert.ok(!JSON.stringify(job).match(/token|secret|password/i));
+});
+
+test("a lost publish response asks for reconciliation and never sends the publish twice", async t => {
+  const job = jobFor();
+  t.mock.method(siteApi, "submitting", async () => ({}));
+  const send = t.mock.method(siteApi, "nativeDelivery", async () => { throw new TypeError("fetch failed"); });
+  const result = t.mock.method(siteApi, "result", async () => ({}));
+  await live(() => processJob(job));
+  assert.equal(send.mock.callCount(), 1);
+  assert.equal(result.mock.calls[0].arguments[1]?.outcome, "reconciling");
+  assert.equal(result.mock.calls[0].arguments[1]?.error_code, "NATIVE_RESPONSE_LOST");
+});
+
+test("a 409 from the publish call is the site's answer: nothing more is reported", async t => {
+  for (const code of ["LEASE_LOST", "PUBLISHING_PAUSED", undefined]) {
+    const job = jobFor();
+    t.mock.method(siteApi, "submitting", async () => ({}));
+    t.mock.method(siteApi, "nativeDelivery", async () => { throw lease(code); });
+    const result = t.mock.method(siteApi, "result", async () => ({}));
+    await live(() => processJob(job));
+    assert.equal(result.mock.callCount(), 0, String(code));
+    t.mock.restoreAll();
+  }
+});
+
+test("poll and reconcile jobs are checked by the site through its journal", async t => {
+  const check = t.mock.method(siteApi, "nativeDelivery", async () => ({}));
+  const result = t.mock.method(siteApi, "result", async () => ({}));
+  await live(() => processJob(jobFor("poll")));
+  await live(() => processJob(jobFor("reconcile")));
+  assert.equal(check.mock.callCount(), 2);
+  assert.ok(check.mock.calls.every(call => call.arguments[2] === "check"));
+  assert.equal(result.mock.callCount(), 0, "absence is never guessed by the worker");
+});
+
+test("dry run never asks the site to publish or check, and reports a fake published URL", async t => {
+  const job = jobFor();
+  t.mock.method(siteApi, "submitting", async () => ({}));
+  const result = t.mock.method(siteApi, "result", async () => ({}));
+  const send = t.mock.method(siteApi, "nativeDelivery", async () => { throw new Error("Unexpected real publication"); });
+  await processJob(job);
+  await processJob(jobFor("poll"));
+  await processJob(jobFor("reconcile"));
+  assert.equal(send.mock.callCount(), 0);
+  assert.equal(result.mock.callCount(), 1);
+  assert.equal(result.mock.calls[0].arguments[1]?.outcome, "published");
+  assert.match(String(result.mock.calls[0].arguments[1]?.remote_url), /^https:\/\/example\.com\/dry-run\//);
+});
+
+test("content that does not match the approved hash fails before anything is sent", async t => {
+  const job = jobFor();
+  job.destination.text = "Alt text decat cel aprobat";
+  const submitting = t.mock.method(siteApi, "submitting", async () => ({}));
+  const send = t.mock.method(siteApi, "nativeDelivery", async () => ({}));
+  const result = t.mock.method(siteApi, "result", async () => ({}));
+  await live(() => processJob(job));
+  assert.equal(submitting.mock.callCount(), 0);
+  assert.equal(send.mock.callCount(), 0);
+  assert.equal(result.mock.calls[0].arguments[1]?.error_code, "HASH_MISMATCH");
+});
+
+test("a refused /submitting stops before the publish call, whatever the 409 code", async t => {
+  for (const code of ["LEASE_LOST", "INVALID_TRANSITION", undefined]) {
+    t.mock.method(siteApi, "submitting", async () => { throw lease(code); });
+    const send = t.mock.method(siteApi, "nativeDelivery", async () => { throw new Error("Unexpected publication"); });
+    await live(() => processJob(jobFor()));
+    assert.equal(send.mock.callCount(), 0, String(code));
+    t.mock.restoreAll();
+  }
+});
+
+test("the lease is extended while a job runs, and the timer stops afterwards", async t => {
+  t.mock.method(siteApi, "submitting", async () => ({}));
+  t.mock.method(siteApi, "nativeDelivery", async () => {
+    await new Promise((r) => setTimeout(r, 150));
+    return {};
+  });
+  const beat = t.mock.method(siteApi, "heartbeat", async () => ({}));
+  await live(() => processJob(jobFor(), { heartbeatMs: 20 }));
+  const during = beat.mock.callCount();
+  assert.ok(during >= 2, `expected heartbeats while running, got ${during}`);
+  await new Promise((r) => setTimeout(r, 80));
+  assert.equal(beat.mock.callCount(), during, "no heartbeat after the job ended");
+});
+
+test("a heartbeat answered 409 stops the job before the publish call", async t => {
+  t.mock.method(siteApi, "heartbeat", async () => { throw lease("LEASE_LOST"); });
+  t.mock.method(siteApi, "submitting", async () => {
+    await new Promise((r) => setTimeout(r, 100));
+    return {};
+  });
+  const send = t.mock.method(siteApi, "nativeDelivery", async () => { throw new Error("Unexpected publication"); });
+  await live(() => processJob(jobFor(), { heartbeatMs: 10 }));
+  assert.equal(send.mock.callCount(), 0);
+});
+
+test("a job of an old Postiz account fails to publish and is never looked up", async t => {
+  const send = t.mock.method(siteApi, "nativeDelivery", async () => { throw new Error("Unexpected call"); });
+  const submitting = t.mock.method(siteApi, "submitting", async () => ({}));
+  const result = t.mock.method(siteApi, "result", async () => ({}));
+  await live(() => processJob(jobFor("publish", "postiz")));
+  await live(() => processJob(jobFor("poll", "postiz")));
+  await live(() => processJob(jobFor("reconcile", null)));
+  assert.equal(send.mock.callCount(), 0);
+  assert.equal(submitting.mock.callCount(), 0);
+  assert.equal(result.mock.callCount(), 1, "only the publish job is reported");
   assert.equal(result.mock.calls[0].arguments[1]?.outcome, "failed");
-  assert.equal(result.mock.calls[0].arguments[1]?.error_code, "VALIDATION_REJECTED");
+  assert.equal(result.mock.calls[0].arguments[1]?.error_code, "LEGACY_POSTIZ_ACCOUNT");
+});
+
+test("a result refused with 409 is logged, not thrown", async t => {
+  for (const code of ["LEASE_LOST", "INVALID_TRANSITION"]) {
+    const job = jobFor();
+    job.destination.text = "changed";
+    t.mock.method(siteApi, "result", async () => { throw lease(code); });
+    await assert.doesNotReject(live(() => processJob(job)), code);
+    t.mock.restoreAll();
+  }
 });

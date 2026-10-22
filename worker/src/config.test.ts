@@ -3,11 +3,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseConfig } from "./config.js";
 
-const base = { WORKER_TOKEN: "x".repeat(32), POSTIZ_API_KEY: "k" };
+const base = { WORKER_TOKEN: "x".repeat(32) };
 
-test("direct publishing starts without a Postiz key", () => {
-  assert.equal(parseConfig({ WORKER_TOKEN: "x".repeat(32) }).POSTIZ_API_KEY, "");
-  assert.equal(parseConfig({ WORKER_TOKEN: "x".repeat(32), POSTIZ_API_KEY: "old-key" }).POSTIZ_COMPAT_ENABLED, false);
+test("old Postiz settings left in a .env are ignored (amendment 10 removed Postiz)", () => {
+  const c = parseConfig({ ...base, POSTIZ_API_KEY: "old-key", POSTIZ_BASE_URL: "not a url", POSTIZ_COMPAT_ENABLED: "true", SYNC_LOOP_INTERVAL_MS: "0" });
+  assert.ok(!Object.keys(c).some((key) => key.startsWith("POSTIZ") || key.startsWith("SYNC")));
 });
 
 test("WORKER_DRY_RUN=false really turns dry run off (z.coerce.boolean read it as true)", () => {
@@ -33,7 +33,6 @@ test("blank intervals keep their defaults instead of becoming 0", () => {
   const c = parseConfig({ ...base, DELIVERY_LOOP_INTERVAL_MS: "", GENERATION_HEARTBEAT_MS: "" });
   assert.equal(c.DELIVERY_LOOP_INTERVAL_MS, 30_000);
   assert.equal(c.GENERATION_HEARTBEAT_MS, 120_000);
-  assert.equal(parseConfig({ ...base, SYNC_LOOP_INTERVAL_MS: "60000" }).SYNC_LOOP_INTERVAL_MS, 60_000);
   assert.throws(() => parseConfig({ ...base, GENERATION_LOOP_INTERVAL_MS: "0" }));
 });
 

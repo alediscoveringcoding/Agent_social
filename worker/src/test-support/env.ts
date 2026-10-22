@@ -4,9 +4,6 @@
 // ever calls a real AI API: the clients are mocked.
 process.env.WORKER_TOKEN = "test-worker-token-0123456789abcdef0123456789";
 process.env.WORKER_ID = "worker-test-01";
-process.env.POSTIZ_API_KEY = "test-postiz-key";
-process.env.POSTIZ_COMPAT_ENABLED = "true";
-process.env.POSTIZ_BASE_URL = "http://127.0.0.1:9";
 process.env.ANTHROPIC_API_KEY = "sk-ant-test-not-a-real-key";
 process.env.GEMINI_API_KEY = "test-gemini-not-a-real-key";
 process.env.GENERATOR_PROVIDER = "claude";

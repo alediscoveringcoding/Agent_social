@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PLATFORMS } from "../platforms.js";
+import { WRITABLE_PLATFORMS } from "../platforms.js";
 
 // Both providers use this closed schema. Length limits are in descriptions:
 // Gemini does not accept maxLength; content is checked after parsing.
@@ -20,15 +20,15 @@ export const ModelDraftSchema = z.strictObject({
   client_ref: z.string().describe("Unique nonempty batch reference, at most 64 characters"),
   kind: z.enum(["social", "article", "launch"]),
   title: z.string().describe("Title; empty string when absent"),
-  canonical_text: z.string(),
+  canonical_text: z.string().describe("The complete post in the request's LENGTH form, the master text the variants adapt; never only the hook"),
   source_url: z.string().describe("Source URL; empty string when absent"),
   variants: z.array(z.strictObject({
-    platform: z.enum(PLATFORMS),
-    text: z.string().describe("Social copy; empty string for article and launch destinations"),
+    platform: z.enum(WRITABLE_PLATFORMS),
+    text: z.string().describe("The complete social post in the request's LENGTH form; empty string for article and launch destinations"),
     // Optional-looking fields are required strings: Claude structured outputs
     // allow at most 24 optional parameters, so "absent" is an empty string.
-    title: z.string().describe("Post title for reddit (at most 300 characters), pinterest (at most 100), lemmy (3 to 200), dribbble, skool, tiktok (at most 90), youtube (at most 100), tradingview (at most 100) and indiehackers (at most 150); optional for tumblr, whop and forum (a new thread); for stackexchange only a question (15 to 150); empty string for every other platform"),
-    link: z.string().describe("Destination URL for pinterest, optional link for lemmy and tumblr, normally the source URL; empty string for every other platform"),
+    title: z.string().describe("Post title for lemmy (3 to 200 characters), skool, tiktok (at most 90), youtube (at most 100), tradingview (at most 100) and indiehackers (at most 150); optional for forum (a new thread); for stackexchange only a question (15 to 150); empty string for every other platform"),
+    link: z.string().describe("Optional link for lemmy, normally the source URL; empty string for every other platform"),
   })),
   article: article.nullable(),
   launch: launch.nullable(),

@@ -67,12 +67,6 @@ export const siteApi = {
     request(`/deliveries/${id}/submitting`, { attempt_no: attemptNo }),
   nativeDelivery: (id: string, attemptNo: number, kind: "publish" | "check") =>
     request(`/deliveries/${id}/native`, { attempt_no: attemptNo, kind }, { timeoutMs: 300_000 }),
-  submitted: (id: string, attemptNo: number, postizPostId: string, postizGroup: string) =>
-    request(`/deliveries/${id}/submitted`, {
-      attempt_no: attemptNo,
-      postiz_post_id: postizPostId,
-      postiz_group: postizGroup,
-    }),
   result: (
     id: string,
     body: {
@@ -91,7 +85,4 @@ export const siteApi = {
   postDrafts: (id: string, drafts: unknown[], opts: { signal?: AbortSignal } = {}) => request(`/generation/${id}/drafts`, { drafts }, { ...opts, timeoutMs: DRAFTS_TIMEOUT_MS }),
   generationFailed: (id: string, errorCode: string, errorMessage: string, opts: { signal?: AbortSignal } = {}) =>
     request(`/generation/${id}/failed`, { error_code: errorCode, error_message: errorMessage.slice(0, 4000) }, opts),
-
-  // Sync
-  syncAccounts: (body: unknown) => request("/accounts/sync", body),
 };

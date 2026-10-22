@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { PLATFORMS } from "../platforms.js";
+import { DROPPED_PLATFORMS, WRITABLE_PLATFORMS } from "../platforms.js";
 import { PLATFORM_RULES, buildSystemPrompt, buildUserPrompt } from "./prompts.js";
 import type { ResearchBrief } from "./research-types.js";
 import {
@@ -22,9 +22,10 @@ function write(root: string, rel: string, text: string) {
 }
 const section = (prompt: string, title: string) => prompt.slice(prompt.indexOf(title));
 
-test("PLATFORM_RULES covers every platform", () => {
-  for (const p of PLATFORMS) assert.ok(PLATFORM_RULES[p], p);
-  assert.equal(Object.keys(PLATFORM_RULES).length, PLATFORMS.length);
+test("PLATFORM_RULES covers every platform the generator writes for, and no dropped one", () => {
+  for (const p of WRITABLE_PLATFORMS) assert.ok(PLATFORM_RULES[p], p);
+  assert.equal(Object.keys(PLATFORM_RULES).length, WRITABLE_PLATFORMS.length);
+  for (const p of DROPPED_PLATFORMS) assert.ok(!(p in PLATFORM_RULES), p);
 });
 
 test("no pack: the prompt is generic, public and deterministic", () => {

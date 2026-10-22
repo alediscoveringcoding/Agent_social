@@ -2,20 +2,13 @@ import "../test-support/env.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import * as yaml from "yaml";
 import { LINK_IN_TEXT, NEEDS_CANONICAL, activeFacts, buildSystemPrompt, buildUserPrompt } from "./prompts.js";
 import type { ResearchBrief } from "./research-types.js";
-import { PROMPTS_DIR, addDays, loadStylePack } from "./style-pack.js";
+import { PROMPTS_DIR, addDays } from "./style-pack.js";
 
 const brand = { slug: "taxes-support", name: "Taxes Support" };
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "prompts-"));
-function write(root: string, rel: string, text: string) {
-  const file = path.join(root, rel);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, text);
-}
 const part = (prompt: string, title: string, next: string) => prompt.slice(prompt.indexOf(title), prompt.indexOf(next));
 
 const research: ResearchBrief = {
@@ -162,19 +155,33 @@ test("with a research brief the count is a ceiling; without one it is exact", ()
   }
 });
 
-// ---- threads: no CTA ----
+// ---- length (amendment 10) ----
 
-test("threads gets no CTA, whatever the brand sets", () => {
-  const p = buildSystemPrompt(brand, { platforms: ["linkedin", "threads", "x"] });
-  const cta = part(p, "CTA per platform", "Fixed hashtags").split("\n");
-  assert.ok(cta.includes("- linkedin: Afli mai multe de la Taxes Support."));
-  assert.ok(cta.includes("- x: Afli mai multe de la Taxes Support."));
-  assert.ok(cta.includes("- threads: (no CTA)"));
-  assert.ok(buildSystemPrompt(brand, { platforms: ["threads"] }).includes("- threads: (no CTA)"), "stated even when the brand has no other CTA use");
-  assert.match(readPlaybook("threads"), /no CTA line/);
+test("one length per request, the same on every platform, after the briefs it overrides", () => {
+  const long = buildSystemPrompt(brand, { platforms: ["linkedin", "instagram", "x", "telegram"], length: "long" });
+  const section = part(long, "LENGTH (long form", "LINKS (one rule");
+  assert.ok(section.includes("1200-2000 characters"));
+  assert.ok(section.includes("x: 196-280") && section.includes("telegram: 716-1024"), "capped platforms fill most of their limit");
+  assert.ok(!section.includes("linkedin:") && !section.includes("instagram:"), "the others share the common target");
+  assert.ok(section.includes("wins over any length"));
+  assert.ok(long.indexOf("LENGTH (") > long.indexOf("PLATFORMS ("), "after the playbooks and brand notes");
+  assert.ok(!readPlaybook("linkedin").match(/\d+-\d+ words/) && !readPlaybook("instagram").match(/\d[\d,]*-\d[\d,]* characters/), "no playbook sets its own length");
 
-  const dir = tmp();
-  write(dir, "taxes-support/brand.yaml", "cta:\n  threads: PACK THREADS CTA\n  linkedin: PACK LINKEDIN CTA\n");
-  const withPack = buildSystemPrompt(brand, { platforms: ["linkedin", "threads"] }, loadStylePack("taxes-support", dir));
-  assert.ok(withPack.includes("- linkedin: PACK LINKEDIN CTA") && withPack.includes("- threads: (no CTA)") && !withPack.includes("PACK THREADS CTA"));
+  const short = buildSystemPrompt(brand, { platforms: ["facebook", "x"], length: "short" });
+  assert.ok(part(short, "LENGTH (short form", "LINKS (one rule").includes("250-600 characters"));
+  assert.ok(buildSystemPrompt(brand, { platforms: ["x"] }).includes("LENGTH (long form"), "a request without the field is long");
+
+  const user = buildUserPrompt({ source: { type: "topic", topic: "T", hooks: [] }, platforms: ["x", "reddit"], count: 2, length: "short" });
+  assert.ok(user.includes("Length: short form, 250-600 characters"));
+  assert.ok(user.includes("Target platforms: x\n"), "a dropped platform left in an old request is not targeted");
+});
+
+test("a later batch is told what the earlier ones wrote", () => {
+  const source = { type: "topic", topic: "T", hooks: [] };
+  const first = buildUserPrompt({ source, platforms: ["x"], count: 3 });
+  assert.ok(!first.includes("Already written"));
+  const next = buildUserPrompt({ source, platforms: ["x"], count: 2 }, undefined, [{ headline: "Titlu unu", opening: "Prima propozitie." }]);
+  assert.ok(next.includes("Already written for this request in an earlier call"));
+  assert.ok(next.includes("- Titlu unu: Prima propozitie."));
+  assert.match(next, /Create exactly 2 drafts/);
 });

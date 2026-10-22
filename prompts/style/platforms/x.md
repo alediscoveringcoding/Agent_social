@@ -1,2 +1,2 @@
-- One claim and one figure. No bullets. At most 1 hashtag.
+- One claim with its key figure and what it means for the reader. No bullets. At most 1 hashtag.
 - The link, when the request offers one (see LINKS), is the only URL in the text and goes last: the article URL for an article request, the most relevant source URL from the brief for a research request. Otherwise no URL.

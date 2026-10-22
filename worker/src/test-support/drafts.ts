@@ -1,8 +1,11 @@
 import type { ModelDraft } from "../generator/schema.js";
 
-/** A model variant with the title and link fields empty, as for most platforms. */
-export function variant(platform: ModelDraft["variants"][number]["platform"], text: string, extra: { title?: string; link?: string } = {}): ModelDraft["variants"][number] {
-  return { platform, text, title: extra.title ?? "", link: extra.link ?? "" };
+/**
+ * A model variant with the title and link fields empty, as for most platforms. The platform is
+ * any name: tests also feed the validators the platforms dropped from the schema (amendment 10).
+ */
+export function variant(platform: string, text: string, extra: { title?: string; link?: string } = {}): ModelDraft["variants"][number] {
+  return { platform: platform as ModelDraft["variants"][number]["platform"], text, title: extra.title ?? "", link: extra.link ?? "" };
 }
 
 export function modelDraft(patch: Partial<ModelDraft> = {}): ModelDraft {

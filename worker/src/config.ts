@@ -22,10 +22,6 @@ const schema = z.object({
   WORKER_TOKEN: z.string().min(32),
   WORKER_ID: z.preprocess(blankToUndefined, z.string().default("worker-local-01")),
 
-  POSTIZ_BASE_URL: z.string().url().default("http://localhost:4007"),
-  POSTIZ_API_KEY: z.preprocess(blankToUndefined, z.string().default('')),
-  POSTIZ_COMPAT_ENABLED: envBool(false),
-
   // Optional: the generator loop is skipped (with a warning) when no AI key is set.
   // GENERATOR_PROVIDER picks one explicitly; unset means whichever key is present
   // (Claude first). See services/llm.ts.
@@ -57,7 +53,6 @@ const schema = z.object({
   // Generation leases last 10 minutes; the worker extends its lease this often
   // while it generates and repairs (POST /generation/{id}/heartbeat).
   GENERATION_HEARTBEAT_MS: envInt(120_000),
-  SYNC_LOOP_INTERVAL_MS: envInt(900_000),
 });
 
 export type WorkerConfig = z.infer<typeof schema>;

@@ -2,7 +2,6 @@ import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { startDeliveryLoop } from "./loops/delivery.js";
 import { startGeneratorLoop } from "./loops/generator.js";
-import { startSyncLoop } from "./loops/sync.js";
 import { availableProviders, generatorProvider } from "./services/llm.js";
 import { startHealthServer } from "./utils/health.js";
 
@@ -11,11 +10,9 @@ async function main() {
     workerId: config.WORKER_ID,
     dryRun: config.WORKER_DRY_RUN,
     siteBase: config.SITE_BASE_URL,
-    postizBase: config.POSTIZ_BASE_URL,
   });
 
   startDeliveryLoop();
-  startSyncLoop();
   startHealthServer();
 
   // The loop runs when any AI key is set: the admin picks the model per request,
@@ -33,7 +30,7 @@ async function main() {
     }
     startGeneratorLoop();
   } else {
-    logger.warn("No ANTHROPIC_API_KEY or GEMINI_API_KEY set, generator loop disabled (delivery + sync still run)");
+    logger.warn("No ANTHROPIC_API_KEY or GEMINI_API_KEY set, generator loop disabled (delivery still runs)");
   }
 
   logger.info("All loops running");
