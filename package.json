@@ -2,7 +2,9 @@
   "name": "social-infra",
   "private": true,
   "type": "module",
-  "workspaces": ["worker"],
+  "workspaces": [
+    "worker"
+  ],
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
     "dev:worker": "cd worker && npm run dev",
@@ -11,5 +13,8 @@
     "dev:down": "node scripts/dev-down.mjs",
     "health": "node scripts/health-check.mjs",
     "backup": "node scripts/backup-local.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^2.1.292"
   }
 }

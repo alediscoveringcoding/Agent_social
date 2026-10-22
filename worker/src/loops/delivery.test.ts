@@ -18,6 +18,75 @@ function fixture() {
   destination.destination_hash = destinationHash({ account_id: account.id, platform: account.platform, ...destination, media });
   return { bytes, job: { job_id: randomUUID(), kind: "publish", attempt_no: 1, account, destination, media } };
 }
+
+test("native publishing uses the site's durable endpoint without Postiz or platform credentials", async t => {
+  const { job } = fixture();
+  const native = { ...job, account: { ...job.account, publishing_backend: "native", postiz_integration_id: null } };
+  const order: string[] = [];
+  t.mock.method(siteApi, "submitting", async () => { order.push("submitting"); return {}; });
+  const send = t.mock.method(siteApi, "nativeDelivery", async () => { order.push("native"); return { ok: true }; });
+  const create = t.mock.method(postizApi, "createPost", async () => { throw new Error("Unexpected legacy publication"); });
+  const upload = t.mock.method(postizApi, "uploadMedia", async () => { throw new Error("Unexpected legacy upload"); });
+  const previous = config.POSTIZ_API_KEY;
+  const previousCompat = config.POSTIZ_COMPAT_ENABLED;
+  config.POSTIZ_API_KEY = "";
+  config.POSTIZ_COMPAT_ENABLED = false;
+  try { await live(() => processJob(native)); } finally {
+    config.POSTIZ_API_KEY = previous;
+    config.POSTIZ_COMPAT_ENABLED = previousCompat;
+  }
+  assert.deepEqual(order, ["submitting", "native"]);
+  assert.deepEqual(send.mock.calls[0].arguments, [job.job_id, 1, "publish"]);
+  assert.equal(create.mock.callCount(), 0); assert.equal(upload.mock.callCount(), 0);
+});
+
+test("a lost native response requests reconciliation and never retries the platform create", async t => {
+  const { job } = fixture();
+  const native = { ...job, account: { ...job.account, publishing_backend: "native", postiz_integration_id: null } };
+  t.mock.method(siteApi, "submitting", async () => ({}));
+  const send = t.mock.method(siteApi, "nativeDelivery", async () => { throw new TypeError("fetch failed"); });
+  const result = t.mock.method(siteApi, "result", async () => ({}));
+  await live(() => processJob(native));
+  assert.equal(send.mock.callCount(), 1);
+  assert.equal(result.mock.calls[0].arguments[1]?.outcome, "reconciling");
+});
+
+test("native poll and reconcile recover by journal instead of text matching in Postiz", async t => {
+  const { job } = fixture();
+  const native = { ...job, account: { ...job.account, publishing_backend: "native", postiz_integration_id: null } };
+  const check = t.mock.method(siteApi, "nativeDelivery", async () => ({}));
+  const list = t.mock.method(postizApi, "listPosts", async () => { throw new Error("Unexpected legacy lookup"); });
+  await live(() => processJob({ ...native, kind: "poll" }));
+  await live(() => processJob({ ...native, kind: "reconcile" }));
+  assert.equal(check.mock.callCount(), 2);
+  assert.ok(check.mock.calls.every(call => call.arguments[2] === "check"));
+  assert.equal(list.mock.callCount(), 0);
+});
+
+test("dry run never invokes native publishing even for directly connected accounts", async t => {
+  const { bytes, job } = fixture();
+  t.mock.method(globalThis, "fetch", async () => new Response(bytes));
+  t.mock.method(siteApi, "submitting", async () => ({}));
+  const result = t.mock.method(siteApi, "result", async () => ({}));
+  const send = t.mock.method(siteApi, "nativeDelivery", async () => { throw new Error("Unexpected real publication"); });
+  await processJob({ ...job, account: { ...job.account, publishing_backend: "native", postiz_integration_id: null } });
+  assert.equal(send.mock.callCount(), 0);
+  assert.equal(result.mock.calls[0].arguments[1]?.outcome, "published");
+});
+
+test("disabled historical compatibility holds uncertain jobs without Postiz lookups or absence reports", async t => {
+  const { job } = fixture();
+  const list = t.mock.method(postizApi, "listPosts", async () => { throw new Error("Unexpected legacy lookup"); });
+  const result = t.mock.method(siteApi, "result", async () => ({}));
+  const previous = config.POSTIZ_COMPAT_ENABLED;
+  config.POSTIZ_COMPAT_ENABLED = false;
+  try {
+    await live(() => processJob({ ...job, kind: "poll", postiz: { post_id: "historical" } }));
+    await live(() => processJob({ ...job, kind: "reconcile" }));
+  } finally { config.POSTIZ_COMPAT_ENABLED = previous; }
+  assert.equal(list.mock.callCount(), 0);
+  assert.equal(result.mock.callCount(), 0);
+});
 test("dry run downloads and checks media, submits a result without contacting Postiz", async t => {
   const { bytes, job } = fixture();
   t.mock.method(globalThis, "fetch", async () => new Response(bytes));

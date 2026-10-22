@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Social publishing worker API
-  version: 1.0.0-draft
+  version: 1.1.0-draft
   summary: Site API consumed by the Track B worker (PRD section 10.3).
   description: |
     Draft written by Track A from the implementation in `site/src/app/api/worker/social/v1/`
@@ -12,6 +12,8 @@ info:
     - Every call: `Authorization: Bearer ${WORKER_TOKEN}`, `X-Worker-Id`, optional `X-Worker-Version`,
       JSON body (an empty body is read as `{}`). Every authenticated call updates
       `social_workers.last_seen_at`.
+    - Native workers advertise `X-Worker-Capabilities: native-v1`. Native jobs are withheld
+      from older workers; legacy payloads and immutable hash vectors remain unchanged.
     - Timestamps in responses are ISO 8601 UTC to the second with a `Z` suffix.
     - Errors are `{"error": {"code", "message", "details"?}}`.
     - **409 = lease lost**: stop work on that job at once (do not call Postiz, do not retry the call).
@@ -38,6 +40,46 @@ servers:
 security:
   - workerToken: []
 paths:
+  /deliveries/{id}/native:
+    post:
+      summary: Execute or recover a native TypeScript publication
+      description: |
+        Additive amendment-08 endpoint. Used only when account.publishing_backend is native.
+        Call /submitting before kind=publish; kind=check requires a poll/reconcile lease.
+        The site verifies the immutable destination and private media, owns encrypted credentials,
+        persists a publication fence before remote writes, and records the job result atomically.
+        It never returns platform credentials or resumable session capabilities. A lost HTTP response
+        is recovered with kind=check, never a second provider create request. Unknown writes remain
+        reconciling until a provider proves the outcome or a verified administrator resolves it.
+        Native IDs are stored independently; /submitted and Postiz ID fields keep their old meaning.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/WorkerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [attempt_no, kind]
+              properties:
+                attempt_no: { type: integer, minimum: 1 }
+                kind: { type: string, enum: [publish, check] }
+      responses:
+        '200':
+          description: Result saved or pending reconciliation; inspect the status field
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { const: true }
+                  status: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/LeaseLost' }
+        '422': { $ref: '#/components/responses/Invalid' }
   /deliveries/claim:
     post:
       summary: Claim due publish jobs, then reconcile and poll jobs (leased 10 min)
@@ -520,6 +562,11 @@ components:
             id: { type: string, format: uuid }
             platform: { $ref: '#/components/schemas/Platform' }
             postiz_integration_id: { type: [string, 'null'] }
+            publishing_backend:
+              type: string
+              const: native
+              description: Present only for direct native accounts; absent retains the legacy contract
+            native_provider_account_id: { type: [string, 'null'] }
         destination:
           type: object
           required: [id, text, settings, scheduled_at, destination_hash]

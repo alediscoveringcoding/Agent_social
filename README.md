@@ -2,11 +2,20 @@
 
 Infrastructure for cross-posting and automation behind `/admin/social` on thecrypto.support.
 
+**Native TypeScript publishing:** the app now has direct account connections and
+delivery adapters for Instagram, Facebook Pages, X, LinkedIn, Bluesky, Telegram,
+dev.to, TikTok and YouTube. Start the site and worker with
+`wsl.exe -e bash /mnt/r/Repos/Agent_social/scripts/dev-local.sh`; no Postiz or Docker
+process is required. See [native setup and current limits](docs/native-publishing.md)
+and [amendment 08](docs/amendment-08-native-platforms.md). The older Postiz setup
+below remains historical compatibility documentation; full feature parity is
+still in progress.
+
 This repo contains the admin site, database migrations, approval rules, the AI drafting and publishing worker, n8n workflows, the local Postiz stack and infrastructure scripts. The site currently runs with local PGlite and TOTP login; Vercel, Supabase and VPS setup are documented for later deployment.
 
 Status: local v1 implemented and tested, plus 44 platforms, brand style packs, opt-in web research with human-verified sources, and local n8n automations. External platform connections and VPS deployment remain pending. Publishing always requires admin approval.
 
-Product requirements and the work split: [docs/PRD.md](docs/PRD.md), changed by amendments [01](docs/amendment-01-localhost-mvp.md) to [07](docs/amendment-07-n8n-news-sources.md). Where this README and the PRD differ, the PRD wins until this README is updated.
+Product requirements and the work split: [docs/PRD.md](docs/PRD.md), changed by amendments [01](docs/amendment-01-localhost-mvp.md) to [08](docs/amendment-08-native-platforms.md). Where this README and the amended PRD differ, the amended PRD wins until this README is updated.
 
 Current phase: **local v1 complete on `main`**, with amendment 07 on 2026-10-10. [Amendment 03](docs/amendment-03-finish-the-site.md) defines the completed local scope; external setup follows later.
 
@@ -22,6 +31,7 @@ Current phase: **local v1 complete on `main`**, with amendment 07 on 2026-10-10.
 | Amendment 06: style packs | Public style rules and brand profiles, private per-brand packs with examples | Complete locally |
 | Bug-fix batch (2026-10-10) | Migration `0011` state machine fixes, one Claude call per attempt, safer delivery reconcile, login lockout and session revocation | Complete locally |
 | Amendment 07: news, sources, n8n | Opt-in web research, sources a person verifies before approval, the owner's original prompts as private briefs, automation API and four n8n workflows | Complete locally; untested against live web search and a running n8n |
+| Amendment 08: native publishing | Direct connections for nine platform families, encrypted tokens, native publishing/reconciliation and MP4 ingest; container-free startup and backups | Offline verified: 564 site tests, production build and 235 worker tests; wider feature parity incomplete |
 
 Final review fixed approval checks for the actual attached card, immutable card metadata (migration `0007`), competing media/text edits, and consistent keyword matching. All four branches were merged into `main`; the feature branches remain available.
 
@@ -37,20 +47,19 @@ flowchart LR
   N[n8n] -->|automation API: request drafts, read events, log runs| S
   N -->|email alerts| E[Admins]
   F[Fake generator and worker] -->|offline local flow| S
-  S --> DB[(PGlite and private images)]
+  S --> DB[(PGlite and private media)]
   S --> M[Manual handoff]
   W[Local worker] -->|claim requests and jobs, report results| S
   W -->|drafts, optional web research| AI[Claude or Gemini]
-  W -.->|after external setup| P[Postiz]
-  P -.-> PL[Platform accounts]
+  S -->|encrypted credentials, direct API adapters| PL[Platform accounts]
 ```
 
 Rules that never change:
 
 1. Automation (n8n) can only create draft requests, read events and log its runs. It cannot approve or publish.
-2. The site database owns the schedule: PGlite locally, Supabase after migration. Postiz and automation keep no second schedule.
-3. Only the worker holds a Postiz API key.
-4. Postiz holds platform credentials. The site never sees them.
+2. The site database owns the schedule: PGlite locally, Supabase after migration.
+3. The worker claims native jobs through authenticated HTTP; it receives no platform credentials.
+4. The site encrypts native credentials and upload-session capabilities and owns direct provider calls.
 5. Approval is tied to the exact content, media, accounts and time. Any edit invalidates it.
 
 ## Repo layout
@@ -232,9 +241,9 @@ From the repo root, in WSL:
 | --- | --- |
 | `bash scripts/dev-local.sh [--site-only]` | Starts the site (http://localhost:3000) and the worker (health on :8787); Ctrl+C stops both |
 | `bash scripts/update.sh [--no-pull] [--quick] [--admin-email EMAIL]` | Pull, install when needed, create missing settings, migrate, run every check. `--help` lists the options |
-| `node scripts/backup-local.mjs` | Copies `site/.local-db/` (data and private images) and dumps the Postiz database to `~/agent-social-backups/<time>/`. Stop the app first; it refuses while the database is in use |
+| `node scripts/backup-local.mjs` | Copies `site/.local-db/` (data and private media) and private environment files to `~/agent-social-backups/<time>/`. Stop the app first; it refuses while the database is in use. A historical Postiz dump requires `--include-postiz` |
 | `node scripts/health-check.mjs` | Checks that the site and the worker answer (Postiz optional); exits with an error when one is down |
-| `node scripts/dev-up.mjs` / `node scripts/dev-down.mjs` | Start or stop the local Postiz stack in Docker (http://localhost:4007) |
+| `npm run dev:up` / `npm run dev:down` | Start or stop this checkout's native site and worker in WSL, without containers |
 | `bash scripts/n8n-local.sh [--import]` | Runs n8n in WSL without Docker (http://127.0.0.1:5678; the first run downloads it). `--import` loads the workflows from `n8n/workflows/` and exits |
 
 In `site/` (`npm run <name>`):
@@ -259,11 +268,13 @@ In `worker/`: `npm run dev` (the worker alone, restarts on code changes), `npm t
 - **Gemini 503 "high demand"**: pick another model in the dropdown or try again later.
 - **No drafts appear**: the worker needs an AI key in `worker/.env` (or use the fake generator) and a restart after adding it.
 
-### Postiz sandbox (external setup still pending)
+### Historical Postiz compatibility
 
-`node scripts/dev-up.mjs` starts the local Postiz/Temporal stack on http://localhost:4007. Before testing real delivery:
+The native runtime uses direct platform connections. Only for historical Postiz
+accounts, the retained sandbox can be started with `cd local && docker compose up -d`
+on http://localhost:4007. Before testing that compatibility path:
 1. Create its user and an API key.
-2. Configure `worker/.env`.
+2. Configure `worker/.env`, including `POSTIZ_COMPAT_ENABLED=true` and its API key.
 3. Close registration.
 4. Connect a throwaway account.
 
@@ -273,9 +284,9 @@ In `worker/`: `npm run dev` (the worker alone, restarts on code changes), `npm t
 
 Only placeholders live in git (`.env` is git-ignored everywhere). Real values stay on each developer's or the publisher machine.
 
-- [local/.env.example](local/.env.example) — Postiz JWT secret, registration toggle, provider credentials as each platform is connected.
-- [site/.env.example](site/.env.example) — database mode, admin allowlist, local auth/media signing secrets, worker token, n8n automation token and the publishing kill switch.
-- [worker/.env.example](worker/.env.example) — site URL/token, Postiz key, optional Claude/Gemini keys, generation provider/model/effort, repair and fallback switches, web research limits (`RESEARCH_MAX_SEARCHES`), heartbeat and loop intervals, dry-run setting. Keep AI keys blank for offline use.
+- [local/.env.example](local/.env.example) — settings for the optional historical Postiz sandbox.
+- [site/.env.example](site/.env.example) — database mode, admin allowlist, local auth/media signing secrets, native credential encryption, platform developer apps, worker token, n8n automation token and the publishing kill switch.
+- [worker/.env.example](worker/.env.example) — site URL/token, optional historical Postiz compatibility, optional Claude/Gemini keys, generation provider/model/effort, repair and fallback switches, web research limits (`RESEARCH_MAX_SEARCHES`), heartbeat and loop intervals, dry-run setting. Keep AI keys blank for offline use.
 - Generator style: public rules in `prompts/style/` and `prompts/brands/`; an optional private pack in `prompts/private/` (git-ignored, `STYLE_PACK_DIR`), template in `prompts/private.example/`: [amendment 06](docs/amendment-06-style-packs.md).
 
 In the VPS phase these move to Vercel/VPS env and gain `N8N_AUTOMATION_TOKEN`, `N8N_ENCRYPTION_KEY`, a real `POSTIZ_URL` domain, and n8n's own env — see the amendment, section 11.
@@ -285,8 +296,8 @@ In the VPS phase these move to Vercel/VPS env and gain `N8N_AUTOMATION_TOKEN`, `
 1. An admin requests drafts in **Genereaza**, or n8n creates the request through the automation API. The fake generator or the production generator, with optional web research, delivers them through the worker API.
 2. An admin edits and approves it in `/admin/social`. Approval stores a hash of the exact content.
 3. Approval creates one delivery job per destination, in the same transaction.
-4. The worker claims due automatic jobs, checks the approval hash and media bytes, and either reports a dry-run result or submits to Postiz when real delivery is configured. Manual jobs become due for handoff.
-5. The worker reports the Postiz ID, the result and the published URL per destination.
+4. The worker claims due automatic jobs and checks the approval hash. In a real native delivery, the site rechecks the hash and private media bytes, records the attempt and calls the platform directly. Dry-run delivery uses fake results. Manual jobs become due for handoff.
+5. The site records the native publication ID, result and published URL per destination. Historical Postiz accounts retain their separate compatibility path.
 
 Failure handling:
 
@@ -389,14 +400,20 @@ Data rules:
 
 - Admin-only endpoints use the existing admin auth, MFA and activity logging. No admin actions while impersonating a user. Locally: 10 failed passwords or codes lock an account for 15 minutes, each authenticator code works once, and sign-out ends every session of that account.
 - No Supabase service-role key, approval permission or Postiz key is ever given to n8n. Its `N8N_AUTOMATION_TOKEN` (32+ characters, constant-time check) only opens draft requests, the event feed and the run log.
-- AI and Postiz keys live only in `worker/.env`.
+- AI keys and optional historical Postiz keys live only in `worker/.env`. Native platform developer credentials and the encryption key live in private `site/.env.local`.
 - Real names, handles and posts stay in the git-ignored `posts_framework/` and `prompts/private/`. The repository is public.
-- Platform credentials stay in Postiz; the site stores no platform passwords.
+- Native account tokens are encrypted in private site storage and never sent to the worker or browser. Social passwords are entered on the platform's authorization page; Bluesky accepts an app password to establish its token session.
 - `.env` never enters git. Pin container versions, no `latest`.
 
 ## Backups and restore
 
-`node scripts/backup-local.mjs` (run it in WSL with the site and worker stopped) copies `site/.local-db/` (site data and private images) and dumps the local Postiz database into `~/agent-social-backups/<timestamp>/`; it refuses while the site holds the database and exits non-zero when a part fails. Automated VPS backups and a clean-machine restore drill remain pending before real accounts are enabled.
+`npm run backup` (run it in WSL with the site and worker stopped) copies
+`site/.local-db/` (site data and private media) and private environment files into
+`~/agent-social-backups/<timestamp>/` with restricted permissions. Restore the
+database with its original encryption/session keys. It refuses while the site
+holds the database and exits non-zero when a requested part fails. Historical
+Postiz dumps require `-- --include-postiz`. Automated VPS backups and a
+clean-machine restore drill remain pending before real accounts are enabled.
 
 ## Implementation phases
 

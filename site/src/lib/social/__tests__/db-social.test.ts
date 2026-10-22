@@ -203,11 +203,11 @@ describe('schema and access', () => {
     assert.deepEqual(fns, [])
   })
 
-  it('creates the private media bucket with the 8 MiB and image-only limits', async () => {
+  it('creates the private media bucket with images and the native MP4 upload limit', async () => {
     const b = await one(`select public, file_size_limit, allowed_mime_types from storage.buckets where id = 'social-media'`)
     assert.equal(b.public, false)
-    assert.equal(Number(b.file_size_limit), 8388608)
-    assert.deepEqual(b.allowed_mime_types, ['image/png', 'image/jpeg', 'image/webp'])
+    assert.equal(Number(b.file_size_limit), 134217728)
+    assert.deepEqual(b.allowed_mime_types, ['image/png', 'image/jpeg', 'image/webp', 'video/mp4'])
   })
 })
 

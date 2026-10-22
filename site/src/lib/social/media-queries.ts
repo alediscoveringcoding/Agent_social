@@ -5,10 +5,11 @@ import { SOCIAL_BUCKET } from './constants.ts'
 export interface MediaItem {
   id: string; source: 'upload' | 'generated'; mime: string; width: number; height: number; bytes: number
   alt_text: string; format: string | null; brand_id: string | null; created_at: string; url: string | null; attached: boolean
+  duration_seconds?: number | null
 }
 export async function listMedia(brandId?: string): Promise<MediaItem[]> {
   const db = createAdminClient()
-  const res = await db.from('social_media').select('id, source, storage_path, mime, width, height, bytes, alt_text, format, brand_id, created_at').order('created_at', { ascending: false }).limit(200)
+  const res = await db.from('social_media').select('id, source, storage_path, mime, width, height, bytes, alt_text, format, brand_id, created_at,duration_seconds').order('created_at', { ascending: false }).limit(200)
   if (res.error) throw new Error(res.error.message)
   const items = ((res.data ?? []) as Array<Omit<MediaItem, 'url' | 'attached'> & { storage_path: string }>).filter((m) => !brandId || !m.brand_id || m.brand_id === brandId)
   if (!items.length) return []

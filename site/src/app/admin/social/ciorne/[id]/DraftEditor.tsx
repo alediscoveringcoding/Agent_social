@@ -19,6 +19,7 @@ import { MediaPanel } from './MediaPanel'
 import { CardStudio } from './CardStudio'
 import { DestinationPreview } from './DestinationPreview'
 import { parseTags, tagsToText } from './ui-helpers'
+import { TikTokCreator } from './TikTokCreator'
 
 interface DestState {
   accountId: string
@@ -86,11 +87,13 @@ function SettingsFields({
   settings,
   onChange,
   disabled,
+  nativeTikTok = false,
 }: {
   platform: Platform
   settings: Record<string, unknown>
   onChange: (s: Record<string, unknown>) => void
   disabled: boolean
+  nativeTikTok?: boolean
 }) {
   const text = (key: string, label: string, hint?: string, suggestions?: readonly string[]) => (
     <Field label={label} hint={hint} key={key}>
@@ -175,7 +178,7 @@ function SettingsFields({
       if (!fields?.length) return null
       return (
         <div className="grid gap-3 sm:grid-cols-2">
-          {fields.map((f) => {
+          {fields.filter((field) => !(nativeTikTok && field.key === 'privacy_level')).map((f) => {
             const label = f.required ? `${f.label} *` : f.label
             if (f.kind === 'tags') return tags(f.maxItems ?? 20, f.hint)
             if (f.kind === 'select') {
@@ -459,10 +462,12 @@ export function DraftEditor({ draft, editable, mediaLibrary = [], legalNames = [
                       Foloseste varianta generatorului
                     </Button>
                   ) : null}
+                  {activeAcc.platform === 'tiktok' && activeAcc.rules?.native === true ? <TikTokCreator key={`creator:${activeAcc.id}`} accountId={activeAcc.id} value={String(activeDest.settings.privacy_level || '')} disabled={!editable} onChange={(privacy) => updateDest(activeDest.accountId, { settings: { ...activeDest.settings, privacy_level: privacy } })} /> : null}
                   <SettingsFields
                     key={activeDest.accountId}
                     platform={activeAcc.platform}
                     settings={activeDest.settings}
+                    nativeTikTok={activeAcc.platform === 'tiktok' && activeAcc.rules?.native === true}
                     disabled={!editable}
                     onChange={(s) => updateDest(activeDest.accountId, { settings: s })}
                   />

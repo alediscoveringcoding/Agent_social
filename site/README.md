@@ -2,6 +2,12 @@
 
 The `/admin/social` app and worker API, as a standalone Next.js app. Today it runs in temporary local mode with PGlite and disk storage; Supabase remains the later deployment path.
 
+Direct account connections and publishing now run inside this TypeScript app,
+without Postiz or containers. Use **Conturi** to authorize an existing social
+account. See [native setup, supported platforms and current limits](../docs/native-publishing.md)
+and [amendment 08](../docs/amendment-08-native-platforms.md). Full Postiz feature
+parity is still in progress.
+
 Specs: [PRD](../docs/PRD.md), [amendment 01: localhost MVP](../docs/amendment-01-localhost-mvp.md), [amendment 02: standalone site](../docs/amendment-02-standalone-site.md). Contracts for the worker: [`../docs/contracts/`](../docs/contracts/).
 
 > This repository is public. `.env.local` is git-ignored; never put real keys, tokens, handles or the operator's legal name in a tracked file.

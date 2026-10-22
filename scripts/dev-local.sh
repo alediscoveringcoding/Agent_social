@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the local stack in WSL/Linux: the site (Next.js dev server, PGlite local
+# Start the native stack in WSL/Linux, without Docker or Postiz: the site (Next.js dev server, PGlite local
 # mode, http://localhost:3000) and the worker (drafts with the real AI provider
 # from worker/.env; publishing stays off while WORKER_DRY_RUN=true).
 # Ctrl+C stops both.
@@ -45,9 +45,14 @@ port_busy() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 port_busy 3000 && fail "port 3000 is in use: the site is already running (or another app). Stop it first."
 if ! $SITE_ONLY && port_busy 8787; then fail "port 8787 is in use: a worker is already running. Stop it first."; fi
 
+mkdir -p "$ROOT/.local-run"
+RUN_FILE="$ROOT/.local-run/dev.pid"
+printf '%s %s\n' "$$" "$(awk '{print $22}' /proc/$$/stat)" > "$RUN_FILE"
+
 env_value() { grep -E "^$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"'"'"' \r'; }
 echo "Publishing: SOCIAL_PUBLISHING_ENABLED=$(env_value "$ROOT/site/.env.local" SOCIAL_PUBLISHING_ENABLED)"
 $SITE_ONLY || echo "Worker:     WORKER_DRY_RUN=$(env_value "$ROOT/worker/.env" WORKER_DRY_RUN) (true = nothing is posted)"
+echo "Runtime:    native TypeScript, embedded database, no containers."
 
 PIDS=()
 NAMES=()
@@ -68,6 +73,7 @@ stop() {
   echo; echo "Stopping..."
   for pid in ${PIDS[@]+"${PIDS[@]}"}; do kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true; done
   wait 2>/dev/null || true
+  if [ -f "$RUN_FILE" ] && [ "$(cut -d' ' -f1 "$RUN_FILE")" = "$$" ]; then rm -f -- "$RUN_FILE"; fi
   echo "Stopped."
 }
 on_signal() { stop; exit 130; }
@@ -82,6 +88,7 @@ $SITE_ONLY || start "worker" "$ROOT/worker" npm run dev
 
 echo
 echo "Site:   http://localhost:3000/admin/social (login: http://localhost:3000/login)"
+echo "Accounts: http://localhost:3000/admin/social/conturi"
 $SITE_ONLY || echo "Worker: health on http://localhost:8787; drafts requested in Genereaza appear in Ciorne"
 echo "Ctrl+C stops everything."
 echo

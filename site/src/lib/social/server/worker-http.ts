@@ -70,11 +70,11 @@ export function authenticateWorker(request: Request): Auth {
   return { ok: true, workerId, version }
 }
 
-async function touchWorker(admin: SupabaseClient, workerId: string, version: string | null): Promise<void> {
+async function touchWorker(admin: SupabaseClient, workerId: string, version: string | null, capabilities: string[]): Promise<void> {
   // `worker_id` is the primary key (a plain unique index), so this upsert is safe.
   const { error } = await admin
     .from('social_workers')
-    .upsert({ worker_id: workerId, version, last_seen_at: new Date().toISOString() }, { onConflict: 'worker_id' })
+    .upsert({ worker_id: workerId, version, capabilities, last_seen_at: new Date().toISOString() }, { onConflict: 'worker_id' })
   if (error) console.error('[social/worker] could not update last_seen_at:', error.message)
 }
 
@@ -90,7 +90,8 @@ export async function handleWorkerCall(
   if (!auth.ok) return auth.response
   try {
     const admin = createAdminClient()
-    await touchWorker(admin, auth.workerId, auth.version)
+    const capabilities = (request.headers.get('x-worker-capabilities') || '').split(',').map((value) => value.trim()).filter((value) => value === 'native-v1')
+    await touchWorker(admin, auth.workerId, auth.version, [...new Set(capabilities)])
     return await handler({ workerId: auth.workerId, version: auth.version, admin })
   } catch (error) {
     console.error('[social/worker] %s %s failed:', request.method, new URL(request.url).pathname, error)

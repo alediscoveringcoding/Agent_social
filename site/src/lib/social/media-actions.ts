@@ -12,6 +12,7 @@ import { ActionRefusal } from './server/run-admin-action.ts'
 import { AdminAuthError } from '@/lib/auth/decision'
 import { signUploadTicket, verifyUploadTicket, UPLOAD_TTL } from './media/signing.ts'
 import { ingestImage, MAX_UPLOAD_BYTES } from './media/ingest.ts'
+import { ingestVideo, MAX_VIDEO_BYTES } from './media/video.ts'
 import { loadMediaRevision, saveMediaRevision } from './media/revision.ts'
 import { cardBrand } from './cards/palette.ts'
 import { normalizeCardSpec, checkCardSpec, type CardSpec } from './cards/spec.ts'
@@ -72,7 +73,8 @@ async function guarded<T extends object>(action: string, body: (actor: AdminIden
 }
 export async function createUploadTicket(input: { mime: string; bytes: number }) {
   return guarded('media_ticket_created', async (actor) => {
-    const parsed = z.object({ mime: z.enum(['image/jpeg', 'image/png', 'image/webp']), bytes: z.number().int().min(1).max(MAX_UPLOAD_BYTES) }).parse(input)
+    const parsed = z.object({ mime: z.enum(['image/jpeg', 'image/png', 'image/webp', 'video/mp4']), bytes: z.number().int().min(1).max(MAX_VIDEO_BYTES) }).parse(input)
+    if (parsed.mime !== 'video/mp4' && parsed.bytes > MAX_UPLOAD_BYTES) throw new ActionRefusal('Imaginea depaseste 8 MB.')
     const path = `staging/${randomUUID()}`
     const exp = Math.floor(Date.now() / 1000) + UPLOAD_TTL
     const db = createAdminClient()
@@ -107,13 +109,15 @@ export async function finalizeUpload(input: { ticket: string; altText: string })
     try {
       const download = await bucket.download(ticket.path)
       if (download.error || !download.data) throw new ActionRefusal('Fisierul incarcat nu exista.')
-      if (download.data.size > MAX_UPLOAD_BYTES) throw new ActionRefusal('Imaginea depaseste 8 MB.')
-      const image = await refusing(async () => ingestImage(new Uint8Array(await download.data.arrayBuffer()), ticket.mime), 'Imaginea nu a putut fi procesata.')
+      const video = ticket.mime === 'video/mp4'
+      if (download.data.size > (video ? MAX_VIDEO_BYTES : MAX_UPLOAD_BYTES)) throw new ActionRefusal('Fisierul depaseste limita de incarcare.')
+      const image = await refusing(async () => video ? ingestVideo(new Uint8Array(await download.data.arrayBuffer()), ticket.mime) : ingestImage(new Uint8Array(await download.data.arrayBuffer()), ticket.mime), 'Fisierul nu a putut fi procesat. Pentru video, foloseste MP4 H.264.')
       const id = ticket.path.slice(8)
       finalPath = `uploads/${id}.${image.ext}`
       const stored = await bucket.upload(finalPath, image.bytes, { contentType: image.mime, upsert: false })
       if (stored.error) throw new ActionRefusal('Nu am putut salva imaginea.')
-      const { error } = await db.from('social_media').insert({ id, source: 'upload', storage_path: finalPath, mime: image.mime, width: image.width, height: image.height, bytes: image.bytes.length, sha256: image.sha256, alt_text: altText, created_by: actor.userId })
+      const { error } = await db.from('social_media').insert({ id, kind: video ? 'video' : 'image', source: 'upload', storage_path: finalPath, mime: image.mime, width: image.width, height: image.height, bytes: image.bytes.length, sha256: image.sha256, alt_text: altText, created_by: actor.userId,
+        ...('durationSeconds' in image ? { duration_seconds: image.durationSeconds } : {}) })
       if (error) throw new ActionRefusal('Nu am putut salva detaliile imaginii.')
       saved = true
       return { mediaId: id }

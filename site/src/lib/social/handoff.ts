@@ -263,7 +263,7 @@ export function buildHandoff(input: HandoffInput): Handoff {
       for (const f of SETTINGS_FIELDS[input.platform] ?? []) {
         const fallback = f.key === 'title' ? str(a.title) || input.title || '' : f.key === 'subtitle' ? str(a.subtitle) : ''
         let value = str(s[f.key])
-        if (f.kind === 'select') value = f.options?.find((o) => o.value === value)?.label ?? value
+        if (f.kind === 'select' && value) value = f.options?.find((o) => o.value === value)?.label ?? value
         add(f.key, f.label, value || fallback)
       }
     } else {
@@ -285,7 +285,7 @@ export function buildHandoff(input: HandoffInput): Handoff {
   // platform's own editor asks for (subreddit, board, community, title, link).
   for (const f of SETTINGS_FIELDS[input.platform] ?? []) {
     let value = str(s[f.key])
-    if (f.kind === 'select') value = f.options?.find((o) => o.value === value)?.label ?? value
+    if (f.kind === 'select' && value) value = f.options?.find((o) => o.value === value)?.label ?? value
     add(f.key, f.label, value, f.max ? { max: f.max } : {})
   }
   return {

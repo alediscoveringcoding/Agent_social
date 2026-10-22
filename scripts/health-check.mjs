@@ -15,8 +15,10 @@ async function check(name, url, required) {
 const checks = await Promise.all([
   check("Site", "http://127.0.0.1:3000/login", true),
   check("Worker", "http://127.0.0.1:8787/health", true),
-  check("Postiz", "http://127.0.0.1:4007", false),
-  check("Temporal UI", "http://127.0.0.1:8080", false),
+  ...(process.argv.includes("--include-postiz") ? [
+    check("Postiz", "http://127.0.0.1:4007", false),
+    check("Temporal UI", "http://127.0.0.1:8080", false),
+  ] : []),
 ]);
 
 console.log("=== Health Check ===\n");

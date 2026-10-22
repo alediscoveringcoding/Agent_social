@@ -173,10 +173,19 @@ export const SETTINGS_FIELDS: Partial<Record<Platform, readonly SettingsField[]>
   tiktok: [
     { key: 'title', label: 'Titlu', max: 90, hint: 'Cel mult 90 de caractere.' },
     { key: 'privacy_level', label: 'Cine vede', kind: 'select', options: options(TIKTOK_PRIVACY_LEVELS, TIKTOK_PRIVACY_LABELS) },
+    { key: 'commercial_content', label: 'Continut comercial', kind: 'select', options: [{ value: '', label: 'Alege' }, { value: 'NONE', label: 'Fara promovare comerciala' }, { value: 'OWN_BRAND', label: 'Promovez propriul brand' }, { value: 'PAID_PARTNERSHIP', label: 'Parteneriat platit' }] },
+    { key: 'allow_comments', label: 'Permite comentarii', kind: 'select', options: [{ value: 'no', label: 'Nu' }, { value: 'yes', label: 'Da, daca platforma permite' }] },
+    { key: 'allow_duet', label: 'Permite Duet', kind: 'select', options: [{ value: 'no', label: 'Nu' }, { value: 'yes', label: 'Da, daca platforma permite' }] },
+    { key: 'allow_stitch', label: 'Permite Stitch', kind: 'select', options: [{ value: 'no', label: 'Nu' }, { value: 'yes', label: 'Da, daca platforma permite' }] },
+    { key: 'synthetic_media', label: 'Continut generat cu AI', kind: 'select', options: [{ value: '', label: 'Alege' }, { value: 'false', label: 'Nu' }, { value: 'true', label: 'Da' }] },
+    { key: 'publish_consent', label: 'Acord pentru publicarea pe TikTok', kind: 'select', options: [{ value: '', label: 'Alege dupa verificarea setarilor' }, { value: 'yes', label: 'Da, aprob trimiterea acestui continut si setarile alese' }], hint: 'Confirma ca ai drepturile necesare pentru continut si muzica. Acordul si setarile fac parte din revizia aprobata.' },
   ],
   youtube: [
     { key: 'title', label: 'Titlu video', required: true, max: 100 },
     { key: 'tags', label: 'Etichete', kind: 'tags', maxItems: 15, hint: 'Separate prin virgula; impreuna cel mult 500 de caractere.' },
+    { key: 'privacy_status', label: 'Vizibilitate', kind: 'select', options: [{ value: '', label: 'Alege' }, { value: 'private', label: 'Privat' }, { value: 'unlisted', label: 'Nelistat' }, { value: 'public', label: 'Public' }] },
+    { key: 'made_for_kids', label: 'Creat pentru copii', kind: 'select', options: [{ value: '', label: 'Alege' }, { value: 'false', label: 'Nu' }, { value: 'true', label: 'Da' }] },
+    { key: 'synthetic_media', label: 'Continut modificat sau generat cu AI', kind: 'select', options: [{ value: '', label: 'Alege' }, { value: 'false', label: 'Nu' }, { value: 'true', label: 'Da' }] },
   ],
   reddit: [
     {

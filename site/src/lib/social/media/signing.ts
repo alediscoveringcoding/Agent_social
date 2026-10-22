@@ -38,7 +38,7 @@ export function verifyUploadTicket(token: string, now = Math.floor(Date.now() / 
     if (!equal(sig, mac('media-upload-v1', value))) return null
     const t = JSON.parse(value) as UploadTicket
     if (!UUID.test(t.userId) || !/^staging\/[0-9a-f-]{36}$/.test(t.path) || !UUID.test(t.path.slice(8))) return null
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(t.mime) || !validExpiry(t.exp, UPLOAD_TTL, now)) return null
+    if (!['image/jpeg', 'image/png', 'image/webp', 'video/mp4'].includes(t.mime) || !validExpiry(t.exp, UPLOAD_TTL, now)) return null
     return t
   } catch { return null }
 }

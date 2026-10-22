@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// Backs up (1) site/.local-db (PGlite data + private storage; the site must be
-// stopped) and (2) the Postiz database via docker, into
+// Backs up site/.local-db and private environment files (site must be stopped).
+// --include-postiz also dumps the historical Postiz database via Docker, into
 // ~/agent-social-backups/<timestamp>/. Override for tests: LOCAL_DB_DIR (source)
 // and BACKUP_ROOT (destination).
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, openSync, closeSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, openSync, closeSync, chmodSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,7 @@ const dbDir = process.env.LOCAL_DB_DIR || join(root, "site", ".local-db");
 const backupRoot = process.env.BACKUP_ROOT || join(homedir(), "agent-social-backups");
 const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 const backupDir = join(backupRoot, timestamp);
+const includePostiz = process.argv.includes("--include-postiz");
 
 function pidAlive(pid) {
   try {
@@ -63,11 +64,21 @@ if (!existsSync(dbDir)) {
     siteFailed = true;
   } else {
     try {
-      mkdirSync(backupDir, { recursive: true });
+      mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+      chmodSync(backupDir, 0o700);
       const dest = join(backupDir, "local-db");
       cpSync(dbDir, dest, { recursive: true });
       rmSync(join(dest, "owner.pid"), { force: true });
       siteSaved = dest;
+      // Encrypted native tokens require the original encryption/session key.
+      // These private files stay outside the public checkout, with mode 0600.
+      const siteEnv = process.env.BACKUP_SITE_ENV || (!process.env.LOCAL_DB_DIR ? join(root,"site",".env.local") : undefined);
+      const workerEnv = process.env.BACKUP_WORKER_ENV || (!process.env.LOCAL_DB_DIR ? join(root,"worker",".env") : undefined);
+      for (const [name, source] of [["site.env.local", siteEnv], ["worker.env", workerEnv]]) {
+        if (!source || !existsSync(source)) continue;
+        const target = join(backupDir, name);
+        cpSync(source, target); chmodSync(target, 0o600);
+      }
       console.log(`Site database saved: ${dbDir} -> ${dest}`);
     } catch (err) {
       console.error(`Site database backup FAILED: ${err.message}`);
@@ -82,12 +93,14 @@ function dockerOut(args) {
 }
 let postizRunning = false;
 let dockerProblem = null;
-try {
+if (includePostiz) try {
   postizRunning = dockerOut(["ps", "--filter", "name=^postiz-postgres$", "--format", "{{.Names}}"]).trim() === "postiz-postgres";
 } catch (err) {
   dockerProblem = err.code === "ENOENT" ? "docker is not installed or not on PATH" : "docker is not reachable";
 }
-if (!postizRunning) {
+if (!includePostiz) {
+  console.log("Native backup: legacy Postiz dump was not requested.");
+} else if (!postizRunning) {
   postizSkipped = dockerProblem || "container postiz-postgres is not running";
 } else {
   mkdirSync(backupDir, { recursive: true });

@@ -1,5 +1,9 @@
 # Platform setup guide (localhost MVP)
 
+For direct TypeScript connections without containers, follow
+[native-publishing.md](native-publishing.md) and start `scripts/dev-local.sh`.
+The Postiz/Docker sections below are historical compatibility instructions.
+
 ## Local site without external services
 
 The local site is complete under amendment 03. Run `bash scripts/update.sh --no-pull` in Linux/WSL, create an admin with `cd site && npm run admin:create -- --email you@example.com`, then start the site and enroll TOTP. See [site/README.md](../site/README.md) for the full workflow.
@@ -10,11 +14,17 @@ For an offline production-worker test keep AI keys blank and `WORKER_DRY_RUN=tru
 
 ## Postiz initial setup
 
-1. `node scripts/dev-up.mjs` (or `docker compose up -d` in `local/`)
+1. `docker compose up -d` in `local/` (historical compatibility only)
 2. Open http://localhost:4007
 3. Create the admin user
-4. Settings > Public API > generate an API key, put it in `worker/.env` as `POSTIZ_API_KEY`
+4. Settings > Public API > generate an API key, put it in `worker/.env` as `POSTIZ_API_KEY`, and opt in with `POSTIZ_COMPAT_ENABLED=true`
 5. Set `DISABLE_REGISTRATION=true` in `local/.env`, restart (`docker compose up -d` again in `local/`)
+
+For the bundled image, `NEXT_PUBLIC_BACKEND_URL` is `http://localhost:4007/api`
+and `BACKEND_INTERNAL_URL` is `http://localhost:3000`. An HTML 404 shown in the
+login form usually means the browser is calling the frontend instead of `/api`.
+The local Compose file also mounts `local/dynamicconfig/` into Temporal and waits
+for Temporal to be healthy before starting Postiz.
 
 ## Platform connections
 

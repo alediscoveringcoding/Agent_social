@@ -18,8 +18,8 @@ function MediaTile({ item }: { item: MediaItem }) {
     })
   }
   return <Card>
-    {item.url ? <img src={item.url} alt={item.alt_text} className="mb-3 max-h-64 w-full rounded-lg object-contain" /> : null /* eslint-disable-line @next/next/no-img-element */}
-    <div className="mb-3 flex flex-wrap gap-2"><Badge>{item.source === 'generated' ? 'Card' : 'Imagine'}</Badge><span className="text-xs text-ink-soft">{item.width} × {item.height} · {Math.ceil(item.bytes / 1024)} KB</span>{item.attached ? <Badge tone="accent">Atasata</Badge> : null}</div>
+    {item.url ? item.mime.startsWith('video/') ? <video src={item.url} aria-label={item.alt_text} controls preload="none" className="mb-3 max-h-64 w-full rounded-lg" /> : <img src={item.url} alt={item.alt_text} className="mb-3 max-h-64 w-full rounded-lg object-contain" /> : null /* eslint-disable-line @next/next/no-img-element */}
+    <div className="mb-3 flex flex-wrap gap-2"><Badge>{item.mime.startsWith('video/') ? 'Video' : item.source === 'generated' ? 'Card' : 'Imagine'}</Badge><span className="text-xs text-ink-soft">{item.width} × {item.height} · {Math.ceil(item.bytes / 1024)} KB</span>{item.attached ? <Badge tone="accent">Atasata</Badge> : null}</div>
     <Field label="Text alternativ sugerat" hint="Reviziile existente pastreaza propriul text. Modifica textul atasat din ciorna."><textarea className={inputClass} value={alt} maxLength={1000} onChange={(e) => setAlt(e.target.value)} disabled={pending} /></Field>
     <div className="mt-3 flex gap-2"><Button tone="secondary" disabled={pending || !alt.trim() || alt === item.alt_text} onClick={() => run(false)}>Salveaza textul</Button><Button tone="danger" disabled={pending || item.attached} onClick={() => run(true)}>Sterge</Button></div>
   </Card>

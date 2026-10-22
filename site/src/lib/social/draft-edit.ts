@@ -56,8 +56,8 @@ export const SETTINGS_KEYS: Record<Platform, readonly string[]> = {
   moltbook: ['submolt'],
   kick: [],
   twitch: ['message_type', 'announcement_color'],
-  tiktok: ['title', 'privacy_level'],
-  youtube: ['title', 'tags'],
+  tiktok: ['title', 'privacy_level', 'publish_consent', 'commercial_content', 'allow_comments', 'allow_duet', 'allow_stitch', 'synthetic_media'],
+  youtube: ['title', 'tags', 'privacy_status', 'made_for_kids', 'synthetic_media'],
   // Amendment 05: manual-only channels.
   quora: ['target_url'],
   'linkedin-article': ['title', 'subtitle'],

@@ -52,6 +52,7 @@ export interface ValidationMedia {
   width?: number | null
   height?: number | null
   altText: string
+  durationSeconds?: number | null
 }
 
 export interface ValidateDestinationInput {
@@ -542,7 +543,7 @@ function validateNewPlatform(input: ValidateDestinationInput, errors: Validation
       if (input.media.length === 0) {
         err('TIKTOK_NO_IMAGE', 'media', 'TikTok are nevoie de cel putin o imagine (postare cu poze, fara video).')
       }
-      input.media.forEach((m, i) => {
+      input.media.filter((m) => !m.mime?.startsWith('video/')).forEach((m, i) => {
         if (m.width && m.height && Math.min(m.width, m.height) > TIKTOK_MAX_SHORT_SIDE) {
           err('TIKTOK_IMAGE_SIZE', `media.${i}`, `TikTok accepta cel mult ${TIKTOK_MAX_SHORT_SIDE}px pe latura mica; imaginea ${i + 1} are ${m.width}x${m.height}.`)
         }
@@ -554,6 +555,14 @@ function validateNewPlatform(input: ValidateDestinationInput, errors: Validation
       const privacy = str(settings.privacy_level).trim()
       if (privacy && !(TIKTOK_PRIVACY_LEVELS as readonly string[]).includes(privacy)) {
         err('TIKTOK_PRIVACY_INVALID', 'settings.privacy_level', 'TikTok: vizibilitatea nu e una dintre cele permise.')
+      }
+      if (input.rules?.native === true) {
+        if (str(settings.publish_consent) !== 'yes') err('TIKTOK_CONSENT_REQUIRED', 'settings.publish_consent', 'Confirma acordul pentru publicarea pe TikTok.')
+        if (!['NONE', 'OWN_BRAND', 'PAID_PARTNERSHIP'].includes(str(settings.commercial_content))) err('TIKTOK_COMMERCIAL_REQUIRED', 'settings.commercial_content', 'Alege tipul continutului comercial.')
+        const choices = input.rules.privacy_level_options
+        if (!privacy || (Array.isArray(choices) && !choices.includes(privacy))) err('TIKTOK_PRIVACY_UNAVAILABLE', 'settings.privacy_level', 'Alege o vizibilitate permisa de contul TikTok.')
+        if (str(settings.commercial_content) === 'PAID_PARTNERSHIP' && privacy === 'SELF_ONLY') err('TIKTOK_COMMERCIAL_PRIVACY', 'settings.privacy_level', 'Un parteneriat platit nu poate fi privat pe TikTok.')
+        if (!['true', 'false'].includes(str(settings.synthetic_media))) err('SYNTHETIC_MEDIA_REQUIRED', 'settings.synthetic_media', 'Alege daca fisierul este generat sau modificat cu AI.')
       }
       break
     }
@@ -569,7 +578,12 @@ function validateNewPlatform(input: ValidateDestinationInput, errors: Validation
       if (total > YOUTUBE_TAGS_MAX) {
         err('YOUTUBE_TAGS_TOO_LONG', 'settings.tags', `YouTube: etichetele au ${total} din ${YOUTUBE_TAGS_MAX} caractere la un loc.`)
       }
-      warn('YOUTUBE_NEEDS_VIDEO', 'text', 'YouTube cere video: aplicatia nu face filme, deci se publica manual (titlul si descrierea se copiaza de pe pagina de predare).')
+      if (input.rules?.native === true) {
+        if (input.media.length !== 1 || input.media[0]?.mime !== 'video/mp4') err('YOUTUBE_VIDEO_REQUIRED', 'media', 'Ataseaza un singur video MP4 pentru YouTube.')
+        if (!['private', 'unlisted', 'public'].includes(str(settings.privacy_status))) err('YOUTUBE_PRIVACY_REQUIRED', 'settings.privacy_status', 'Alege vizibilitatea pe YouTube.')
+        if (!['true', 'false'].includes(str(settings.made_for_kids))) err('YOUTUBE_KIDS_REQUIRED', 'settings.made_for_kids', 'Alege daca videoclipul este creat pentru copii.')
+        if (!['true', 'false'].includes(str(settings.synthetic_media))) err('SYNTHETIC_MEDIA_REQUIRED', 'settings.synthetic_media', 'Alege daca fisierul este generat sau modificat cu AI.')
+      } else warn('YOUTUBE_NEEDS_VIDEO', 'text', 'YouTube cere video: pentru acest cont manual, incarca filmul pe platforma si copiaza titlul si descrierea.')
       break
     }
     case 'quora': {
@@ -754,7 +768,11 @@ export function validateDestination(input: ValidateDestinationInput): Destinatio
         message: `Imaginea ${i + 1} nu are text alternativ.`,
       })
     }
-    if (m.mime && !(MEDIA_MIME_TYPES as readonly string[]).includes(m.mime)) {
+    const video = m.mime === 'video/mp4'
+    if (video && (!['youtube', 'tiktok', 'instagram', 'telegram'].includes(platform) || input.media.length !== 1)) {
+      errors.push({ code: 'VIDEO_DESTINATION', field: `media.${i}`, message: 'Ataseaza un singur video pentru YouTube, TikTok, Instagram sau Telegram.' })
+    }
+    if (m.mime && !video && !(MEDIA_MIME_TYPES as readonly string[]).includes(m.mime)) {
       errors.push({ code: 'MEDIA_TYPE', field: `media.${i}`, message: `Imaginea ${i + 1} nu e JPEG, PNG sau WebP.` })
     }
   })
@@ -787,7 +805,7 @@ export function validateDestination(input: ValidateDestinationInput): Destinatio
       })
     }
     input.media.forEach((m, i) => {
-      if (m.width && m.height) {
+      if (m.width && m.height && !m.mime?.startsWith('video/')) {
         const ratio = m.width / m.height
         if (ratio < INSTAGRAM_MIN_ASPECT - 0.005 || ratio > INSTAGRAM_MAX_ASPECT + 0.005) {
           errors.push({

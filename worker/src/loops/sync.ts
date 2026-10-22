@@ -56,6 +56,10 @@ export function buildSyncPayload(integrations: any[], recentPosts: any[]) {
 }
 
 export function startSyncLoop() {
+  if (!config.POSTIZ_COMPAT_ENABLED || !config.POSTIZ_API_KEY) {
+    logger.info("Direct connections are managed by the site; legacy Postiz sync is disabled");
+    return;
+  }
   if (config.WORKER_DRY_RUN) {
     logger.info("DRY RUN: account sync skipped; use the local fake worker to sync accounts");
     return;

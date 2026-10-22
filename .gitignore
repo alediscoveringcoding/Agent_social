@@ -25,6 +25,7 @@ backups/
 # TEMPORARY local mode database (PGlite files, site/.local-db/): personal data,
 # rebuilt from supabase/migrations by scripts/update.sh
 .local-db/
+.local-run/
 
 # OS and editor files
 .DS_Store
@@ -38,3 +39,8 @@ desktop.ini
 posts_framework/
 # Private style packs for the generator (brand voice, real example posts): local only
 prompts/private/
+
+# Private research reports and local learning progress
+/another-social-media-report.md
+/deep-research-report.md
+/qdk-learning.json

@@ -18,7 +18,7 @@ export interface DeliveryJob {
   attempt_no: number
   lease_expires_at: string
   run_at: string
-  account: { id: string; platform: string; postiz_integration_id: string | null }
+  account: { id: string; platform: string; postiz_integration_id: string | null; publishing_backend?: 'native'; native_provider_account_id?: string | null }
   destination: {
     id: string
     text: string
@@ -53,6 +53,8 @@ interface AccountRow {
   id: string
   platform: string
   postiz_integration_id: string | null
+  publishing_backend: 'native' | 'postiz'
+  native_provider_account_id: string | null
 }
 interface MediaLinkRow {
   destination_id: string
@@ -96,7 +98,7 @@ export async function buildDeliveryJobs(admin: SupabaseClient, claimed: Readonly
       .then((r) => must<DestinationRow[]>(r, 'destinations')),
     admin
       .from('social_accounts')
-      .select('id, platform, postiz_integration_id')
+      .select('id, platform, postiz_integration_id, publishing_backend, native_provider_account_id')
       .in('id', accountIds)
       .then((r) => must<AccountRow[]>(r, 'accounts')),
     admin
@@ -159,7 +161,8 @@ export async function buildDeliveryJobs(admin: SupabaseClient, claimed: Readonly
       attempt_no: c.attempt_no,
       lease_expires_at: toHashTimestamp(c.lease_expires_at),
       run_at: toHashTimestamp(job.run_at),
-      account: { id: acc.id, platform: acc.platform, postiz_integration_id: acc.postiz_integration_id },
+      account: { id: acc.id, platform: acc.platform, postiz_integration_id: acc.postiz_integration_id,
+        ...(acc.publishing_backend === 'native' ? { publishing_backend: 'native' as const, native_provider_account_id: acc.native_provider_account_id } : {}) },
       destination: {
         id: dest.id,
         text: dest.text,

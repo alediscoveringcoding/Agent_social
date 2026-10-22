@@ -155,6 +155,21 @@ export async function processJob(job: any, opts: ProcessOptions = {}) {
   const ownBeat = opts.heartbeat ? null : startHeartbeat(job, opts.heartbeatMs);
   const beat = opts.heartbeat ?? ownBeat!;
   try {
+    if (account.publishing_backend === "native" && kind !== "publish") {
+      if (config.WORKER_DRY_RUN) {
+        logger.info("DRY RUN: native reconciliation skipped", { jobId: job_id });
+        return;
+      }
+      await siteApi.nativeDelivery(job_id, job.attempt_no, "check");
+      return;
+    }
+    if (account.publishing_backend !== "native" && kind !== "publish" && !config.WORKER_DRY_RUN &&
+        (!config.POSTIZ_COMPAT_ENABLED || !config.POSTIZ_API_KEY)) {
+      // Preserve uncertain historical jobs until compatibility is explicitly
+      // enabled. Skipping a lookup never proves that a remote post is absent.
+      logger.warn("Historical delivery lookup is paused; Postiz compatibility is disabled", { jobId: job_id });
+      return;
+    }
     if (kind === "publish") {
       await handlePublish(job, beat);
     } else if (kind === "poll") {
@@ -214,6 +229,27 @@ async function handlePublish(job: any, beat: JobHeartbeat) {
       error_code: "HASH_MISMATCH",
       error_message: "Content hash does not match approved content",
     });
+    return;
+  }
+
+  if (account.publishing_backend === "native" && !config.WORKER_DRY_RUN) {
+    if (beat.lost) return;
+    try {
+      await siteApi.submitting(job_id, attempt_no);
+      if (beat.lost) return;
+      // The site owns credentials, rechecks approval/media and journals the
+      // remote request. A lost response is reconciled through that journal.
+      await siteApi.nativeDelivery(job_id, attempt_no, "publish");
+    } catch (error) {
+      if (leaseErrorCode(error)) return;
+      await reportResult(job_id, { attempt_no, outcome: "reconciling", error_code: "NATIVE_RESPONSE_LOST",
+        error_message: "The direct publication result will be recovered from the site's durable journal." });
+    }
+    return;
+  }
+  if (!config.WORKER_DRY_RUN && (!config.POSTIZ_COMPAT_ENABLED || !config.POSTIZ_API_KEY)) {
+    await reportResult(job_id, { attempt_no, outcome: "failed", error_code: "POSTIZ_NOT_CONFIGURED",
+      error_message: "Reconnect this historical account directly in the app." });
     return;
   }
 
@@ -280,7 +316,7 @@ async function handlePublish(job: any, beat: JobHeartbeat) {
 
   // 4. Submit to Postiz (or dry-run)
   if (config.WORKER_DRY_RUN) {
-    logger.info("DRY RUN: would submit to Postiz", {
+    logger.info("DRY RUN: publication verified", {
       jobId: job_id,
       platform: account.platform,
       textLength: destination.text.length,

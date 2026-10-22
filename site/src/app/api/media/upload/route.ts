@@ -3,6 +3,7 @@ import { isLocalMode } from '@/lib/local/mode'
 import { SOCIAL_BUCKET } from '@/lib/social/constants'
 import { verifyUploadTicket } from '@/lib/social/media/signing'
 import { readUploadBody, ingestImage } from '@/lib/social/media/ingest'
+import { ingestVideo, MAX_VIDEO_BYTES } from '@/lib/social/media/video'
 
 export const runtime = 'nodejs'
 export async function POST(request: Request) {
@@ -13,12 +14,12 @@ export async function POST(request: Request) {
   const db = createAdminClient()
   let claimed = false
   try {
-    const body = await readUploadBody(request)
+    const body = await readUploadBody(request, ticket.mime === 'video/mp4' ? MAX_VIDEO_BYTES : undefined)
     // Claim the ticket before the expensive decode: one ticket, one decode.
     const take = await db.rpc('social_take_upload_ticket', { p_path: ticket.path, p_user: ticket.userId, p_mime: ticket.mime, p_phase: 'issued', p_next: 'uploaded' })
     if (take.error || !take.data) return new Response('Ticket already used', { status: 403 })
     claimed = true
-    const image = await ingestImage(body, ticket.mime)
+    const image = ticket.mime === 'video/mp4' ? ingestVideo(body, ticket.mime) : await ingestImage(body, ticket.mime)
     const result = await db.storage.from(SOCIAL_BUCKET).upload(ticket.path, image.bytes, { contentType: image.mime, upsert: false })
     if (result.error) throw new Error('Storage failed')
     return Response.json({ ok: true })

@@ -24,9 +24,10 @@ export async function ingestImage(input: Uint8Array, expectedMime?: string) {
 }
 
 /** Stop reading oversized chunked bodies before buffering the entire request. */
-export async function readUploadBody(request: Request): Promise<Uint8Array> {
+export async function readUploadBody(request: Request, maximum = MAX_UPLOAD_BYTES): Promise<Uint8Array> {
+  const tooLarge = maximum === MAX_UPLOAD_BYTES ? 'Imaginea depaseste 8 MB.' : 'Video-ul depaseste 128 MB.'
   const length = request.headers.get('content-length')
-  if (length && (!/^\d+$/.test(length) || Number(length) > MAX_UPLOAD_BYTES)) throw new Error('Imaginea depaseste 8 MB.')
+  if (length && (!/^\d+$/.test(length) || Number(length) > maximum)) throw new Error(tooLarge)
   const reader = request.body?.getReader()
   if (!reader) throw new Error('Fisierul lipseste.')
   const chunks: Uint8Array[] = []; let size = 0
@@ -35,7 +36,7 @@ export async function readUploadBody(request: Request): Promise<Uint8Array> {
       const { done, value } = await reader.read()
       if (done) break
       size += value.length
-      if (size > MAX_UPLOAD_BYTES) { await reader.cancel(); throw new Error('Imaginea depaseste 8 MB.') }
+      if (size > maximum) { await reader.cancel(); throw new Error(tooLarge) }
       chunks.push(value)
     }
   } finally { reader.releaseLock() }

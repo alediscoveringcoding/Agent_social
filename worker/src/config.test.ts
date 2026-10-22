@@ -5,6 +5,11 @@ import { parseConfig } from "./config.js";
 
 const base = { WORKER_TOKEN: "x".repeat(32), POSTIZ_API_KEY: "k" };
 
+test("direct publishing starts without a Postiz key", () => {
+  assert.equal(parseConfig({ WORKER_TOKEN: "x".repeat(32) }).POSTIZ_API_KEY, "");
+  assert.equal(parseConfig({ WORKER_TOKEN: "x".repeat(32), POSTIZ_API_KEY: "old-key" }).POSTIZ_COMPAT_ENABLED, false);
+});
+
 test("WORKER_DRY_RUN=false really turns dry run off (z.coerce.boolean read it as true)", () => {
   for (const v of ["false", "FALSE", "0", "no", "off"]) {
     assert.equal(parseConfig({ ...base, WORKER_DRY_RUN: v }).WORKER_DRY_RUN, false, v);

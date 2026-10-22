@@ -23,7 +23,8 @@ const schema = z.object({
   WORKER_ID: z.preprocess(blankToUndefined, z.string().default("worker-local-01")),
 
   POSTIZ_BASE_URL: z.string().url().default("http://localhost:4007"),
-  POSTIZ_API_KEY: z.string().min(1),
+  POSTIZ_API_KEY: z.preprocess(blankToUndefined, z.string().default('')),
+  POSTIZ_COMPAT_ENABLED: envBool(false),
 
   // Optional: the generator loop is skipped (with a warning) when no AI key is set.
   // GENERATOR_PROVIDER picks one explicitly; unset means whichever key is present

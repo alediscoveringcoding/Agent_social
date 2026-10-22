@@ -8,6 +8,7 @@ import { ACCOUNT_STATUS_HINTS, ACCOUNT_STATUS_TONES, STATUSES_FOR_MODE, ago, isM
 import type { AdminAccount, AdminBrand } from '@/lib/social/accounts-queries'
 import { createManualAccount, deleteManualAccount, updateAccount } from '@/lib/social/accounts-actions'
 import { isHttpUrl } from '@/lib/social/schemas'
+import { disconnectNativeAccount } from '@/lib/native/connection-actions'
 
 function AccountRow({ account: a, brands, now }: { account: AdminAccount; brands: AdminBrand[]; now: string }) {
   const [mode, setMode] = useState<AccountMode>(a.mode)
@@ -16,7 +17,7 @@ function AccountRow({ account: a, brands, now }: { account: AdminAccount; brands
   const [paused, setPaused] = useState(a.paused)
   const [pending, start] = useTransition()
   const router = useRouter()
-  const manualOnly = !a.postiz_integration_id
+  const manualOnly = !a.postiz_integration_id && a.publishing_backend !== 'native'
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -30,20 +31,23 @@ function AccountRow({ account: a, brands, now }: { account: AdminAccount; brands
   }
   return <tr className="border-t border-line align-top"><td className="p-3 text-sm"><div className="flex items-center gap-2">
     {a.picture_url && isHttpUrl(a.picture_url) && <a href={a.picture_url} target="_blank" rel="noreferrer" className="text-xs text-accent-dark">Imagine ↗</a>}
-    <strong>{a.display_name}</strong></div><p>{PLATFORM_LABELS[a.platform]}</p><p className="mt-1 text-xs text-ink-soft">{a.postiz_integration_id ? `Postiz: ${a.postiz_integration_id}` : 'Cont manual'} · sync {ago(a.last_synced_at, new Date(now))}</p>
+    <strong>{a.display_name}</strong></div><p>{PLATFORM_LABELS[a.platform]}</p><p className="mt-1 text-xs text-ink-soft">{a.publishing_backend === 'native' ? 'Conectare directa' : a.postiz_integration_id ? `Postiz: ${a.postiz_integration_id}` : 'Cont manual'} · verificat {ago(a.last_synced_at, new Date(now))}</p>
     <div className="mt-2"><Badge tone={ACCOUNT_STATUS_TONES[a.status]}>{ACCOUNT_STATUS_LABELS[a.status]}</Badge></div><p className="mt-1 max-w-xs text-xs text-ink-soft">{ACCOUNT_STATUS_HINTS[a.status]}</p>
     <p className="mt-1 text-xs text-warn">{publishBlockers(a).join(' · ')}</p><p className="mt-1 text-xs">{a.open_jobs} destinatii in lucru</p>
     {a.profile_url && isHttpUrl(a.profile_url) && <a href={a.profile_url} target="_blank" rel="noreferrer" className="mr-3 text-xs text-accent-dark">Profil ↗</a>}
     {a.open_editor_url && isHttpUrl(a.open_editor_url) && <a href={a.open_editor_url} target="_blank" rel="noreferrer" className="text-xs text-accent-dark">Deschide editorul ↗</a>}</td>
     <td className="min-w-[32rem] p-3"><form onSubmit={submit}><fieldset disabled={pending} className="grid gap-3 sm:grid-cols-3">
       <Field label="Brand"><select className={inputClass} value={brand} onChange={(e) => { setBrand(e.target.value); if (!e.target.value) setPaused(true) }}><option value="">Atribuie un brand</option>{brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
-      <Field label="Mod"><select className={inputClass} value={mode} onChange={(e) => { const next = e.target.value as AccountMode; setMode(next); setStatus(next === 'manual' ? 'manual' : 'connected') }}><option value="manual">Manual</option><option value="auto" disabled={manualOnly || isManualOnlyPlatform(a.platform)}>Automat</option></select></Field>
+      <Field label="Mod"><select className={inputClass} value={mode} onChange={(e) => { const next = e.target.value as AccountMode; setMode(next); setStatus(next === 'manual' ? 'manual' : 'connected') }}><option value="manual">Manual</option><option value="auto" disabled={manualOnly || (isManualOnlyPlatform(a.platform) && !(a.platform === 'youtube' && a.publishing_backend === 'native'))}>Automat</option></select></Field>
       <Field label="Stare"><select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value as AccountStatus)}>{STATUSES_FOR_MODE[mode].map((s) => <option value={s} key={s}>{ACCOUNT_STATUS_LABELS[s]}</option>)}</select></Field>
       <Field label="Limita zilnica"><input className={inputClass} type="number" name="cap" min={1} max={5} required defaultValue={a.daily_cap} /></Field>
       <Field label="Link editor"><input className={inputClass} name="editor" type="url" maxLength={2048} defaultValue={a.open_editor_url ?? ''} /></Field>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={paused} disabled={!brand} onChange={(e) => setPaused(e.target.checked)} /> Pe pauza</label>
       {manualOnly && <><Field label="Nume"><input className={inputClass} name="name" required maxLength={120} defaultValue={a.display_name} /></Field><Field label="Profil"><input className={inputClass} name="profile" type="url" maxLength={2048} defaultValue={a.profile_url ?? ''} /></Field></>}
-      <div className="flex items-end gap-2"><Button type="submit">{pending ? 'Se salveaza...' : 'Salveaza'}</Button>{manualOnly && !a.used && <Button tone="danger" onClick={() => {
+      <div className="flex items-end gap-2"><Button type="submit">{pending ? 'Se salveaza...' : 'Salveaza'}</Button>{a.publishing_backend === 'native' && <Button tone="danger" onClick={() => {
+        if (!window.confirm(`Deconectezi contul ${a.display_name}? Publicarea va fi pusa pe pauza.`)) return
+        start(async () => { const result = await disconnectNativeAccount(a.id); if (!result.ok) toast.error(result.error); else toast.success('Cont deconectat.'); router.refresh() })
+      }}>Deconecteaza</Button>}{manualOnly && !a.used && <Button tone="danger" onClick={() => {
         if (!window.confirm(`Stergi contul ${a.display_name}?`)) return
         start(async () => { const r = await deleteManualAccount(a.id); if (!r.ok) toast.error(r.error); else toast.success('Cont sters.'); router.refresh() })
       }}>Sterge</Button>}</div></fieldset></form></td></tr>

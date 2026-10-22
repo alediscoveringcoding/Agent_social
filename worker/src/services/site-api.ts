@@ -39,7 +39,8 @@ async function request(path: string, body?: unknown, opts: { signal?: AbortSigna
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.WORKER_TOKEN}`,
       "X-Worker-Id": config.WORKER_ID,
-      "X-Worker-Version": "0.1.0",
+      "X-Worker-Version": "0.2.0",
+      "X-Worker-Capabilities": "native-v1",
     },
     body: body ? JSON.stringify(body) : undefined,
     signal: opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout,
@@ -64,6 +65,8 @@ export const siteApi = {
     request(`/deliveries/${id}/heartbeat`, { attempt_no: attemptNo }),
   submitting: (id: string, attemptNo: number) =>
     request(`/deliveries/${id}/submitting`, { attempt_no: attemptNo }),
+  nativeDelivery: (id: string, attemptNo: number, kind: "publish" | "check") =>
+    request(`/deliveries/${id}/native`, { attempt_no: attemptNo, kind }, { timeoutMs: 300_000 }),
   submitted: (id: string, attemptNo: number, postizPostId: string, postizGroup: string) =>
     request(`/deliveries/${id}/submitted`, {
       attempt_no: attemptNo,

@@ -8,5 +8,5 @@ export const metadata: Metadata = { title: 'Media' }
 export default async function MediaPage() {
   await requireAdminPage('/admin/social/media')
   const items = await listMedia()
-  return <><PageTitle title="Media" subtitle="Imagini si carduri. Textul alternativ este necesar la fiecare atasare." /><Card><UploadForm /></Card><div className="mt-6">{items.length ? <MediaLibrary items={items} /> : <Empty title="Nicio imagine inca">Incarca prima imagine sau genereaza un card din ciorna.</Empty>}</div></>
+  return <><PageTitle title="Media" subtitle="Imagini, video si carduri. Descrierea este necesara la fiecare atasare." /><Card><UploadForm /></Card><div className="mt-6">{items.length ? <MediaLibrary items={items} /> : <Empty title="Niciun fisier inca">Incarca o imagine, un video sau genereaza un card din ciorna.</Empty>}</div></>
 }
