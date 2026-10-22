@@ -131,12 +131,10 @@ describe('approval actions on the real database', () => {
     // Approval tolerates up to 60 seconds of clock skew; use the current minute so the claim is due.
     assert.equal((await approve(post, toLocalInputs(new Date()))).ok, true)
     const api = new WorkerApi({ baseUrl: 'http://127.0.0.1:3000', token: TOKEN, workerId: 'approval-worker', fetch: routeFetch })
-    const submitted = await runFakeWorkerOnce(api, { scenario: 'ok' })
-    assert.ok(submitted.some((s) => s.action === 'submitted'), JSON.stringify(submitted))
-    assert.ok(submitted.every((s) => s.status === 200))
-    await db.query("update social_delivery_jobs set next_check_at = now() - interval '1 second'")
+    // Native publishing answers at once: submitting, then published (no Postiz poll).
     const steps = await runFakeWorkerOnce(api, { scenario: 'ok' })
-    assert.ok(steps.some((s) => s.action === 'poll -> published' && s.status === 200), JSON.stringify(steps))
+    assert.ok(steps.some((s) => s.action === 'published'), JSON.stringify(steps))
+    assert.ok(steps.every((s) => s.status === 200))
     const published = (await getPost(post.id))!
     assert.equal(published.status, 'published')
     assert.match(published.destinations[0].job!.remote_url!, /^https:\/\/example.com\/fake\//)

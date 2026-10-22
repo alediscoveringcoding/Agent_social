@@ -9,9 +9,9 @@ import { stackexchangeProvider } from '../providers/stackexchange.ts'
 import { farcasterProvider } from '../providers/farcaster.ts'
 import { lemmyProvider } from '../providers/lemmy.ts'
 import { NativeProviderError, NativeProcessingFailedError } from '../http.ts'
-import { AUTOMATIC_API_PLATFORMS, EXCLUDED_NATIVE_PLATFORMS, INACTIVE_API_PLATFORMS, apiAvailability } from '../capabilities.ts'
+import { AUTOMATIC_API_PLATFORMS, EXCLUDED_NATIVE_PLATFORMS, INACTIVE_API_PLATFORMS, NOT_IMPLEMENTED_PLATFORMS, apiAvailability } from '../capabilities.ts'
 import { REGISTERED_NATIVE_PLATFORMS, nativeProvider } from '../providers/index.ts'
-import { PLATFORMS } from '../../social/constants.ts'
+import { DROPPED_PLATFORMS, PLATFORMS } from '../../social/constants.ts'
 import { validateDestination } from '../../social/validation.ts'
 import type { NativeContext, NativePublication, NativePublishInput } from '../types.ts'
 
@@ -39,13 +39,14 @@ const errorCode = (code: string, ambiguous: boolean) => (error: unknown) => erro
 describe('automatic API connections and explicit inactive platform bin', () => {
   it('accounts for every platform and exposes only implemented adapters as automatic choices', () => {
     assert.deepEqual([...AUTOMATIC_API_PLATFORMS].sort(), [...REGISTERED_NATIVE_PLATFORMS].sort())
-    const all = [...AUTOMATIC_API_PLATFORMS, ...INACTIVE_API_PLATFORMS, ...EXCLUDED_NATIVE_PLATFORMS]
+    const all = [...AUTOMATIC_API_PLATFORMS, ...INACTIVE_API_PLATFORMS, ...NOT_IMPLEMENTED_PLATFORMS, ...EXCLUDED_NATIVE_PLATFORMS]
     assert.equal(new Set(all).size, all.length)
     assert.deepEqual([...all].sort(), [...PLATFORMS].sort())
     for (const platform of AUTOMATIC_API_PLATFORMS) assert.equal(nativeProvider(platform).platform, platform)
-    for (const platform of [...INACTIVE_API_PLATFORMS, ...EXCLUDED_NATIVE_PLATFORMS]) assert.throws(() => nativeProvider(platform), /UNAVAILABLE/)
+    for (const platform of [...INACTIVE_API_PLATFORMS, ...NOT_IMPLEMENTED_PLATFORMS, ...EXCLUDED_NATIVE_PLATFORMS]) assert.throws(() => nativeProvider(platform), /UNAVAILABLE/)
     assert.equal(apiAvailability('medium').state, 'conditional'); assert.equal(apiAvailability('hashnode').state, 'conditional')
-    assert.match(apiAvailability('threads').reason, /nu este implementat/)
+    assert.equal(apiAvailability('threads').state, 'dropped'); assert.match(apiAvailability('threads').reason, /Neimplementata/)
+    assert.deepEqual([...NOT_IMPLEMENTED_PLATFORMS, ...EXCLUDED_NATIVE_PLATFORMS].sort(), [...DROPPED_PLATFORMS].sort(), 'the dropped list is the not implemented and the excluded platforms')
   })
   it('Medium verifies an existing token and publishes the approved article, canonical URL and attached image', async () => {
     const f = fixture([{ data: { id: 'user', name: 'Example', url: 'https://medium.com/@example' } }, { data: { url: 'https://cdn-images-1.medium.com/example.png' } }, { data: { id: 'article', url: 'https://medium.com/example/article' } }])

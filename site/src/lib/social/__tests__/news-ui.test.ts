@@ -62,6 +62,7 @@ const state = (over: Partial<GenerationFormState> = {}): GenerationFormState => 
   windowDays: '7',
   webSearch: false,
   platforms: ['x', 'devto'],
+  length: 'long',
   count: 3,
   templates: ['dark'],
   aiModel: '',
@@ -634,5 +635,29 @@ describe('sources: who verified them, and when they are frozen', () => {
 
   it('does not ask the database about an id that is not a uuid', async () => {
     assert.equal(await revisionHasActiveApproval('not-a-uuid'), false)
+  })
+})
+
+describe('post length and dropped platforms (amendment 10)', () => {
+  it('passes the chosen length on, long when absent, and refuses a length that is not offered', () => {
+    const short = buildGenerationCandidate(buildGenerationForm(state({ length: 'short' })))
+    assert.ok(short.ok)
+    assert.equal(GenerationInputSchema.parse(short.candidate).length, 'short')
+    const absent = buildGenerationCandidate({ brandId: 'b1', source: { type: 'news', topic: '', window_days: 7 }, platforms: ['x'], count: 1 } as never)
+    assert.ok(absent.ok)
+    assert.equal(GenerationInputSchema.parse(absent.candidate).length, 'long')
+    const odd = buildGenerationCandidate({ ...buildGenerationForm(state()), length: 'medium' as never })
+    assert.ok(odd.ok)
+    assert.equal(GenerationInputSchema.safeParse(odd.candidate).success, false)
+    assert.match(generationIssueMessage('length', 'topic'), /scurta sau lunga/)
+  })
+
+  it('a request for a dropped platform is refused; the kept ones pass', () => {
+    const dropped = buildGenerationCandidate(buildGenerationForm(state({ platforms: ['x', 'reddit' as never] })))
+    assert.ok(dropped.ok)
+    assert.equal(GenerationInputSchema.safeParse(dropped.candidate).success, false)
+    const kept = buildGenerationCandidate(buildGenerationForm(state({ platforms: ['x', 'telegram', 'tiktok'] })))
+    assert.ok(kept.ok)
+    assert.equal(GenerationInputSchema.safeParse(kept.candidate).success, true)
   })
 })

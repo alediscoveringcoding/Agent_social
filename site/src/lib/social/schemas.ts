@@ -8,7 +8,7 @@
  */
 
 import { z } from 'zod'
-import { AI_MODELS, AI_PROVIDERS, CARD_TEMPLATES, DELIVERY_OUTCOMES, PLATFORMS, POST_KINDS } from './constants.ts'
+import { ACTIVE_PLATFORMS, AI_MODELS, AI_PROVIDERS, CARD_TEMPLATES, DELIVERY_OUTCOMES, PLATFORMS, POST_KINDS, POST_LENGTHS } from './constants.ts'
 
 export const isHttpUrl = (v: string) => /^https?:\/\/[^\s]+$/i.test(v)
 
@@ -37,12 +37,6 @@ export const ClaimBody = z.object({
 
 export const AttemptBody = z.object({
   attempt_no: z.number().int().min(1),
-})
-
-export const SubmittedBody = z.object({
-  attempt_no: z.number().int().min(1),
-  postiz_post_id: z.string().min(1).max(200),
-  postiz_group: z.string().max(200).nullish(),
 })
 
 export const ResultBody = z
@@ -186,33 +180,6 @@ export const DraftsBody = z.object({
   drafts: z.array(DraftSchema).min(1).max(50),
 })
 
-export const SyncBody = z.object({
-  integrations: z
-    .array(
-      z.object({
-        postiz_integration_id: z.string().min(1).max(200),
-        provider: z.string().min(1).max(64),
-        name: z.string().max(300),
-        picture_url: z.string().max(2048).nullish(),
-        profile_url: z.string().max(2048).nullish(),
-        disabled: z.boolean().optional(),
-        refresh_needed: z.boolean().optional(),
-        rules: z.record(z.string(), z.unknown()).nullish(),
-      })
-    )
-    .max(500),
-  postiz_recent_posts: z
-    .array(
-      z.object({
-        postiz_post_id: z.string().min(1).max(200),
-        integration_id: z.string().min(1).max(200),
-        created_at: z.string().max(64).nullish(),
-      })
-    )
-    .max(2000)
-    .optional(),
-})
-
 /** Generation input (PRD 10.5), as the admin form stores it. */
 export const GenerationInputSchema = z.object({
   source: z.discriminatedUnion('type', [
@@ -231,7 +198,9 @@ export const GenerationInputSchema = z.object({
   ]),
   // Search the web before writing (2 AI calls). Always on for a 'news' source.
   research: z.boolean().default(false),
-  platforms: z.array(z.enum(PLATFORMS)).min(1).max(PLATFORMS.length),
+  // Amendment 10: no request for a dropped platform; one length for every platform.
+  platforms: z.array(z.enum(ACTIVE_PLATFORMS)).min(1).max(ACTIVE_PLATFORMS.length),
+  length: z.enum(POST_LENGTHS).default('long'),
   kinds: z.array(z.enum(POST_KINDS)).min(1),
   count: z.number().int().min(1).max(20),
   language: z.literal('ro'),

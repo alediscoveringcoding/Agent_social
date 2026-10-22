@@ -67,7 +67,7 @@ export interface ValidateDestinationInput {
   scheduledAt?: string | null
   /** For the "in the past" check; defaults to now. */
   now?: Date
-  /** From Postiz account sync (`max_length` / `maxLength`), when known. */
+  /** A platform limit stored on the account (`max_length` / `maxLength`), when known: set by the old Postiz sync or a direct connection. */
   rules?: Record<string, unknown> | null
   /** Operator company name(s): never in a post. */
   legalNames?: ReadonlyArray<string>
@@ -91,7 +91,7 @@ export const PLATFORM_MAX_LENGTH: Partial<Record<Platform, number>> = {
   'linkedin-page': 3000,
   facebook: 63206,
   producthunt: 260,
-  // Amendment 04 (sources in PRD section 5). Postiz's provider limit is used
+  // Amendment 04 (sources in PRD section 5). The provider limit the old Postiz used is kept
   // where it is lower than the platform's own.
   threads: 500,
   bluesky: 300, // graphemes
@@ -100,13 +100,13 @@ export const PLATFORM_MAX_LENGTH: Partial<Record<Platform, number>> = {
   reddit: 10000, // body; Reddit itself allows 40,000
   pinterest: 500, // description; the Pinterest API allows 800
   telegram: 4096, // 1,024 when an image is attached (caption): TELEGRAM_CAPTION_MAX
-  discord: 1980, // Discord's message limit is 2,000; Postiz keeps 1,980
+  discord: 1980, // Discord's message limit is 2,000; 1,980 leaves room (dropped in amendment 10)
   medium: 100000,
   farcaster: 320, // UTF-8 bytes; a long cast (Farcaster Pro) holds 1,024
   nostr: 100000,
   lemmy: 10000, // body; Lemmy itself allows 50,000
   // Amendment 04, second batch.
-  slack: 40000, // Slack truncates above 40,000 (it advises 4,000); Postiz allows 400,000
+  slack: 40000, // Slack truncates above 40,000 (it advises 4,000)
   wordpress: 100000,
   vk: 2048,
   gmb: 1500,
@@ -158,7 +158,7 @@ export const MAX_IMAGES: Partial<Record<Platform, number>> = {
   'linkedin-article': 1, // the cover
 }
 
-/** Platforms whose Postiz provider publishes text only (chat messages, Moltbook). */
+/** Chat platforms that publish text only (dropped in amendment 10; kept for older drafts). */
 export const TEXT_ONLY_PLATFORMS: readonly Platform[] = ['moltbook', 'kick', 'twitch']
 
 export const COVER_SIZES: Partial<Record<Platform, { width: number; height: number }>> = {
@@ -199,7 +199,7 @@ export const SE_TAG_MAX = 35
 const SE_SITE_RE = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/
 const GITHUB_REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 const TV_SYMBOL_RE = /^[A-Za-z0-9_.!&-]+(?::[A-Za-z0-9_.!&/-]+)?$/
-/** Dribbble accepts exactly these two shot sizes (Postiz checks them). */
+/** Dribbble accepts exactly these two shot sizes (dropped in amendment 10; kept for older drafts). */
 export const DRIBBBLE_SIZES: ReadonlyArray<{ width: number; height: number }> = [
   { width: 400, height: 300 },
   { width: 800, height: 600 },
@@ -263,9 +263,9 @@ export function maxLengthFor(
 ): number | null {
   let base = PLATFORM_MAX_LENGTH[platform] ?? null
   if (platform === 'telegram' && imageCount > 0 && base !== null) base = Math.min(base, TELEGRAM_CAPTION_MAX)
-  const fromPostiz = rulesMaxLength(rules)
-  if (base === null) return fromPostiz
-  return fromPostiz === null ? base : Math.min(base, fromPostiz)
+  const fromAccount = rulesMaxLength(rules)
+  if (base === null) return fromAccount
+  return fromAccount === null ? base : Math.min(base, fromAccount)
 }
 
 /** The length the platform counts (X weighted, Bluesky graphemes, Farcaster bytes, ...): see text-length.ts. */
@@ -356,7 +356,7 @@ function validateNewPlatform(input: ValidateDestinationInput, errors: Validation
       }
       const board = str(settings.board).trim()
       if (!board) {
-        err('PIN_BOARD_MISSING', 'settings.board', 'Pinterest: alege board-ul (id-ul numeric din Postiz).')
+        err('PIN_BOARD_MISSING', 'settings.board', 'Pinterest: alege board-ul (id-ul numeric).')
       } else if (!NUMERIC_ID_RE.test(board)) {
         err('PIN_BOARD_INVALID', 'settings.board', 'Pinterest: board-ul se da prin id-ul numeric, nu prin nume.')
       }
@@ -410,7 +410,7 @@ function validateNewPlatform(input: ValidateDestinationInput, errors: Validation
     }
     case 'medium': {
       if (!str(settings.subtitle).trim()) {
-        err('MEDIUM_SUBTITLE_MISSING', 'settings.subtitle', 'Medium: lipseste subtitlul (Postiz il cere).')
+        err('MEDIUM_SUBTITLE_MISSING', 'settings.subtitle', 'Medium: lipseste subtitlul.')
       }
       tagsOf(settings).forEach((t, i) => {
         if (chars(t) > MEDIUM_TAG_MAX) {
@@ -418,7 +418,7 @@ function validateNewPlatform(input: ValidateDestinationInput, errors: Validation
         }
       })
       if (input.media.length > 0) {
-        warn('MEDIUM_NO_COVER', 'media', 'Medium nu primeste imagini prin Postiz; pune imaginile in text ca markdown.')
+        warn('MEDIUM_NO_COVER', 'media', 'Medium: imaginile atasate (doar PNG sau JPEG) apar la finalul articolului, nu ca imagine de coperta.')
       }
       break
     }
@@ -848,7 +848,7 @@ export function validateDestination(input: ValidateDestinationInput): Destinatio
   }
 
   if (TEXT_ONLY_PLATFORMS.includes(platform) && input.media.length > 0) {
-    warnings.push({ code: 'TEXT_ONLY', field: 'media', message: `${label} publica doar text prin Postiz; imaginea nu apare.` })
+    warnings.push({ code: 'TEXT_ONLY', field: 'media', message: `${label} publica doar text; imaginea nu apare.` })
   }
 
   validateNewPlatform(input, errors, warnings)

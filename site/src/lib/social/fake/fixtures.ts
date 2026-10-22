@@ -232,7 +232,7 @@ export const DRAFT_FIXTURES: Fixture[] = [
     ],
     validation_errors: [],
     notes:
-      'Fixture: restul platformelor Postiz. Slack, Skool, Whop, MeWe, Google Business si Dribbble cer inca un camp; Dribbble si TikTok cer imaginea; YouTube cere video, deci merge manual.',
+      'Fixture: platformele adaugate in amendamentul 04. Slack, Skool, Whop, MeWe, Google Business si Dribbble cer inca un camp; Dribbble si TikTok cer imaginea; YouTube cere video, deci merge manual.',
   },
   {
     name: 'more-platforms',

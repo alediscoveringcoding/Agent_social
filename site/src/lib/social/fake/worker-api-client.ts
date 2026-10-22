@@ -39,6 +39,8 @@ export class WorkerApi {
         'content-type': 'application/json',
         'x-worker-id': this.opts.workerId,
         'x-worker-version': this.opts.version ?? 'fake/0.1',
+        // Like the real worker: only a native-capable worker is given native jobs (migration 0020).
+        'x-worker-capabilities': 'native-v1',
       },
       body: JSON.stringify(body ?? {}),
     })

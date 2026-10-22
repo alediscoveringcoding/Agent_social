@@ -6,6 +6,7 @@ import { migratedDb } from '../../testing/pglite-db.ts'
 import { adminUser, brandId, rows } from '../../testing/social-fixtures.ts'
 import { newOAuthAttempt } from '../oauth.ts'
 import { NATIVE_PLATFORMS } from '../types.ts'
+import { isDroppedPlatform } from '../../social/constants.ts'
 
 let db: PGlite
 let actor: string
@@ -25,7 +26,8 @@ describe('native connections on a temporary migrated database', () => {
 
   it('keeps the SQL and TypeScript platform inventories consistent', async () => {
     const [result] = await rows(db, 'select social_native_platforms() as platforms')
-    assert.deepEqual([...result.platforms].sort(), [...NATIVE_PLATFORMS].sort())
+    // Dropped platforms (amendment 10) keep their TS adapters for old rows but are not native in SQL.
+    assert.deepEqual([...result.platforms].sort(), NATIVE_PLATFORMS.filter((p) => !isDroppedPlatform(p)).sort())
   })
 
   it('connects directly with no Postiz ID, starts paused and records no secret in activity', async () => {

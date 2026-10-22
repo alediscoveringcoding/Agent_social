@@ -37,32 +37,66 @@ export async function adminUser(db: PGlite, email = 'admin@example.test'): Promi
   return (await rows(db, `insert into auth.users (email) values ($1) returning id`, [email]))[0].id
 }
 
+/** A placeholder credential: at least 40 characters, never valid ciphertext. */
+export const FIXTURE_CREDENTIAL = 'fixture-credential-placeholder-not-ciphertext'
+
 let seq = 0
+/**
+ * An account. An automatic one is directly connected (native, with a stored credential),
+ * as every automatic account is since amendment 10; a manual one has no connection.
+ */
 export async function createAccount(
   db: PGlite,
   brand: string,
   platform = 'x',
-  extra: { mode?: 'auto' | 'manual'; status?: string; paused?: boolean; cap?: number } = {}
+  extra: { mode?: 'auto' | 'manual'; status?: string; paused?: boolean; cap?: number; legacy?: boolean } = {}
 ): Promise<string> {
   seq += 1
   const mode = extra.mode ?? ((MANUAL_ONLY_PLATFORMS as readonly string[]).includes(platform) ? 'manual' : 'auto')
-  return (
+  // legacy: the pre-native shape (Postiz id, no backend column), for databases migrated only up to 0010.
+  if (extra.legacy) {
+    return (
+      await rows(
+        db,
+        `insert into social_accounts (brand_id, platform, mode, status, postiz_integration_id, display_name, paused, daily_cap)
+         values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+        [brand, platform, mode, extra.status ?? (mode === 'manual' ? 'manual' : 'connected'), mode === 'manual' ? null : `fx-${seq}`,
+          `Cont ${platform} ${seq}`, extra.paused ?? false, extra.cap ?? 5]
+      )
+    )[0].id
+  }
+  const native = mode === 'auto'
+  const id = (
     await rows(
       db,
-      `insert into social_accounts (brand_id, platform, mode, status, postiz_integration_id, display_name, paused, daily_cap)
-       values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+      `insert into social_accounts (brand_id, platform, mode, status, publishing_backend, native_provider_account_id, display_name, paused, daily_cap)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`,
       [
         brand,
         platform,
         mode,
         extra.status ?? (mode === 'manual' ? 'manual' : 'connected'),
-        mode === 'manual' ? null : `fx-${seq}`,
+        native ? 'native' : 'postiz',
+        native ? `fx-${seq}` : null,
         `Cont ${platform} ${seq}`,
         extra.paused ?? false,
         extra.cap ?? 5,
       ]
     )
   )[0].id
+  if (native) await rows(db, `insert into social_native_credentials (account_id, encrypted) values ($1, $2)`, [id, FIXTURE_CREDENTIAL])
+  return id
+}
+
+/** Register a worker that runs native jobs (migration 0020), as the worker API does from its headers. */
+// seenAt: the test clock, so a later sweep does not report the worker as silent.
+export async function nativeWorker(db: PGlite, workerId: string, seenAt?: string): Promise<void> {
+  await rows(
+    db,
+    `insert into social_workers (worker_id, capabilities, last_seen_at) values ($1, array['native-v1'], coalesce($2::timestamptz, now()))
+     on conflict (worker_id) do update set capabilities = array['native-v1']`,
+    [workerId, seenAt ?? null]
+  )
 }
 
 /**

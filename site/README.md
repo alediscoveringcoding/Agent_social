@@ -5,8 +5,8 @@ The `/admin/social` app and worker API, as a standalone Next.js app. Today it ru
 Direct account connections and publishing now run inside this TypeScript app,
 without Postiz or containers. Use **Conturi** to authorize an existing social
 account. See [native setup, supported platforms and current limits](../docs/native-publishing.md)
-and [amendment 08](../docs/amendment-08-native-platforms.md). Full Postiz feature
-parity is still in progress.
+and [amendment 10](../docs/amendment-10-postiz-removed-length.md) (Postiz removed, dropped platforms,
+short or long posts).
 
 Specs: [PRD](../docs/PRD.md), [amendment 01: localhost MVP](../docs/amendment-01-localhost-mvp.md), [amendment 02: standalone site](../docs/amendment-02-standalone-site.md). Contracts for the worker: [`../docs/contracts/`](../docs/contracts/).
 
@@ -57,11 +57,11 @@ Run npm only inside Linux/WSL, never from Windows.
 1. From the repo root: `bash scripts/update.sh --no-pull --admin-email you@example.com`. It installs dependencies, creates ignored environment files, applies migrations and checks both packages.
 2. With the site stopped: `cd site && npm run admin:create -- --email you@example.com` (replace the example address with your allowlisted email). The script generates a password and prints it once; save it. To choose one, add `--password 'your-password-at-least-12-characters'`. For an existing local account, `--reset` generates a new password and removes its authenticator, which must be enrolled again.
 3. `npm run dev`, open `http://localhost:3000/login`, sign in and enroll TOTP.
-4. `npm run social:fake-worker -- --sync`; open **Conturi** to assign brands and unpause the fake channels. Create manual Substack/Product Hunt accounts there.
+4. With the site stopped, `npm run db:test-accounts`; then open **Conturi** to assign brands and unpause the test accounts. Create manual Substack/Product Hunt accounts there.
 5. Request drafts in **Genereaza**, then `npm run social:fake-generator -- --once`. Edit in **Ciorne**, upload JPEG/PNG/WebP in **Media**, or generate and attach cards in the editor. Uploads strip EXIF/GPS metadata; attachment alt text is saved per revision.
 6. Open **Programare si aprobare**, choose times, confirm figure sources and tick **Am verificat cifrele** where needed. Set `SOCIAL_PUBLISHING_ENABLED=true` in the ignored site environment when ready to exercise local delivery, then restart the site.
 7. For due jobs: `npm run social:fake-worker -- --once --scenario ok --download-media`; run again when the poll is due. Public links appear in **Postari**, **Prezentare** and **Calendar**. **Publicare manuala** offers copy/download formats, images and publication confirmation.
-8. The production worker with `WORKER_DRY_RUN=true` downloads and verifies approved media and reports a test URL without contacting Postiz. Dry run skips account sync, polling and reconciliation; use fake sync locally. Keep AI keys blank for an offline run.
+8. The production worker with `WORKER_DRY_RUN=true` checks the approved hash and reports a test URL without publishing anything. Dry run skips account sync, polling and reconciliation; use fake sync locally. Keep AI keys blank for an offline run.
 
 Private database and storage data are under `site/.local-db/`. Stop the site before database maintenance. `npm run db:reset -- --yes` deletes local data; use it only for a disposable environment.
 
@@ -72,7 +72,7 @@ Private database and storage data are under `site/.local-db/`. Stop the site bef
 3. Copy `.env.example` to `.env.local` and fill it from `supabase status` (URL, anon key, service role key). Set `ADMIN_EMAILS`, `WORKER_TOKEN` (`openssl rand -hex 32`, same value in the worker's env) and, when testing delivery, `SOCIAL_PUBLISHING_ENABLED=true`.
 4. `npm run admin:create -- --email you@example.com` (refuses a non-local Supabase).
 5. `npm run dev`, open `http://localhost:3000/login`, sign in, enrol the authenticator.
-6. Without Track B running: `npm run social:fake-worker -- --sync` registers six fake channels. Open **Conturi** (`/admin/social/conturi`), assign each channel to a brand and unpause it. Create a request in **Genereaza**, run `npm run social:fake-generator -- --once`, and the drafts appear in **Ciorne**. Create Substack and Product Hunt accounts in **Conturi** for the **Publicare manuala** flow.
+6. Without the worker running: stop the site, run `npm run db:test-accounts` (one paused test account per platform), start the site again. Open **Conturi** (`/admin/social/conturi`), assign each channel to a brand and unpause it. Create a request in **Genereaza**, run `npm run social:fake-generator -- --once`, and the drafts appear in **Ciorne**. Create Substack and Product Hunt accounts in **Conturi** for the **Publicare manuala** flow.
 7. With Track B: point the worker's `SITE_BASE_URL` at `http://localhost:3000` with the same `WORKER_TOKEN`.
 8. Concurrency check on real Postgres: `npm run social:fake-worker -- --race 8` (needs approved, due jobs).
 

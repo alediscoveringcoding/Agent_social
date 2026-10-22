@@ -8,7 +8,7 @@ import { setTestAdmin } from '../../testing/auth-shim.ts'
 import { routeFetch } from '../../testing/route-fetch.ts'
 import { adminUser, brandId, createAccount, resetSocial, rows, scheduleAndApprove } from '../../testing/social-fixtures.ts'
 import { WorkerApi } from '../fake/worker-api-client.ts'
-import { runFakeWorkerOnce, syncFakeAccounts } from '../fake/fake-worker.ts'
+import { runFakeWorkerOnce } from '../fake/fake-worker.ts'
 import { createManualAccount, updateAccount } from '../accounts-actions.ts'
 import { duplicatePost, markManualPublished } from '../handoff-actions.ts'
 import { getManualJob, listManualJobs } from '../handoff-queries.ts'
@@ -57,9 +57,8 @@ describe('overview, manual handoff and duplicate (W3)', () => {
     assert.equal((await rows(db, `select seen_at from social_events`))[0].seen_at, null)
     assert.equal((await rows(db, `select * from social_activity_log`)).length, 0)
   })
-  it('syncs, manages X and Substack, publishes automatically and completes the manual handoff', async () => {
-    assert.equal((await syncFakeAccounts(api)).status, 200)
-    const [x] = await rows(db, `select id from social_accounts where postiz_integration_id = 'fake-x'`)
+  it('manages X and Substack, publishes automatically and completes the manual handoff', async () => {
+    const x = { id: await createAccount(db, brand, 'x', { paused: true }) }
     assert.equal((await updateAccount(x.id, { brand_id: brand, paused: false })).ok, true)
     const created = await createManualAccount({ brandId: brand, displayName: 'Publication test', platform: 'substack', openEditorUrl: 'https://example.test/editor' })
     assert.equal(created.ok, true); if (!created.ok) return

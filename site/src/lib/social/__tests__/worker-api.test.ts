@@ -19,12 +19,10 @@ import { approvalHash, destinationHash } from '../hash.ts'
 import * as claimRoute from '@/app/api/worker/social/v1/deliveries/claim/route'
 import * as heartbeatRoute from '@/app/api/worker/social/v1/deliveries/[id]/heartbeat/route'
 import * as submittingRoute from '@/app/api/worker/social/v1/deliveries/[id]/submitting/route'
-import * as submittedRoute from '@/app/api/worker/social/v1/deliveries/[id]/submitted/route'
 import * as resultRoute from '@/app/api/worker/social/v1/deliveries/[id]/result/route'
 import * as genClaimRoute from '@/app/api/worker/social/v1/generation/claim/route'
 import * as draftsRoute from '@/app/api/worker/social/v1/generation/[id]/drafts/route'
 import * as genFailedRoute from '@/app/api/worker/social/v1/generation/[id]/failed/route'
-import * as syncRoute from '@/app/api/worker/social/v1/accounts/sync/route'
 
 const TOKEN = 'test-token-0123456789abcdef0123456789abcdef'
 const BASE = 'http://127.0.0.1:3000/api/worker/social/v1'
@@ -44,7 +42,8 @@ async function call(
   body: unknown,
   opts: { id?: string; token?: string | null; worker?: string | null } = {}
 ): Promise<{ status: number; json: Json }> {
-  const headers: Record<string, string> = { 'content-type': 'application/json', 'x-worker-version': 'test/1' }
+  // Like the real worker: only a native-capable worker is given native jobs (migration 0020).
+  const headers: Record<string, string> = { 'content-type': 'application/json', 'x-worker-version': 'test/1', 'x-worker-capabilities': 'native-v1' }
   if (opts.token !== null) headers.authorization = `Bearer ${opts.token ?? TOKEN}`
   if (opts.worker !== null) headers['x-worker-id'] = opts.worker ?? 'w1'
   const req = new Request(`${BASE}${path}`, { method: 'POST', headers, body: JSON.stringify(body) })
@@ -60,18 +59,21 @@ let seq = 0
 async function account(platform = 'x', extra: Json = {}): Promise<string> {
   seq += 1
   const [row] = await q(
-    `insert into social_accounts (brand_id, platform, mode, status, postiz_integration_id, display_name, paused)
-     values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+    `insert into social_accounts (brand_id, platform, mode, status, publishing_backend, native_provider_account_id, display_name, paused)
+     values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
     [
       extra.brand_id ?? brandId,
       platform,
       extra.mode ?? 'auto',
       extra.status ?? 'connected',
+      extra.mode === 'manual' ? 'postiz' : 'native',
       extra.mode === 'manual' ? null : `int-${seq}`,
       `Cont ${seq}`,
       extra.paused ?? false,
     ]
   )
+  // Every automatic account is directly connected since amendment 10.
+  if (extra.mode !== 'manual') await q(`insert into social_native_credentials (account_id, encrypted) values ($1, $2)`, [row.id, 'fixture-credential-placeholder-not-ciphertext'])
   return row.id
 }
 
@@ -189,14 +191,15 @@ describe('worker API (PRD 10.3)', () => {
       assert.equal(r.json.jobs.length, 1)
       const job = r.json.jobs[0]
       assert.deepEqual(Object.keys(job).sort(), [
-        'account', 'attempt_no', 'attempt_started_at', 'destination', 'job_id', 'kind', 'lease_expires_at', 'media', 'postiz', 'run_at',
+        'account', 'attempt_no', 'attempt_started_at', 'destination', 'job_id', 'kind', 'lease_expires_at', 'media', 'run_at',
       ])
       assert.equal(job.job_id, j.job)
       assert.equal(job.kind, 'publish')
       assert.equal(job.attempt_no, 1)
       assert.match(job.lease_expires_at, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/)
       assert.match(job.destination.scheduled_at, /Z$/)
-      assert.equal(job.postiz, null)
+      assert.deepEqual([job.account.publishing_backend, job.account.native_provider_account_id], ['native', `int-${seq}`])
+      assert.ok(!JSON.stringify(job).includes('fixture-credential'), 'no credential reaches the worker')
       assert.equal(job.media[0].mime, 'image/png')
       assert.match(job.media[0].url, /^http:\/\/storage\.test\/sign\/social-media\/generated\/.+ttl=3600$/)
       const recomputed = destinationHash({
@@ -213,7 +216,7 @@ describe('worker API (PRD 10.3)', () => {
       assert.deepEqual((await call(claimRoute.POST, '/deliveries/claim', { limit: 5 }, { worker: 'w2' })).json.jobs, [])
     })
 
-    it('walks publish -> submitting -> submitted -> poll -> published with the contract status codes', async () => {
+    it('walks publish -> submitting -> reconciling -> reconcile -> published with the contract status codes', async () => {
       const j = await approvedJob()
       const [job] = (await call(claimRoute.POST, '/deliveries/claim', {})).json.jobs
       const id = job.job_id
@@ -227,16 +230,16 @@ describe('worker API (PRD 10.3)', () => {
       assert.equal(lost.json.error.code, 'LEASE_LOST')
 
       assert.equal((await call(submittingRoute.POST, `/deliveries/${id}/submitting`, { attempt_no: 1 }, { id })).status, 200)
-      const sub = { attempt_no: 1, postiz_post_id: 'pz-1', postiz_group: 'g-1' }
-      assert.equal((await call(submittedRoute.POST, `/deliveries/${id}/submitted`, sub, { id })).status, 200)
-      assert.equal((await call(submittedRoute.POST, `/deliveries/${id}/submitted`, sub, { id })).json.idempotent, true)
+      // The publish response was lost: the job waits for a check, never for a second publish.
+      const lostResponse = { attempt_no: 1, outcome: 'reconciling', error_code: 'NATIVE_RESPONSE_LOST' }
+      assert.equal((await call(resultRoute.POST, `/deliveries/${id}/result`, lostResponse, { id })).status, 200)
+      assert.equal((await call(resultRoute.POST, `/deliveries/${id}/result`, lostResponse, { id })).json.idempotent, true)
 
-      // Poll paced at 30-60 s: force it due.
+      // Checks are paced: force it due.
       await q(`update social_delivery_jobs set next_check_at = now() - interval '1 second' where id = $1`, [id])
-      const poll = (await call(claimRoute.POST, '/deliveries/claim', {})).json.jobs[0]
-      assert.equal(poll.kind, 'poll')
-      assert.deepEqual(poll.postiz, { post_id: 'pz-1', group: 'g-1' })
-      assert.match(poll.attempt_started_at, /Z$/)
+      const check = (await call(claimRoute.POST, '/deliveries/claim', {})).json.jobs[0]
+      assert.equal(check.kind, 'reconcile')
+      assert.match(check.attempt_started_at, /Z$/)
 
       const done = await call(resultRoute.POST, `/deliveries/${id}/result`, {
         attempt_no: 1, outcome: 'published', remote_url: 'https://x.com/i/status/1',
@@ -355,58 +358,4 @@ describe('worker API (PRD 10.3)', () => {
     })
   })
 
-  describe('accounts/sync', () => {
-    const integration = (id: string, extra: Json = {}) => ({
-      postiz_integration_id: id,
-      provider: 'linkedin-page',
-      name: 'Taxes Support',
-      picture_url: 'https://media.example/p.png',
-      profile_url: 'https://www.linkedin.com/company/example',
-      disabled: false,
-      refresh_needed: false,
-      rules: { max_length: 3000 },
-      ...extra,
-    })
-
-    it('adds new channels paused and unassigned, and records the sync time', async () => {
-      await call(claimRoute.POST, '/deliveries/claim', {})
-      const r = await call(syncRoute.POST, '/accounts/sync', {
-        integrations: [integration('li-1'), integration('tt-1', { provider: 'vimeo' })],
-        postiz_recent_posts: [],
-      })
-      assert.equal(r.status, 200)
-      assert.equal(r.json.upserted, 1)
-      assert.equal(r.json.ignored[0].postiz_integration_id, 'tt-1')
-      const [a] = await q(`select platform, mode, status, paused, brand_id, rules from social_accounts`)
-      assert.deepEqual(a, { platform: 'linkedin-page', mode: 'auto', status: 'connected', paused: true, brand_id: null, rules: { max_length: 3000 } })
-      const [w] = await q(`select last_account_sync_at from social_workers where worker_id = 'w1'`)
-      assert.ok(w.last_account_sync_at)
-    })
-
-    it('reconnect_required on refresh_needed, notified once, back to connected after', async () => {
-      await call(syncRoute.POST, '/accounts/sync', { integrations: [integration('li-1')] })
-      await call(syncRoute.POST, '/accounts/sync', { integrations: [integration('li-1', { refresh_needed: true })] })
-      await call(syncRoute.POST, '/accounts/sync', { integrations: [integration('li-1', { refresh_needed: true })] })
-      assert.equal((await q(`select status from social_accounts`))[0].status, 'reconnect_required')
-      assert.deepEqual((await q(`select type from social_events`)).map((e) => e.type), ['account_reconnect_required'])
-      await call(syncRoute.POST, '/accounts/sync', { integrations: [integration('li-1')] })
-      assert.equal((await q(`select status from social_accounts`))[0].status, 'connected')
-    })
-
-    it('reports a Postiz post no job created as foreign_post, once', async () => {
-      const j = await approvedJob()
-      await q(`update social_delivery_jobs set postiz_post_id = 'ours' where id = $1`, [j.job])
-      const body = {
-        integrations: [],
-        postiz_recent_posts: [
-          { postiz_post_id: 'ours', integration_id: 'int-x', created_at: new Date().toISOString() },
-          { postiz_post_id: 'theirs', integration_id: 'int-x', created_at: new Date().toISOString() },
-        ],
-      }
-      assert.equal((await call(syncRoute.POST, '/accounts/sync', body)).json.foreign_posts, 1)
-      assert.equal((await call(syncRoute.POST, '/accounts/sync', body)).json.foreign_posts, 0)
-      const events = await q(`select type, payload->>'postiz_post_id' as post from social_events`)
-      assert.deepEqual(events, [{ type: 'foreign_post', post: 'theirs' }])
-    })
-  })
 })

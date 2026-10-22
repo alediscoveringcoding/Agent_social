@@ -31,7 +31,6 @@ export interface AttentionAccount {
   status: AccountStatus
   brand_id: string | null
   paused: boolean
-  postiz_disabled: boolean
 }
 
 export interface Overview {
@@ -99,7 +98,7 @@ export async function getOverview(opts: { includeSeen?: boolean; now?: Date } = 
     listJobViews({ statuses: ['queued', 'manual_pending'], from: now.toISOString(), limit: 1 }),
     admin
       .from('social_accounts')
-      .select('id, platform, display_name, status, brand_id, paused, postiz_disabled')
+      .select('id, platform, display_name, status, brand_id, paused')
       .order('platform')
       .then((r) => must<AttentionAccount[]>(r, 'accounts') ?? []),
     getWorkerHealth(now),
@@ -117,7 +116,7 @@ export async function getOverview(opts: { includeSeen?: boolean; now?: Date } = 
     manualDue: manual.filter((j) => new Date(j.run_at).getTime() <= nowMs),
     nextScheduled: next[0] ?? null,
     attention: accounts.filter(
-      (a) => a.status === 'reconnect_required' || a.status === 'developer_setup_required' || (a.postiz_disabled && !a.paused)
+      (a) => a.status === 'reconnect_required' || a.status === 'developer_setup_required'
     ),
     unassigned: accounts.filter((a) => !a.brand_id).length,
     worker,

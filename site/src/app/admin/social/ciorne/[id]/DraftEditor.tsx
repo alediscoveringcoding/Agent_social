@@ -386,7 +386,7 @@ export function DraftEditor({ draft, editable, mediaLibrary = [], legalNames = [
           <h2 className="text-sm font-bold text-ink">Platforme</h2>
           <p className="mt-0.5 text-xs text-ink-soft">Bifeaza conturile brandului pe care merge postarea. Fiecare are textul ei.</p>
           {draft.accounts.length === 0 ? (
-            <p className="mt-3 text-sm text-warn">Brandul nu are inca niciun cont. Conturile se adauga din Postiz si apar aici dupa sincronizare.</p>
+            <p className="mt-3 text-sm text-warn">Brandul nu are inca niciun cont. Conecteaza conturile din Conturi; apar aici dupa ce le atribui brandul.</p>
           ) : (
             <div className="mt-3 flex flex-wrap gap-2">
               {draft.accounts.map((a) => {

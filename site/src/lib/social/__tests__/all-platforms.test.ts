@@ -18,11 +18,11 @@ import {
   CARD_FORMATS,
   MANUAL_ONLY_PLATFORMS,
   MANUAL_ONLY_REASONS,
+  isDroppedPlatform,
   PLATFORMS,
   PLATFORM_CARD_FORMAT,
   PLATFORM_KIND,
   PLATFORM_LABELS,
-  PROVIDER_TO_PLATFORM,
   type Platform,
 } from '../constants.ts'
 import { findDiacritics } from '../content-rules.ts'
@@ -30,10 +30,10 @@ import { mapDraft } from '../draft-mapping.ts'
 import { buildHandoff } from '../handoff.ts'
 import { SETTINGS_FIELDS } from '../platform-settings.ts'
 import { DraftSchema } from '../schemas.ts'
-import { platformForProvider } from '../sync-rules.ts'
 import { validateDestination, type ValidateDestinationInput } from '../validation.ts'
 import { DRAFT_FIXTURES } from '../fake/fixtures.ts'
-import { FAKE_INTEGRATIONS, runFakeWorkerOnce, syncFakeAccounts } from '../fake/fake-worker.ts'
+import { runFakeWorkerOnce } from '../fake/fake-worker.ts'
+import { insertTestAccounts } from '../fake/test-accounts.ts'
 import { WorkerApi } from '../fake/worker-api-client.ts'
 import { approvePost } from '../approval-actions.ts'
 import { getPost } from '../approval-queries.ts'
@@ -43,12 +43,6 @@ import { getManualJob } from '../handoff-queries.ts'
 import { toLocalInputs } from '../time.ts'
 
 const BATCH2 = ['slack', 'wordpress', 'listmonk', 'vk', 'gmb', 'tumblr', 'dribbble', 'mewe', 'skool', 'whop', 'moltbook', 'kick', 'twitch', 'tiktok', 'youtube'] as const satisfies readonly Platform[]
-/** Every provider identifier of Postiz v2.25.0 (libraries/nestjs-libraries/src/integrations/social). */
-const POSTIZ_IDENTIFIERS = [
-  'x', 'linkedin', 'linkedin-page', 'facebook', 'instagram', 'instagram-standalone', 'threads', 'bluesky', 'mastodon', 'mastodon-custom',
-  'reddit', 'pinterest', 'telegram', 'discord', 'slack', 'medium', 'devto', 'hashnode', 'wordpress', 'listmonk', 'wrapcast', 'nostr', 'lemmy',
-  'vk', 'gmb', 'tumblr', 'dribbble', 'mewe', 'skool', 'whop', 'moltbook', 'kick', 'twitch', 'tiktok', 'tiktok-business', 'youtube',
-]
 const NOW = new Date('2026-11-01T08:00:00Z')
 const LATER = '2026-11-02T08:00:00Z'
 const TEXT = 'Afla ce trebuie sa stii despre declaratie.'
@@ -63,26 +57,7 @@ const image = (width = 1080, height = 1080, altText = 'Card despre declaratie') 
 const images = (n: number) => Array.from({ length: n }, (_, i) => ({ ...image(), mediaId: `m${i}` }))
 const a = (n: number) => 'a'.repeat(n)
 
-describe('every Postiz provider (amendment 04, second batch)', () => {
-  it('the 36 Postiz identifiers map onto 33 platforms; aliases are not platforms', () => {
-    assert.equal(POSTIZ_IDENTIFIERS.length, 36)
-    const platforms = new Set<Platform>()
-    for (const id of POSTIZ_IDENTIFIERS) {
-      const p = platformForProvider(id)
-      assert.ok(p, `${id} is mapped`)
-      platforms.add(p)
-    }
-    assert.equal(platforms.size, 33)
-    assert.equal(platformForProvider('instagram-standalone'), 'instagram')
-    assert.equal(platformForProvider('mastodon-custom'), 'mastodon')
-    assert.equal(platformForProvider('tiktok-business'), 'tiktok')
-    assert.equal(platformForProvider('wrapcast'), 'farcaster')
-    // Substack, Product Hunt and the nine manual channels of amendment 05 have no Postiz provider: 33 + 11 = 44 platforms.
-    assert.equal(PLATFORMS.length, 44)
-    assert.deepEqual(PLATFORMS.filter((p) => !platforms.has(p)).sort(), ['forum', 'github', 'indiehackers', 'investing', 'linkedin-article', 'press', 'producthunt', 'quora', 'stackexchange', 'substack', 'tradingview'])
-    for (const target of Object.values(PROVIDER_TO_PLATFORM)) assert.ok((PLATFORMS as readonly string[]).includes(target), target)
-  })
-
+describe('the second batch of amendment 04', () => {
   it('labels, kinds, card formats and the manual-only list of the second batch', () => {
     for (const p of BATCH2) {
       assert.ok((PLATFORMS as readonly string[]).includes(p), p)
@@ -359,16 +334,17 @@ describe('migration 0009 and YouTube as a manual account', () => {
     assert.equal((await rows(db, `select mode from social_accounts where id = $1`, [id]))[0].mode, 'manual')
   })
 
-  it('sync creates every channel; the YouTube one arrives as a manual account', async () => {
-    assert.equal((await syncFakeAccounts(api)).status, 200)
-    const accounts = await rows(db, `select platform, mode, status, paused, postiz_integration_id from social_accounts`)
-    assert.equal(accounts.length, FAKE_INTEGRATIONS.length)
-    for (const p of BATCH2) assert.ok(accounts.some((x) => x.platform === p), `${p} synced`)
+  it('test accounts: one per kept platform, native where a connector exists, none for a dropped platform', async () => {
+    const first = await insertTestAccounts((sql, params) => db.query(sql, params))
+    const accounts = await rows(db, `select platform, mode, status, paused, publishing_backend from social_accounts`)
+    assert.equal(accounts.length, first.created.length)
+    for (const p of BATCH2.filter((p) => !isDroppedPlatform(p))) assert.ok(accounts.some((x) => x.platform === p), `${p} created`)
+    for (const p of BATCH2.filter(isDroppedPlatform)) assert.ok(!accounts.some((x) => x.platform === p), `${p} is dropped`)
     const youtube = accounts.find((x) => x.platform === 'youtube')!
-    assert.deepEqual([youtube.mode, youtube.status, youtube.paused, youtube.postiz_integration_id], ['manual', 'manual', true, 'fake-youtube'])
-    assert.ok(accounts.filter((x) => x.platform !== 'youtube').every((x) => x.mode === 'auto' && x.status === 'connected'))
-    assert.equal((await syncFakeAccounts(api)).status, 200, 'a second sync keeps it manual')
-    assert.equal((await rows(db, `select mode, status from social_accounts where platform = 'youtube'`))[0].mode, 'manual')
+    assert.deepEqual([youtube.mode, youtube.status, youtube.paused, youtube.publishing_backend], ['auto', 'connected', true, 'native'])
+    assert.deepEqual(accounts.find((x) => x.platform === 'skool')!.mode, 'manual', 'no connector: a manual account')
+    const again = await insertTestAccounts((sql, params) => db.query(sql, params))
+    assert.deepEqual([again.created.length, again.existing.length], [0, first.created.length], 'a second run adds nothing')
   })
 
   async function newPost(accountId: string, text: string, settings: Record<string, unknown>) {
@@ -380,9 +356,8 @@ describe('migration 0009 and YouTube as a manual account', () => {
     return (await getPost(id))!
   }
 
-  it('manual: a synced YouTube channel completes the handoff, with the needs-video notice', async () => {
-    await syncFakeAccounts(api)
-    const [{ id: account }] = await rows(db, `select id from social_accounts where platform = 'youtube'`)
+  it('manual: a manual YouTube account completes the handoff, with the needs-video notice', async () => {
+    const account = await createAccount(db, brand, 'youtube', { paused: true })
     assert.equal((await updateAccount(account, { brand_id: brand, paused: false })).ok, true)
     const post = await newPost(account, 'Un ghid clar pentru documentele tale.', { title: 'Declaratia Unica, pas cu pas', tags: ['taxe', 'crypto'] })
     const approved = await approvePost({

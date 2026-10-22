@@ -13,7 +13,7 @@ export const PLATFORMS = [
   'hashnode',
   'substack',
   'producthunt',
-  // Amendment 04: more platforms. All are Postiz providers (v2.25.0).
+  // Amendment 04: more platforms.
   'threads',
   'bluesky',
   'mastodon',
@@ -26,7 +26,7 @@ export const PLATFORMS = [
   'farcaster',
   'nostr',
   'lemmy',
-  // Amendment 04, second batch: every other Postiz provider (v2.25.0).
+  // Amendment 04, second batch.
   'slack',
   'wordpress',
   'listmonk',
@@ -42,7 +42,7 @@ export const PLATFORMS = [
   'twitch',
   'tiktok',
   'youtube',
-  // Amendment 05: manual-only channels (no API we use). Never in Postiz.
+  // Amendment 05: manual channels.
   'quora',
   'linkedin-article',
   'tradingview',
@@ -57,6 +57,40 @@ export type Platform = (typeof PLATFORMS)[number]
 
 export function isPlatform(value: unknown): value is Platform {
   return typeof value === 'string' && (PLATFORMS as readonly string[]).includes(value)
+}
+
+/**
+ * Amendment 10: platforms dropped from the app (social_dropped_platforms in SQL, the
+ * worker's DROPPED_PLATFORMS, same order). No direct adapter was built for the first
+ * twelve after Postiz was removed; WordPress, Discord and Mastodon were excluded by the
+ * owner. No new account, request or draft uses them. They stay in PLATFORMS because
+ * older drafts and accounts may still name them.
+ */
+export const DROPPED_PLATFORMS = [
+  'threads', 'reddit', 'pinterest', 'nostr', 'vk', 'gmb', 'tumblr', 'dribbble', 'whop', 'moltbook', 'kick', 'twitch',
+  'wordpress', 'discord', 'mastodon',
+] as const satisfies readonly Platform[]
+export type DroppedPlatform = (typeof DROPPED_PLATFORMS)[number]
+export type ActivePlatform = Exclude<Platform, DroppedPlatform>
+
+export function isDroppedPlatform(value: unknown): value is DroppedPlatform {
+  return typeof value === 'string' && (DROPPED_PLATFORMS as readonly string[]).includes(value)
+}
+
+/** The platforms the app writes for and publishes to: PLATFORMS without DROPPED_PLATFORMS, same order. */
+export const ACTIVE_PLATFORMS = PLATFORMS.filter((p): p is ActivePlatform => !isDroppedPlatform(p)) as [ActivePlatform, ...ActivePlatform[]]
+
+/** Why a platform is dropped, for the accounts screen. */
+export const DROPPED_PLATFORM_NOTE = 'Neimplementata: conectorul direct nu a fost construit dupa renuntarea la Postiz.'
+export const EXCLUDED_PLATFORM_NOTE = 'Exclusa din proiect la cererea proprietarului.'
+
+/** Amendment 10: one length per request, the same on every platform (the worker's LENGTH_TARGETS). */
+export const POST_LENGTHS = ['short', 'long'] as const
+export type PostLength = (typeof POST_LENGTHS)[number]
+export const POST_LENGTH_LABELS: Record<PostLength, string> = { short: 'Scurta', long: 'Lunga' }
+export const POST_LENGTH_HINTS: Record<PostLength, string> = {
+  short: '250-600 de caractere pe fiecare platforma (aprox. 40-100 de cuvinte).',
+  long: '1.200-2.000 de caractere pe fiecare platforma (aprox. 200-330 de cuvinte). X, Bluesky, Farcaster si Telegram cu imagine isi folosesc aproape toata limita.',
 }
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
@@ -107,11 +141,11 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
 }
 
 /**
- * Always a manual handoff, whatever the account says (PRD section 5).
- * Substack and Product Hunt have no publishing API; YouTube's Postiz provider
- * only publishes video, and this app makes text and images (amendment 04).
- * Every other platform can still be switched to manual mode account by
- * account (a channel waiting for a platform's approval).
+ * A manual handoff for a manual account (PRD section 5). Substack and Product Hunt have
+ * no publishing API. YouTube, Stack Exchange and GitHub publish automatically only through
+ * a direct connection (amendments 08 and 09); a manual account of theirs stays manual.
+ * Every other platform can still be switched to manual mode account by account (a channel
+ * waiting for a platform's approval).
  */
 export const MANUAL_ONLY_PLATFORMS: readonly Platform[] = [
   'substack',
@@ -143,7 +177,7 @@ export const REDDIT_SUBREDDIT_SUGGESTIONS: readonly string[] = [
 export const MANUAL_ONLY_REASONS: Partial<Record<Platform, string>> = {
   substack: 'Substack nu are API de publicare.',
   producthunt: 'Product Hunt nu are API pentru lansari.',
-  youtube: 'YouTube cere video, iar aplicatia face doar text si imagini: filmul se incarca manual, textul de mai jos e pentru titlu si descriere.',
+  youtube: 'Un cont manual de YouTube: video-ul se incarca de o persoana, textul de mai jos e pentru titlu si descriere. Pentru publicare automata conecteaza canalul direct din Conturi.',
   quora: 'Quora nu are API de publicare.',
   'linkedin-article': 'API-ul LinkedIn nu poate crea articole sau newslettere: se publica din editorul LinkedIn.',
   tradingview: 'TradingView nu are API de publicare pentru idei.',
@@ -151,7 +185,7 @@ export const MANUAL_ONLY_REASONS: Partial<Record<Platform, string>> = {
   indiehackers: 'Indie Hackers nu are API de publicare.',
   stackexchange:
     'Stack Exchange are API de scriere, dar regulile de autopromovare cer sa spui ca esti afiliat: raspunsul se verifica si se publica de o persoana.',
-  github: 'Integrarea directa cu GitHub (release si Discussions) vine mai tarziu: deocamdata se publica manual.',
+  github: 'Un cont manual de GitHub se publica de o persoana. Pentru release si Discussions automate conecteaza depozitul direct din Conturi.',
   forum: 'Forumurile nu au un API comun: fiecare cont este un forum si se posteaza manual.',
   press: 'Comunicatele se trimit redactiilor: fiecare cont este o publicatie si se trimite manual.',
 }
@@ -300,10 +334,14 @@ export const ERROR_CODE_LABELS: Record<string, string> = {
   RECONCILE_MISS: 'Postarea nu a fost gasita la verificare',
   LEASE_EXPIRED: 'Workerul nu a raspuns la timp',
   POLL_TIMEOUT: 'Niciun rezultat dupa 24 de ore. Verifica pe platforma inainte de reincercare: postarea poate fi deja publicata',
-  POSTIZ_UNAUTHORIZED: 'Postiz a refuzat cheia workerului (verifica POSTIZ_API_KEY)',
-  POSTIZ_FORBIDDEN: 'Postiz a refuzat cererea',
-  POSTIZ_REJECTED: 'Postiz a refuzat postarea',
-  INTEGRATION_NOT_FOUND: 'Canalul nu mai exista in Postiz',
+  NATIVE_RESPONSE_LOST: 'Raspunsul platformei s-a pierdut; rezultatul se recupereaza din jurnal',
+  LEGACY_POSTIZ_ACCOUNT: 'Contul foloseste vechea conexiune Postiz, care nu mai exista. Conecteaza-l direct din Conturi.',
+  LEGACY_CONFIRMED_ABSENT: 'Absenta verificata pe platforma de administrator',
+  // Historical codes from before amendment 10 (Postiz removed); old jobs may still show them.
+  POSTIZ_UNAUTHORIZED: 'Postiz (istoric) a refuzat cheia workerului',
+  POSTIZ_FORBIDDEN: 'Postiz (istoric) a refuzat cererea',
+  POSTIZ_REJECTED: 'Postiz (istoric) a refuzat postarea',
+  INTEGRATION_NOT_FOUND: 'Canalul nu mai exista in Postiz (istoric)',
   HASHNODE_CONFIG_MISSING: 'Lipseste publicatia Hashnode',
   DRAFTS_POST_UNCERTAIN: 'Ciornele poate au fost salvate; verifica Ciorne inainte sa generezi din nou',
   RESEARCH_EMPTY: 'Cautarea pe web nu a gasit surse; nu s-a scris nicio ciorna',
@@ -332,7 +370,7 @@ export const EVENT_LABELS: Record<EventType, string> = {
   manual_due: 'De publicat manual',
   drafts_ready: 'Ciorne noi',
   generation_failed: 'Generare esuata',
-  foreign_post: 'Postare facuta direct in Postiz',
+  foreign_post: 'Postare facuta direct in Postiz (istoric)',
   worker_silent: 'Workerul nu mai raspunde',
 }
 
@@ -478,56 +516,6 @@ export const MEDIA_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as con
 export type MediaMime = (typeof MEDIA_MIME_TYPES)[number]
 
 export const SOCIAL_BUCKET = 'social-media'
-
-/**
- * Postiz provider identifiers (with the spellings seen in v2.25.0) to our
- * platforms. The identifier is the `identifier` field of Postiz's
- * GET /public/v1/integrations (the worker also accepts `providerIdentifier`).
- * Farcaster is `wrapcast` in Postiz; `mastodon-custom` is a Mastodon channel
- * on an instance the operator chose.
- */
-export const PROVIDER_TO_PLATFORM: Record<string, Platform> = {
-  x: 'x',
-  facebook: 'facebook',
-  instagram: 'instagram',
-  'instagram-standalone': 'instagram',
-  'instagram.standalone': 'instagram',
-  'linkedin-page': 'linkedin-page',
-  'linkedin.page': 'linkedin-page',
-  devto: 'devto',
-  'dev.to': 'devto',
-  hashnode: 'hashnode',
-  threads: 'threads',
-  bluesky: 'bluesky',
-  mastodon: 'mastodon',
-  'mastodon-custom': 'mastodon',
-  linkedin: 'linkedin',
-  reddit: 'reddit',
-  pinterest: 'pinterest',
-  telegram: 'telegram',
-  discord: 'discord',
-  medium: 'medium',
-  wrapcast: 'farcaster',
-  farcaster: 'farcaster',
-  nostr: 'nostr',
-  lemmy: 'lemmy',
-  slack: 'slack',
-  wordpress: 'wordpress',
-  listmonk: 'listmonk',
-  vk: 'vk',
-  gmb: 'gmb',
-  tumblr: 'tumblr',
-  dribbble: 'dribbble',
-  mewe: 'mewe',
-  skool: 'skool',
-  whop: 'whop',
-  moltbook: 'moltbook',
-  kick: 'kick',
-  twitch: 'twitch',
-  tiktok: 'tiktok',
-  'tiktok-business': 'tiktok',
-  youtube: 'youtube',
-}
 
 /** Where the "Open editor" link of a manual destination points by default. */
 export const DEFAULT_OPEN_EDITOR_URLS: Partial<Record<Platform, string>> = {

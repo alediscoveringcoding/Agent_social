@@ -20,7 +20,8 @@
     "admin:create": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings scripts/create-admin.ts",
     "db:migrate": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings scripts/local-db.ts migrate",
     "db:status": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings scripts/local-db.ts status",
-    "db:reset": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings scripts/local-db.ts reset"
+    "db:reset": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings scripts/local-db.ts reset",
+    "db:test-accounts": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings scripts/local-db.ts test-accounts"
   },
   "dependencies": {
     "@fontsource/plus-jakarta-sans": "^5.3.0",

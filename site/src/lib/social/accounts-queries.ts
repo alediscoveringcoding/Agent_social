@@ -1,7 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  ACCOUNT_SYNC_WARN_MINUTES,
   WORKER_SEEN_WARN_MINUTES,
   freshness,
   type AccountMode,
@@ -28,11 +27,11 @@ export interface AdminAccount {
   platform: Platform
   mode: AccountMode
   status: AccountStatus
+  /** "native": directly connected. "postiz": a manual account, or an old Postiz one (amendment 10). */
+  publishing_backend: 'native' | 'postiz'
+  native_provider_account_id: string | null
+  /** Set only on an account first registered by the removed Postiz sync. */
   postiz_integration_id: string | null
-  postiz_provider: string | null
-  postiz_disabled: boolean
-  publishing_backend?: 'native' | 'postiz'
-  native_provider_account_id?: string | null
   display_name: string
   picture_url: string | null
   profile_url: string | null
@@ -49,13 +48,12 @@ export interface AdminAccount {
 }
 
 export interface WorkerHealth {
-  workers: Array<{ worker_id: string; version: string | null; last_seen_at: string; last_account_sync_at: string | null }>
+  workers: Array<{ worker_id: string; version: string | null; last_seen_at: string }>
   last_seen_at: string | null
-  last_account_sync_at: string | null
   seen: Freshness
-  sync: Freshness
   publishing_enabled: boolean
-  legacy_accounts?: number
+  /** Old Postiz accounts still in automatic mode: they publish nothing until connected directly. */
+  legacy_accounts: number
 }
 
 const OPEN_JOB_STATUSES = ['queued', 'claimed', 'submitting', 'submitted', 'reconciling', 'manual_pending']
@@ -76,7 +74,7 @@ export async function listAdminAccounts(): Promise<AdminAccount[]> {
     admin
       .from('social_accounts')
       .select(
-        'id, brand_id, brand:social_brands(id, slug, name), platform, mode, status, postiz_integration_id, postiz_provider, postiz_disabled, publishing_backend, native_provider_account_id, display_name, picture_url, profile_url, open_editor_url, daily_cap, paused, last_synced_at, created_at, updated_at'
+        'id, brand_id, brand:social_brands(id, slug, name), platform, mode, status, postiz_integration_id, publishing_backend, native_provider_account_id, display_name, picture_url, profile_url, open_editor_url, daily_cap, paused, last_synced_at, created_at, updated_at'
       )
       .order('platform')
       .order('display_name')
@@ -90,11 +88,10 @@ export async function listAdminAccounts(): Promise<AdminAccount[]> {
   const open = new Map<string, number>()
   for (const j of jobs) open.set(j.account_id, (open.get(j.account_id) ?? 0) + 1)
 
-  // "In use" matters only where deleting is offered: manual-only accounts.
-  const manual = accounts.filter((a) => !a.postiz_integration_id)
+  // An account that a destination uses cannot be deleted (social_admin_delete_account).
   const used = new Set<string>()
   await Promise.all(
-    manual.map(async (a) => {
+    accounts.map(async (a) => {
       const { count, error } = await admin
         .from('social_destinations')
         .select('id', { count: 'exact', head: true })
@@ -107,7 +104,7 @@ export async function listAdminAccounts(): Promise<AdminAccount[]> {
   return accounts.map((a) => ({
     ...a,
     open_jobs: open.get(a.id) ?? 0,
-    used: a.postiz_integration_id ? true : used.has(a.id) || (open.get(a.id) ?? 0) > 0,
+    used: used.has(a.id) || (open.get(a.id) ?? 0) > 0,
   }))
 }
 
@@ -117,7 +114,7 @@ export async function getWorkerHealth(now: Date = new Date()): Promise<WorkerHea
     must<WorkerHealth['workers']>(
       await admin
         .from('social_workers')
-        .select('worker_id, version, last_seen_at, last_account_sync_at')
+        .select('worker_id, version, last_seen_at')
         .order('last_seen_at', { ascending: false })
         .limit(20),
       'workers'
@@ -125,15 +122,12 @@ export async function getWorkerHealth(now: Date = new Date()): Promise<WorkerHea
   const latest = (xs: Array<string | null>) =>
     xs.filter((x): x is string => !!x).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null
   const lastSeen = latest(workers.map((w) => w.last_seen_at))
-  const lastSync = latest(workers.map((w) => w.last_account_sync_at))
   const legacy = await admin.from('social_accounts').select('id', { count: 'exact', head: true }).eq('publishing_backend', 'postiz').eq('mode', 'auto')
   if (legacy.error) throw new Error('Could not inspect legacy account health')
   return {
     workers,
     last_seen_at: lastSeen,
-    last_account_sync_at: lastSync,
     seen: freshness(lastSeen, now, WORKER_SEEN_WARN_MINUTES),
-    sync: freshness(lastSync, now, ACCOUNT_SYNC_WARN_MINUTES),
     publishing_enabled: publishingEnabled(),
     legacy_accounts: legacy.count ?? 0,
   }

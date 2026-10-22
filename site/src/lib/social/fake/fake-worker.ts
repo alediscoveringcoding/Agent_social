@@ -1,20 +1,21 @@
 /**
  * The fake worker (task A3): drives the worker API through every delivery
- * state without Postiz, so each admin screen state can be shown on localhost.
- * It follows the real worker procedure of PRD 10.3 (recompute the hash,
- * /submitting before "creating", poll, reconcile) and picks outcomes from a
- * scenario instead of a platform.
+ * state without any platform, so each admin screen state can be shown on
+ * localhost. It follows the real worker's procedure (recompute the hash,
+ * /submitting before publishing) and picks outcomes from a scenario instead
+ * of asking the site to publish (amendment 10: the site publishes natively).
  *
  * Scenarios for publish jobs:
- *   ok         submitting -> submitted; the next poll publishes it
+ *   ok         submitting -> published with a fake URL
  *   fail       submitting -> failed VALIDATION_REJECTED
  *   retry      failed before submitting: retry TRANSIENT (backoff, then again)
  *   unknown    submitting -> reconciling UNKNOWN_RESULT; reconcile decides later
  *   auth       failed AUTH_EXPIRED (the account goes to reconnect_required)
  *   lose-lease /submitting with a wrong attempt: the API answers 409
  *   random     one of the above, weighted towards ok
- * Reconcile jobs are found (-> submitted) or not found, at random unless
- * `reconcile` is forced. Poll jobs publish, or fail with `poll: 'fail'`.
+ * Reconcile jobs are found (-> published) or not found, at random unless
+ * `reconcile` is forced. Poll jobs (an upload still processing) publish, or
+ * fail with `poll: 'fail'`.
  */
 
 import { destinationHash } from '../hash.ts'
@@ -40,11 +41,12 @@ interface ClaimedJob {
   job_id: string
   kind: 'publish' | 'poll' | 'reconcile'
   attempt_no: number
-  account: { id: string; platform: string; postiz_integration_id: string | null }
+  account: { id: string; platform: string; publishing_backend: string; native_provider_account_id: string | null }
   destination: { id: string; text: string; settings: Record<string, unknown>; scheduled_at: string; destination_hash: string | null }
   media: Array<{ media_id: string; url: string | null; mime: string; sha256: string; alt_text: string }>
-  postiz: { post_id: string; group: string | null } | null
 }
+
+const fakeUrl = (job: ClaimedJob, tag = '') => `https://example.com/fake/${job.account.platform}/${tag}${job.job_id}`
 
 export interface FakeWorkerStep {
   job_id: string
@@ -114,7 +116,7 @@ export async function runFakeWorkerOnce(api: WorkerApi, opts: FakeWorkerOptions 
         continue
       }
       if (scenario === 'retry') {
-        const r = await result(job, { outcome: 'retry', error_code: 'TRANSIENT', error_message: 'fake: Postiz 503' })
+        const r = await result(job, { outcome: 'retry', error_code: 'TRANSIENT', error_message: 'fake: platform 503' })
         record(job, 'retry TRANSIENT', r.status)
         continue
       }
@@ -133,31 +135,22 @@ export async function runFakeWorkerOnce(api: WorkerApi, opts: FakeWorkerOptions 
         const r = await result(job, { outcome: 'reconciling', error_code: 'UNKNOWN_RESULT', error_message: 'fake: connection dropped' })
         record(job, 'reconciling UNKNOWN_RESULT', r.status)
       } else {
-        const r = await api.post(`/deliveries/${job.job_id}/submitted`, {
-          attempt_no: job.attempt_no,
-          postiz_post_id: `fake-${job.job_id.slice(0, 8)}-${job.attempt_no}`,
-          postiz_group: `fake-group-${job.job_id.slice(0, 8)}`,
-        })
-        record(job, 'submitted', r.status)
+        const r = await result(job, { outcome: 'published', remote_url: fakeUrl(job) })
+        record(job, 'published', r.status)
       }
     } else if (job.kind === 'poll') {
       if (opts.poll === 'fail') {
         const r = await result(job, { outcome: 'failed', error_code: 'VALIDATION_REJECTED', error_message: 'fake: rejected after review' })
         record(job, 'poll -> failed', r.status)
       } else {
-        const url = `https://example.com/fake/${job.account.platform}/${job.postiz?.post_id ?? job.job_id}`
-        const r = await result(job, { outcome: 'published', remote_url: url })
+        const r = await result(job, { outcome: 'published', remote_url: fakeUrl(job) })
         record(job, 'poll -> published', r.status)
       }
     } else {
       const found = opts.reconcile === 'found' || (opts.reconcile !== 'not_found' && random() < 0.5)
       if (found) {
-        const r = await api.post(`/deliveries/${job.job_id}/submitted`, {
-          attempt_no: job.attempt_no,
-          postiz_post_id: `fake-found-${job.job_id.slice(0, 8)}`,
-          postiz_group: null,
-        })
-        record(job, 'reconcile -> found (submitted)', r.status)
+        const r = await result(job, { outcome: 'published', remote_url: fakeUrl(job, 'found-') })
+        record(job, 'reconcile -> found (published)', r.status)
       } else {
         const r = await result(job, { outcome: 'not_found' })
         record(job, 'reconcile -> not_found', r.status)
@@ -165,58 +158,6 @@ export async function runFakeWorkerOnce(api: WorkerApi, opts: FakeWorkerOptions 
     }
   }
   return steps
-}
-
-/** Fake Postiz channels for /accounts/sync (one per automatic platform). */
-export const FAKE_INTEGRATIONS = [
-  { postiz_integration_id: 'fake-x', provider: 'x', name: 'Taxes Support (X, test)', rules: { max_length: 280 } },
-  { postiz_integration_id: 'fake-linkedin', provider: 'linkedin-page', name: 'Taxes Support (LinkedIn, test)', rules: { max_length: 3000 } },
-  { postiz_integration_id: 'fake-facebook', provider: 'facebook', name: 'Taxes Support (Facebook, test)', rules: {} },
-  { postiz_integration_id: 'fake-instagram', provider: 'instagram-standalone', name: 'taxes.support.test (Instagram)', rules: { max_length: 2200 } },
-  { postiz_integration_id: 'fake-devto', provider: 'devto', name: 'taxes-support-test (dev.to)', rules: {} },
-  { postiz_integration_id: 'fake-hashnode', provider: 'hashnode', name: 'Taxes Support blog (Hashnode, test)', rules: {} },
-  // Amendment 04 (provider identifiers as Postiz v2.25.0 reports them; Farcaster is "wrapcast").
-  { postiz_integration_id: 'fake-threads', provider: 'threads', name: 'taxes.support.test (Threads)', rules: { max_length: 500 } },
-  { postiz_integration_id: 'fake-bluesky', provider: 'bluesky', name: 'taxes-support-test (Bluesky)', rules: {} },
-  { postiz_integration_id: 'fake-mastodon', provider: 'mastodon', name: 'taxes_support_test (Mastodon)', rules: {} },
-  { postiz_integration_id: 'fake-linkedin-profile', provider: 'linkedin', name: 'Taxes Support (LinkedIn profil, test)', rules: { max_length: 3000 } },
-  { postiz_integration_id: 'fake-reddit', provider: 'reddit', name: 'taxes_support_test (Reddit)', rules: {} },
-  { postiz_integration_id: 'fake-pinterest', provider: 'pinterest', name: 'taxes.support.test (Pinterest)', rules: {} },
-  { postiz_integration_id: 'fake-telegram', provider: 'telegram', name: 'Taxes Support (Telegram, test)', rules: {} },
-  { postiz_integration_id: 'fake-discord', provider: 'discord', name: 'Taxes Support (Discord, test)', rules: {} },
-  { postiz_integration_id: 'fake-medium', provider: 'medium', name: 'taxes-support-test (Medium)', rules: {} },
-  { postiz_integration_id: 'fake-farcaster', provider: 'wrapcast', name: 'taxes-support-test (Farcaster)', rules: {} },
-  { postiz_integration_id: 'fake-nostr', provider: 'nostr', name: 'taxes-support-test (Nostr)', rules: {} },
-  { postiz_integration_id: 'fake-lemmy', provider: 'lemmy', name: 'taxes_support_test (Lemmy)', rules: {} },
-  // Amendment 04, second batch (the YouTube channel syncs as a manual account: it needs video).
-  { postiz_integration_id: 'fake-slack', provider: 'slack', name: 'Taxes Support (Slack, test)', rules: {} },
-  { postiz_integration_id: 'fake-wordpress', provider: 'wordpress', name: 'Taxes Support blog (WordPress, test)', rules: {} },
-  { postiz_integration_id: 'fake-listmonk', provider: 'listmonk', name: 'Taxes Support (Listmonk, test)', rules: {} },
-  { postiz_integration_id: 'fake-vk', provider: 'vk', name: 'Taxes Support (VK, test)', rules: {} },
-  { postiz_integration_id: 'fake-gmb', provider: 'gmb', name: 'Taxes Support (Google Business, test)', rules: {} },
-  { postiz_integration_id: 'fake-tumblr', provider: 'tumblr', name: 'taxes-support-test (Tumblr)', rules: {} },
-  { postiz_integration_id: 'fake-dribbble', provider: 'dribbble', name: 'taxes-support-test (Dribbble)', rules: {} },
-  { postiz_integration_id: 'fake-mewe', provider: 'mewe', name: 'Taxes Support (MeWe, test)', rules: {} },
-  { postiz_integration_id: 'fake-skool', provider: 'skool', name: 'Taxes Support (Skool, test)', rules: {} },
-  { postiz_integration_id: 'fake-whop', provider: 'whop', name: 'Taxes Support (Whop, test)', rules: {} },
-  { postiz_integration_id: 'fake-moltbook', provider: 'moltbook', name: 'taxes-support-test (Moltbook)', rules: {} },
-  { postiz_integration_id: 'fake-kick', provider: 'kick', name: 'taxes-support-test (Kick)', rules: {} },
-  { postiz_integration_id: 'fake-twitch', provider: 'twitch', name: 'taxes_support_test (Twitch)', rules: {} },
-  { postiz_integration_id: 'fake-tiktok', provider: 'tiktok', name: 'taxes.support.test (TikTok)', rules: {} },
-  { postiz_integration_id: 'fake-youtube', provider: 'youtube', name: 'Taxes Support (YouTube, test)', rules: {} },
-]
-
-export async function syncFakeAccounts(api: WorkerApi, opts: { refreshNeeded?: string[] } = {}) {
-  return api.post('/accounts/sync', {
-    integrations: FAKE_INTEGRATIONS.map((i) => ({
-      ...i,
-      picture_url: null,
-      profile_url: null,
-      disabled: false,
-      refresh_needed: opts.refreshNeeded?.includes(i.postiz_integration_id) ?? false,
-    })),
-    postiz_recent_posts: [],
-  })
 }
 
 /**

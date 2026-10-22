@@ -17,6 +17,7 @@ import { after, before, beforeEach, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { PGlite } from '@electric-sql/pglite'
 import { migratedDb } from '../../testing/pglite-db.ts'
+import { FIXTURE_CREDENTIAL, nativeWorker } from '../../testing/social-fixtures.ts'
 
 let db: PGlite
 
@@ -70,24 +71,28 @@ async function reset() {
 }
 
 let integrationSeq = 0
+/** An automatic account is directly connected (native, with a stored credential), as every one is since amendment 10. */
 async function account(opts: { platform?: string; mode?: string; status?: string; cap?: number; brand?: string } = {}) {
   const mode = opts.mode ?? 'auto'
   integrationSeq += 1
-  return (
+  const id = (
     await one(
-      `insert into social_accounts (brand_id, platform, mode, status, postiz_integration_id, display_name, daily_cap)
-       values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+      `insert into social_accounts (brand_id, platform, mode, status, publishing_backend, native_provider_account_id, display_name, daily_cap)
+       values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
       [
         opts.brand ?? brandId,
         opts.platform ?? 'x',
         mode,
         opts.status ?? (mode === 'manual' ? 'manual' : 'connected'),
+        mode === 'auto' ? 'native' : 'postiz',
         mode === 'auto' ? `int-${integrationSeq}` : null,
         `Account ${integrationSeq}`,
         opts.cap ?? 5,
       ]
     )
   ).id as string
+  if (mode === 'auto') await one(`insert into social_native_credentials (account_id, encrypted) values ($1, $2) returning account_id`, [id, FIXTURE_CREDENTIAL])
+  return id
 }
 
 interface Dest {
@@ -133,8 +138,10 @@ async function approve(
   ])
 }
 
-const claim = (worker: string, now: string, enabled = true, limit = 5) =>
-  fn<{ jobs: Row[] }>(`select social_claim_deliveries($1, $2, $3, $4)`, [worker, limit, enabled, now])
+const claim = async (worker: string, now: string, enabled = true, limit = 5) => {
+  await nativeWorker(db, worker, now)
+  return fn<{ jobs: Row[] }>(`select social_claim_deliveries($1, $2, $3, $4)`, [worker, limit, enabled, now])
+}
 const submitting = (job: string, worker: string, attempt: number, now: string, enabled = true) =>
   fn<Row>(`select social_job_submitting($1, $2, $3, $4, $5)`, [job, worker, attempt, enabled, now])
 const submitted = (job: string, worker: string, attempt: number, now: string, postId = 'pz-1') =>

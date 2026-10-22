@@ -14,7 +14,9 @@ import { routeFetch } from '../../testing/route-fetch.ts'
 import { adminUser, approvedPost, brandId, createAccount, resetSocial, rows } from '../../testing/social-fixtures.ts'
 import { WorkerApi } from '../fake/worker-api-client.ts'
 import { runFakeGeneratorOnce } from '../fake/fake-generator.ts'
-import { FAKE_INTEGRATIONS, claimRace, runFakeWorkerOnce, syncFakeAccounts } from '../fake/fake-worker.ts'
+import { claimRace, runFakeWorkerOnce } from '../fake/fake-worker.ts'
+import { insertTestAccounts } from '../fake/test-accounts.ts'
+import { ACTIVE_PLATFORMS } from '../constants.ts'
 import { DRAFT_FIXTURES } from '../fake/fixtures.ts'
 import { DraftSchema } from '../schemas.ts'
 
@@ -52,13 +54,11 @@ describe('fake generator and fake worker (A3)', () => {
     }
   })
 
-  it('sync registers the fake channels (paused, unassigned) and can flag a reconnect', async () => {
-    const r = await syncFakeAccounts(api)
-    assert.equal(r.status, 200)
-    assert.equal((await rows(db, `select 1 from social_accounts where paused and brand_id is null`)).length, FAKE_INTEGRATIONS.length)
-    await syncFakeAccounts(api, { refreshNeeded: ['fake-x'] })
-    const [x] = await rows(db, `select status from social_accounts where postiz_integration_id = 'fake-x'`)
-    assert.equal(x.status, 'reconnect_required')
+  it('test accounts: one per kept platform, paused and unassigned, each logged', async () => {
+    const r = await insertTestAccounts((sql, params) => db.query(sql, params))
+    assert.equal(r.created.length, ACTIVE_PLATFORMS.length)
+    assert.equal((await rows(db, `select 1 from social_accounts where paused and brand_id is null`)).length, ACTIVE_PLATFORMS.length)
+    assert.equal((await rows(db, `select 1 from social_activity_log where action = 'social.test_account_created'`)).length, ACTIVE_PLATFORMS.length)
   })
 
   it('the generator delivers drafts, including ones that fail the content rules', async () => {
@@ -86,13 +86,10 @@ describe('fake generator and fake worker (A3)', () => {
     assert.equal((await rows(db, `select status from social_generation_requests`))[0].status, 'failed')
   })
 
-  it('ok: submitted, then the poll publishes it with a URL', async () => {
+  it('ok: submitting, then published with a URL', async () => {
     const { job, post } = await approvedPost(db, brand, user, await createAccount(db, brand, 'x'))
     const steps = await runFakeWorkerOnce(api, { scenario: 'ok' })
-    assert.deepEqual(steps.map((s) => [s.action, s.status]), [['submitting', 200], ['submitted', 200]])
-    assert.equal((await jobStatus(job)).status, 'submitted')
-    await due(job)
-    await runFakeWorkerOnce(api)
+    assert.deepEqual(steps.map((s) => [s.action, s.status]), [['submitting', 200], ['published', 200]])
     assert.equal((await jobStatus(job)).status, 'published')
     assert.match((await rows(db, `select remote_url from social_delivery_jobs where id = $1`, [job]))[0].remote_url, /^https:\/\/example\.com\/fake\/x\//)
     assert.equal((await rows(db, `select status from social_posts where id = $1`, [post]))[0].status, 'published')
@@ -119,12 +116,12 @@ describe('fake generator and fake worker (A3)', () => {
     assert.equal((await jobStatus(lose.job)).status, 'claimed')
   })
 
-  it('unknown result: reconciling, then reconcile finds it (no second create) or not', async () => {
+  it('unknown result: reconciling, then reconcile finds it (no second publish) or not', async () => {
     const found = await approvedPost(db, brand, user, await createAccount(db, brand, 'x'))
     await runFakeWorkerOnce(api, { scenario: 'unknown' })
     assert.deepEqual(await jobStatus(found.job), { status: 'reconciling', last_error_code: 'UNKNOWN_RESULT' })
     await runFakeWorkerOnce(api, { reconcile: 'found' })
-    assert.equal((await jobStatus(found.job)).status, 'submitted')
+    assert.equal((await jobStatus(found.job)).status, 'published')
 
     const missing = await approvedPost(db, brand, user, await createAccount(db, brand, 'facebook'))
     await runFakeWorkerOnce(api, { scenario: 'unknown' })

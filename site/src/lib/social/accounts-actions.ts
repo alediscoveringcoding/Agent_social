@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ACCOUNT_PATCH_KEYS, STATUSES_FOR_MODE, isManualOnlyPlatform, type AccountPatch } from './accounts.ts'
-import { ACCOUNT_STATUSES, DEFAULT_OPEN_EDITOR_URLS, PLATFORM_LABELS, isPlatform, type Platform } from './constants.ts'
+import { ACCOUNT_STATUSES, DEFAULT_OPEN_EDITOR_URLS, PLATFORM_LABELS, isDroppedPlatform, isPlatform, type Platform } from './constants.ts'
 import { formatBucharest } from './time.ts'
 import { logActivity } from './server/activity.ts'
 import {
@@ -31,17 +31,16 @@ const MESSAGES: SqlMessages = {
   SOCIAL_BAD_URL: 'Linkul trebuie sa inceapa cu https://.',
   SOCIAL_NAME_REQUIRED: 'Numele contului e obligatoriu (cel mult 120 de caractere).',
   SOCIAL_ACCOUNT_NO_BRAND: 'Alege intai brandul; un cont fara brand ramane pe pauza.',
-  SOCIAL_SYNCED_FIELD: 'Numele si profilul unui cont din Postiz vin de la sincronizare.',
-  SOCIAL_AUTO_NEEDS_POSTIZ: 'Publicarea automata are nevoie de un canal Postiz. Contul acesta poate fi doar manual.',
+  SOCIAL_AUTO_NEEDS_CONNECTION: 'Publicarea automata are nevoie de o conexiune API directa. Conecteaza contul din Conturi.',
   SOCIAL_MANUAL_ONLY_PLATFORM: 'Acest cont nu are o conexiune API care permite publicarea automata. Foloseste o conexiune API verificata din Conturi.',
   SOCIAL_STATUS_FOR_MODE: 'Starea nu se potriveste cu modul. Un cont manual e "Manual" sau "Asteapta aprobarea platformei".',
   SOCIAL_ACCOUNT_HAS_OPEN_JOBS: (d) =>
     `Contul are ${Number(d?.jobs ?? 0) || 'cateva'} postari programate care nu au plecat. Anuleaza-le sau asteapta sa plece, apoi reincearca.`,
   SOCIAL_CAP_BELOW_SCHEDULED: (d) =>
     `Pe ${d?.day ? formatDay(String(d.day)) : 'o zi viitoare'} sunt deja ${d?.used ?? 'mai multe'} postari programate. Limita nu poate cobori sub atat.`,
-  SOCIAL_ACCOUNT_SYNCED: 'Un cont din Postiz nu se sterge de aici: ar reaparea la urmatoarea sincronizare. Pune-l pe pauza.',
   SOCIAL_ACCOUNT_IN_USE: 'Contul e folosit de postari, asa ca ramane in istoric. Pune-l pe pauza in loc sa il stergi.',
   SOCIAL_BAD_PLATFORM: 'Alege o platforma din lista.',
+  SOCIAL_PLATFORM_DROPPED: 'Platforma a fost scoasa din aplicatie (neimplementata). Alege alta platforma.',
 }
 
 function formatDay(day: string): string {
@@ -146,6 +145,7 @@ export interface ManualAccountForm {
 export async function createManualAccount(form: ManualAccountForm): Promise<ActionResult<{ accountId: string }>> {
   return runAdminAction<{ accountId: string }>('createManualAccount', MESSAGES, async (actor) => {
     if (!isPlatform(form?.platform)) return { ok: false, error: MESSAGES.SOCIAL_BAD_PLATFORM as string }
+    if (isDroppedPlatform(form.platform)) return { ok: false, error: MESSAGES.SOCIAL_PLATFORM_DROPPED as string }
     if (!isUuid(form.brandId)) return { ok: false, error: MESSAGES.SOCIAL_BRAND_NOT_FOUND as string }
     const name = String(form.displayName ?? '').trim()
     if (!name) return { ok: false, error: MESSAGES.SOCIAL_NAME_REQUIRED as string }

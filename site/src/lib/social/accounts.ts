@@ -14,9 +14,8 @@ export const STATUSES_FOR_MODE: Record<AccountMode, readonly AccountStatus[]> = 
   manual: ['manual', 'approval_pending'],
 }
 
-/** PRD F1: warn when the worker or the account sync is older than this. */
+/** PRD F1: warn when the worker was last seen longer ago than this. */
 export const WORKER_SEEN_WARN_MINUTES = 5
-export const ACCOUNT_SYNC_WARN_MINUTES = 30
 
 export const ACCOUNT_STATUS_TONES: Record<AccountStatus, 'accent' | 'danger' | 'warn' | 'neutral'> = {
   connected: 'accent',
@@ -45,8 +44,6 @@ export interface AccountState {
   mode: AccountMode
   status: AccountStatus
   paused: boolean
-  postiz_integration_id: string | null
-  postiz_disabled: boolean
   publishing_backend?: 'native' | 'postiz'
   native_provider_account_id?: string | null
 }
@@ -62,10 +59,9 @@ export function publishBlockers(a: AccountState): string[] {
   if (a.mode === 'manual') out.push('manual')
   else {
     if (a.status !== 'connected') out.push('neconectat')
-    if (a.publishing_backend === 'native') {
-      if (!a.native_provider_account_id) out.push('fara cont conectat')
-    } else if (!a.postiz_integration_id) out.push('fara canal Postiz')
-    if (a.postiz_disabled) out.push('dezactivat in Postiz')
+    // Amendment 10: only a direct connection publishes; an old Postiz account must be reconnected.
+    if (a.publishing_backend !== 'native') out.push('conexiune Postiz veche: conecteaza-l direct')
+    else if (!a.native_provider_account_id) out.push('fara cont conectat')
   }
   return out
 }

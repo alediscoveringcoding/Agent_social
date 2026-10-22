@@ -16,7 +16,7 @@ import { MIGRATIONS_DIR, migratedDb, migrationFiles } from '../../testing/pglite
 import { createFakeSupabase, type FakeSupabase } from '../../testing/fake-supabase.ts'
 import { setTestAdminClient } from '../../testing/admin-shim.ts'
 import { setTestAdmin } from '../../testing/auth-shim.ts'
-import { adminUser, approvedPost, brandId, createAccount, resetSocial, rows, scheduleAndApprove, type Row } from '../../testing/social-fixtures.ts'
+import { adminUser, approvedPost, brandId, createAccount, nativeWorker, resetSocial, rows, scheduleAndApprove, type Row } from '../../testing/social-fixtures.ts'
 import { approvePost, retryFailed } from '../approval-actions.ts'
 import { getPost } from '../approval-queries.ts'
 import { duplicatePost } from '../handoff-actions.ts'
@@ -45,8 +45,10 @@ async function one(sql: string, params: unknown[] = []): Promise<Row> {
 async function fn<T = Row>(sql: string, params: unknown[] = []): Promise<T> {
   return Object.values(await one(sql, params))[0] as T
 }
-const claim = (worker: string, now: Date, limit = 5) =>
-  fn<{ jobs: Row[] }>(`select social_claim_deliveries($1, $2, true, $3)`, [worker, limit, iso(now)])
+const claim = async (worker: string, now: Date, limit = 5) => {
+  await nativeWorker(db, worker, iso(now))
+  return fn<{ jobs: Row[] }>(`select social_claim_deliveries($1, $2, true, $3)`, [worker, limit, iso(now)])
+}
 const submitting = (job: string, worker: string, attempt: number, now: Date, enabled = true) =>
   fn<Row>(`select social_job_submitting($1, $2, $3, $4, $5)`, [job, worker, attempt, enabled, iso(now)])
 const submitted = (job: string, worker: string, attempt: number, now: Date) =>

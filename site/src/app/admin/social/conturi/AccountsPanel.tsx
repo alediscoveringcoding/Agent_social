@@ -3,13 +3,12 @@ import { useState, useTransition, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Badge, Button, Field, inputClass } from '@/components/ui'
-import { ACCOUNT_STATUS_LABELS, PLATFORMS, PLATFORM_LABELS, type AccountStatus, type Platform } from '@/lib/social/constants'
+import { ACCOUNT_STATUS_LABELS, ACTIVE_PLATFORMS, PLATFORM_LABELS, type AccountStatus, type Platform } from '@/lib/social/constants'
 import { ACCOUNT_STATUS_HINTS, ACCOUNT_STATUS_TONES, STATUSES_FOR_MODE, ago, isManualOnlyPlatform, publishBlockers, type AccountMode } from '@/lib/social/accounts'
 import type { AdminAccount, AdminBrand } from '@/lib/social/accounts-queries'
 import { createManualAccount, deleteManualAccount, updateAccount } from '@/lib/social/accounts-actions'
 import { isHttpUrl } from '@/lib/social/schemas'
 import { disconnectNativeAccount } from '@/lib/native/connection-actions'
-import { EXCLUDED_NATIVE_PLATFORMS } from '@/lib/native/capabilities'
 
 function AccountRow({ account: a, brands, now }: { account: AdminAccount; brands: AdminBrand[]; now: string }) {
   const [mode, setMode] = useState<AccountMode>(a.mode)
@@ -18,7 +17,8 @@ function AccountRow({ account: a, brands, now }: { account: AdminAccount; brands
   const [paused, setPaused] = useState(a.paused)
   const [pending, start] = useTransition()
   const router = useRouter()
-  const manualOnly = !a.postiz_integration_id && a.publishing_backend !== 'native'
+  // Without a direct connection (a manual account, or an old Postiz one since amendment 10) the account is edited and deleted by hand.
+  const manualOnly = a.publishing_backend !== 'native'
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -32,7 +32,7 @@ function AccountRow({ account: a, brands, now }: { account: AdminAccount; brands
   }
   return <tr className="border-t border-line align-top"><td className="p-3 text-sm"><div className="flex items-center gap-2">
     {a.picture_url && isHttpUrl(a.picture_url) && <a href={a.picture_url} target="_blank" rel="noreferrer" className="text-xs text-accent-dark">Imagine ↗</a>}
-    <strong>{a.display_name}</strong></div><p>{PLATFORM_LABELS[a.platform]}</p><p className="mt-1 text-xs text-ink-soft">{a.publishing_backend === 'native' ? 'Conectare directa' : a.postiz_integration_id ? `Postiz: ${a.postiz_integration_id}` : 'Cont manual'} · verificat {ago(a.last_synced_at, new Date(now))}</p>
+    <strong>{a.display_name}</strong></div><p>{PLATFORM_LABELS[a.platform]}</p><p className="mt-1 text-xs text-ink-soft">{a.publishing_backend === 'native' ? 'Conectare directa' : a.postiz_integration_id ? 'Conexiune Postiz veche: conecteaza-l direct' : 'Cont manual'} · verificat {ago(a.last_synced_at, new Date(now))}</p>
     <div className="mt-2"><Badge tone={ACCOUNT_STATUS_TONES[a.status]}>{ACCOUNT_STATUS_LABELS[a.status]}</Badge></div><p className="mt-1 max-w-xs text-xs text-ink-soft">{ACCOUNT_STATUS_HINTS[a.status]}</p>
     <p className="mt-1 text-xs text-warn">{publishBlockers(a).join(' · ')}</p><p className="mt-1 text-xs">{a.open_jobs} destinatii in lucru</p>
     {a.profile_url && isHttpUrl(a.profile_url) && <a href={a.profile_url} target="_blank" rel="noreferrer" className="mr-3 text-xs text-accent-dark">Profil ↗</a>}
@@ -70,7 +70,7 @@ export function AccountsPanel({ accounts, brands, now }: { accounts: AdminAccoun
   }
   const sorted = [...accounts].sort((a, b) => Number(!!a.brand_id) - Number(!!b.brand_id))
   return <div className="space-y-5"><details className="rounded-card border border-line bg-card p-4"><summary className="cursor-pointer font-bold">Optiuni avansate: publicare manuala</summary><p className="my-3 text-sm text-ink-soft">Optional: pregateste continut pentru publicare de mana. Pentru publicare automata, foloseste conexiunile API de mai sus.</p><form onSubmit={create}><fieldset disabled={pending} className="grid gap-3 md:grid-cols-3">
-    <Field label="Platforma"><select className={inputClass} name="platform" defaultValue="substack">{PLATFORMS.filter(p => !EXCLUDED_NATIVE_PLATFORMS.includes(p)).map((p) => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}</select></Field>
+    <Field label="Platforma"><select className={inputClass} name="platform" defaultValue="substack">{ACTIVE_PLATFORMS.map((p) => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}</select></Field>
     <Field label="Brand"><select className={inputClass} name="brand" required defaultValue=""><option value="" disabled>Alege brandul</option>{brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
     <Field label="Nume" hint="Pentru Forum si Presa: numele forumului sau al publicatiei (un cont pe forum sau redactie)."><input className={inputClass} name="name" required maxLength={120} /></Field>
     <Field label="Link editor" hint="Gol: editorul implicit al platformei. La Forum si Presa: pagina forumului sau de contact a redactiei (https)."><input className={inputClass} name="editor" type="url" maxLength={2048} /></Field>

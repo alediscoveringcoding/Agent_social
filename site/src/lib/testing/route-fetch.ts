@@ -7,12 +7,10 @@
 import * as claim from '@/app/api/worker/social/v1/deliveries/claim/route'
 import * as heartbeat from '@/app/api/worker/social/v1/deliveries/[id]/heartbeat/route'
 import * as submitting from '@/app/api/worker/social/v1/deliveries/[id]/submitting/route'
-import * as submitted from '@/app/api/worker/social/v1/deliveries/[id]/submitted/route'
 import * as result from '@/app/api/worker/social/v1/deliveries/[id]/result/route'
 import * as genClaim from '@/app/api/worker/social/v1/generation/claim/route'
 import * as drafts from '@/app/api/worker/social/v1/generation/[id]/drafts/route'
 import * as genFailed from '@/app/api/worker/social/v1/generation/[id]/failed/route'
-import * as sync from '@/app/api/worker/social/v1/accounts/sync/route'
 
 type Handler = (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>
 
@@ -20,12 +18,10 @@ const ROUTES: Array<[RegExp, Handler]> = [
   [/^\/deliveries\/claim$/, claim.POST as Handler],
   [/^\/deliveries\/([^/]+)\/heartbeat$/, heartbeat.POST],
   [/^\/deliveries\/([^/]+)\/submitting$/, submitting.POST],
-  [/^\/deliveries\/([^/]+)\/submitted$/, submitted.POST],
   [/^\/deliveries\/([^/]+)\/result$/, result.POST],
   [/^\/generation\/claim$/, genClaim.POST as Handler],
   [/^\/generation\/([^/]+)\/drafts$/, drafts.POST],
   [/^\/generation\/([^/]+)\/failed$/, genFailed.POST],
-  [/^\/accounts\/sync$/, sync.POST as Handler],
 ]
 
 export const routeFetch = (async (input: string | URL | Request, init?: RequestInit) => {

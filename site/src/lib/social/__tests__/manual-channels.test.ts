@@ -31,11 +31,11 @@ import { mapDraft } from '../draft-mapping.ts'
 import { buildHandoff } from '../handoff.ts'
 import { SETTINGS_FIELDS, settingsFieldKeys } from '../platform-settings.ts'
 import { DraftSchema } from '../schemas.ts'
-import { platformForProvider } from '../sync-rules.ts'
 import { validateDestination, type ValidateDestinationInput } from '../validation.ts'
 import { DRAFT_FIXTURES } from '../fake/fixtures.ts'
 import { WorkerApi } from '../fake/worker-api-client.ts'
-import { FAKE_INTEGRATIONS, runFakeWorkerOnce, syncFakeAccounts } from '../fake/fake-worker.ts'
+import { runFakeWorkerOnce } from '../fake/fake-worker.ts'
+import { insertTestAccounts } from '../fake/test-accounts.ts'
 import { approvePost } from '../approval-actions.ts'
 import { getPost } from '../approval-queries.ts'
 import { createManualAccount, updateAccount } from '../accounts-actions.ts'
@@ -79,7 +79,6 @@ describe('manual channels (amendment 05): tables', () => {
     assert.equal(PLATFORM_LABELS.press, 'Presa (comunicat)')
     assert.equal(new Set(PLATFORMS.map((p) => PLATFORM_LABELS[p])).size, PLATFORMS.length, 'labels are unique')
     // No Postiz provider: the sync ignores these names.
-    for (const p of BATCH3) assert.equal(platformForProvider(p), null, p)
   })
 
   it('every settings key of the editor tables is kept by the sanitizer', () => {
@@ -310,11 +309,14 @@ describe('migration 0010 and the manual accounts of amendment 05', () => {
     assert.equal(mail.ok, false)
   })
 
-  it('a worker sync does not turn Postiz channels into any of the nine', async () => {
-    assert.equal((await syncFakeAccounts(api)).status, 200)
-    const synced = await rows(db, `select platform from social_accounts`)
-    assert.equal(synced.length, FAKE_INTEGRATIONS.length)
-    assert.ok(synced.every((x) => !(BATCH3 as readonly string[]).includes(x.platform)))
+  it('test accounts make manual accounts for the channels without a connector', async () => {
+    await insertTestAccounts((sql, params) => db.query(sql, params))
+    const created = await rows(db, `select platform, mode, publishing_backend from social_accounts`)
+    for (const p of BATCH3) {
+      const account = created.find((x) => x.platform === p)
+      assert.ok(account, p)
+      assert.equal(account.mode, ['github', 'stackexchange'].includes(p) ? 'auto' : 'manual', p)
+    }
   })
 
   async function newPost(accountId: string, text: string, settings: Record<string, unknown>) {

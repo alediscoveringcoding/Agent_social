@@ -8,10 +8,10 @@ export const dynamic = 'force-dynamic'
 /**
  * POST /deliveries/{id}/submitting {attempt_no} -> 200 | 409
  *
- * Must succeed before the worker calls Postiz create. It is also the last
+ * Must succeed before the worker asks the site to publish. It is also a
  * gate: past the stale window the job fails as STALE, and with the kill
  * switch off, a paused account or a revoked approval it goes back to the
- * queue. All of these answer 409, so the worker stops before Postiz.
+ * queue. All of these answer 409, so the worker stops before publishing.
  */
 export const POST = idRoute(AttemptBody, async (id, body, { workerId, admin }) => {
   const { data, error } = await admin.rpc('social_job_submitting', {

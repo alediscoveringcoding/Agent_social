@@ -18,7 +18,8 @@ export interface DeliveryJob {
   attempt_no: number
   lease_expires_at: string
   run_at: string
-  account: { id: string; platform: string; postiz_integration_id: string | null; publishing_backend?: 'native'; native_provider_account_id?: string | null }
+  // Amendment 10: only native (directly connected) accounts are claimed; the backend stays on the wire for older workers.
+  account: { id: string; platform: string; publishing_backend: 'native' | 'postiz'; native_provider_account_id: string | null }
   destination: {
     id: string
     text: string
@@ -27,7 +28,6 @@ export interface DeliveryJob {
     destination_hash: string | null
   }
   media: Array<{ media_id: string; url: string | null; mime: string; sha256: string; alt_text: string }>
-  postiz: { post_id: string; group: string | null } | null
   attempt_started_at: string | null
 }
 
@@ -39,8 +39,6 @@ interface JobRow {
   run_at: string
   destination_id: string
   account_id: string
-  postiz_post_id: string | null
-  postiz_group: string | null
 }
 interface DestinationRow {
   id: string
@@ -52,7 +50,6 @@ interface DestinationRow {
 interface AccountRow {
   id: string
   platform: string
-  postiz_integration_id: string | null
   publishing_backend: 'native' | 'postiz'
   native_provider_account_id: string | null
 }
@@ -83,7 +80,7 @@ export async function buildDeliveryJobs(admin: SupabaseClient, claimed: Readonly
   const jobs = must<JobRow[]>(
     await admin
       .from('social_delivery_jobs')
-      .select('id, run_at, destination_id, account_id, postiz_post_id, postiz_group')
+      .select('id, run_at, destination_id, account_id')
       .in('id', jobIds),
     'jobs'
   )
@@ -98,7 +95,7 @@ export async function buildDeliveryJobs(admin: SupabaseClient, claimed: Readonly
       .then((r) => must<DestinationRow[]>(r, 'destinations')),
     admin
       .from('social_accounts')
-      .select('id, platform, postiz_integration_id, publishing_backend, native_provider_account_id')
+      .select('id, platform, publishing_backend, native_provider_account_id')
       .in('id', accountIds)
       .then((r) => must<AccountRow[]>(r, 'accounts')),
     admin
@@ -161,8 +158,7 @@ export async function buildDeliveryJobs(admin: SupabaseClient, claimed: Readonly
       attempt_no: c.attempt_no,
       lease_expires_at: toHashTimestamp(c.lease_expires_at),
       run_at: toHashTimestamp(job.run_at),
-      account: { id: acc.id, platform: acc.platform, postiz_integration_id: acc.postiz_integration_id,
-        ...(acc.publishing_backend === 'native' ? { publishing_backend: 'native' as const, native_provider_account_id: acc.native_provider_account_id } : {}) },
+      account: { id: acc.id, platform: acc.platform, publishing_backend: acc.publishing_backend, native_provider_account_id: acc.native_provider_account_id },
       destination: {
         id: dest.id,
         text: dest.text,
@@ -171,7 +167,6 @@ export async function buildDeliveryJobs(admin: SupabaseClient, claimed: Readonly
         destination_hash: dest.destination_hash,
       },
       media,
-      postiz: c.kind !== 'publish' && job.postiz_post_id ? { post_id: job.postiz_post_id, group: job.postiz_group } : null,
       attempt_started_at:
         c.kind !== 'publish' && attempt ? toHashTimestamp(attempt.submitting_at ?? attempt.started_at) : null,
     })

@@ -16,6 +16,7 @@ import {
   approvedPost,
   brandId as brandIdOf,
   createAccount,
+  nativeWorker,
   resetSocial,
   rows,
   scheduleAndApprove,
@@ -46,8 +47,10 @@ async function rejects(promise: Promise<unknown>, code: string) {
     return true
   })
 }
-const claim = (worker: string, now: Date, limit = 5) =>
-  fn<{ jobs: Row[] }>(`select social_claim_deliveries($1, $2, true, $3)`, [worker, limit, iso(now)])
+const claim = async (worker: string, now: Date, limit = 5) => {
+  await nativeWorker(db, worker, iso(now))
+  return fn<{ jobs: Row[] }>(`select social_claim_deliveries($1, $2, true, $3)`, [worker, limit, iso(now)])
+}
 const job = (id: string) => one(`select * from social_delivery_jobs where id = $1`, [id])
 const postStatus = async (id: string) => (await one(`select status from social_posts where id = $1`, [id])).status as string
 const events = async () => (await rows(db, `select type from social_events order by id`)).map((e) => e.type as string)
@@ -368,8 +371,8 @@ describe('migration 0011 on a database that already has data', () => {
       }
       const b = await brandIdOf(old)
       const u = await adminUser(old)
-      const x = await createAccount(old, b, 'x')
-      const bs = await createAccount(old, b, 'bluesky')
+      const x = await createAccount(old, b, 'x', { legacy: true })
+      const bs = await createAccount(old, b, 'bluesky', { legacy: true })
       const p1 = await approvedPost(old, b, u, x, 'unu')
       const p2 = await approvedPost(old, b, u, bs, 'doi')
       // Violations the new constraints would refuse: a shared Postiz id and

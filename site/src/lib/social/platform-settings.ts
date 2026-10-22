@@ -1,7 +1,7 @@
 /**
  * Per-destination settings of the platforms added in amendment 04 (the
- * neutral keys of PRD 10.5, which the worker maps to Postiz's provider
- * settings). One table drives the draft editor's fields, the preview lines and
+ * neutral keys of PRD 10.5, which the native adapters read in
+ * site/src/lib/native/providers/). One table drives the draft editor's fields, the preview lines and
  * the manual handoff fields, so the three cannot drift apart. Pure.
  *
  * The older platforms (X, Instagram, dev.to, Hashnode, Substack, Product
@@ -45,7 +45,7 @@ export const REDDIT_POST_TYPE_LABELS: Record<RedditPostType, string> = {
   media: 'Imagine',
 }
 
-/** Postiz GmbSettingsDto callToActionType. */
+/** Google Business call-to-action types (dropped in amendment 10; kept for older drafts). */
 export const GMB_CTA_TYPES = ['NONE', 'BOOK', 'ORDER', 'SHOP', 'LEARN_MORE', 'SIGN_UP', 'GET_OFFER', 'CALL'] as const
 export const GMB_CTA_LABELS: Record<(typeof GMB_CTA_TYPES)[number], string> = {
   NONE: 'Fara buton',
@@ -67,7 +67,7 @@ export const TWITCH_MESSAGE_TYPES = ['message', 'announcement'] as const
 export const TWITCH_MESSAGE_LABELS = { message: 'Mesaj in chat', announcement: 'Anunt' } as const
 export const TWITCH_ANNOUNCEMENT_COLORS = ['primary', 'blue', 'green', 'orange', 'purple'] as const
 
-/** Postiz TikTokDto privacy_level. Unaudited apps can only post privately, so SELF_ONLY is the default. */
+/** TikTok privacy_level. Unaudited apps can only post privately, so SELF_ONLY is the default. */
 export const TIKTOK_PRIVACY_LEVELS = ['SELF_ONLY', 'FOLLOWER_OF_CREATOR', 'MUTUAL_FOLLOW_FRIENDS', 'PUBLIC_TO_EVERYONE'] as const
 export const TIKTOK_PRIVACY_LABELS = {
   SELF_ONLY: 'Doar eu',
@@ -76,7 +76,7 @@ export const TIKTOK_PRIVACY_LABELS = {
   PUBLIC_TO_EVERYONE: 'Public',
 } as const
 
-/** WordPress statuses Postiz accepts. */
+/** WordPress post statuses (dropped in amendment 10; kept for older drafts). */
 export const WORDPRESS_STATUSES = ['publish', 'draft', 'pending', 'private'] as const
 export const WORDPRESS_STATUS_LABELS = { publish: 'Publicat', draft: 'Ciorna', pending: 'In asteptare', private: 'Privat' } as const
 
@@ -203,17 +203,17 @@ export const SETTINGS_FIELDS: Partial<Record<Platform, readonly SettingsField[]>
       options: REDDIT_POST_TYPES.map((value) => ({ value, label: REDDIT_POST_TYPE_LABELS[value] })),
     },
     { key: 'link_url', label: 'Link', hint: 'Doar pentru tipul Link.' },
-    { key: 'flair_id', label: 'Flair (id)', hint: 'Doar daca subreddit-ul cere flair; id-ul se vede in Postiz.' },
+    { key: 'flair_id', label: 'Flair (id)', hint: 'Doar daca subreddit-ul cere flair.' },
   ],
   pinterest: [
-    { key: 'board', label: 'Board (id)', required: true, hint: 'Id-ul numeric al board-ului, din Postiz, nu numele.' },
+    { key: 'board', label: 'Board (id)', required: true, hint: 'Id-ul numeric al board-ului, nu numele.' },
     { key: 'title', label: 'Titlu', required: true, max: 100, hint: 'Cel mult 100 de caractere.' },
     { key: 'link', label: 'Link', required: true, hint: 'Unde duce pinul (https://...).', wide: true },
   ],
   discord: [{ key: 'channel', label: 'Canal (id)', required: true, hint: 'Id-ul numeric al canalului.' }],
   medium: [
     { key: 'title', label: 'Titlu', required: true },
-    { key: 'subtitle', label: 'Subtitlu', required: true, hint: 'Postiz il cere; Medium nu are camp separat de subtitlu.' },
+    { key: 'subtitle', label: 'Subtitlu', required: true, hint: 'Apare sub titlu, la inceputul articolului.' },
     { key: 'canonical_url', label: 'Link canonic', required: true, hint: 'Articolul de pe blogul nostru.' },
     { key: 'tags', label: 'Etichete', kind: 'tags', maxItems: 3, hint: 'Separate prin virgula, cel mult 3 (fiecare cel mult 25 de caractere).' },
   ],

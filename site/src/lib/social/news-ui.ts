@@ -11,11 +11,13 @@ import {
   AUTOMATION_WORKFLOW_LABELS,
   NEWS_WINDOW_DAYS,
   PLATFORM_KIND,
+  POST_LENGTH_LABELS,
   SOURCES_APPROVAL_BLOCKED_HINT,
   type AutomationStatus,
   type CardTemplate,
   type GenerationSourceType,
   type Platform,
+  type PostLength,
 } from './constants.ts'
 import { isHttpUrl } from './schemas.ts'
 
@@ -46,6 +48,8 @@ export interface GenerationFormValues {
   /** Search the web before writing. A topic opts in; news always does; an article never. */
   research?: boolean
   platforms: Platform[]
+  /** Amendment 10: one length for every platform; absent = long. */
+  length?: PostLength
   count: number
   templates: CardTemplate[]
   /** An AI_MODELS id; empty or absent = the worker's default. */
@@ -96,6 +100,7 @@ export interface GenerationFormState {
   windowDays: string
   webSearch: boolean
   platforms: Platform[]
+  length: PostLength
   count: number
   templates: CardTemplate[]
   aiModel: string
@@ -113,6 +118,7 @@ export function buildGenerationForm(s: GenerationFormState): GenerationFormValue
     source,
     research: effectiveResearch(s.mode, s.webSearch),
     platforms: s.platforms,
+    length: s.length,
     count: s.count,
     templates: s.templates,
     aiModel: s.aiModel,
@@ -170,6 +176,7 @@ export function buildGenerationCandidate(
       source,
       research: effectiveResearch(sourceType, form.research),
       platforms,
+      length: form.length ?? 'long',
       kinds,
       count: Number(form.count),
       language: 'ro',
@@ -194,6 +201,8 @@ export function generationIssueMessage(path: string, sourceType: string | undefi
       return `Cel mult ${HOOKS_MAX.items} unghiuri, fiecare de cel mult ${HOOKS_MAX.length} de caractere.`
     case 'platforms':
       return 'Alege cel putin o platforma.'
+    case 'length':
+      return `Alege lungimea postarilor: ${POST_LENGTH_LABELS.short.toLowerCase()} sau ${POST_LENGTH_LABELS.long.toLowerCase()}.`
     case 'templates':
       return NO_TEMPLATE_MESSAGE
     case 'count':

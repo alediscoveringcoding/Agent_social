@@ -2,7 +2,6 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { mapDraft, type BrandAccount } from '../draft-mapping.ts'
 import { DraftSchema } from '../schemas.ts'
-import { becameReconnectRequired, platformForProvider, syncedStatus } from '../sync-rules.ts'
 
 const accounts: BrandAccount[] = [
   { id: 'acc-x', platform: 'x', display_name: 'X' },
@@ -111,26 +110,3 @@ describe('mapDraft', () => {
   })
 })
 
-describe('account sync rules', () => {
-  it('maps Postiz providers, including their dotted spellings', () => {
-    assert.equal(platformForProvider('instagram-standalone'), 'instagram')
-    assert.equal(platformForProvider('linkedin.page'), 'linkedin-page')
-    assert.equal(platformForProvider('dev.to'), 'devto')
-    assert.equal(platformForProvider('vimeo'), null, 'a provider the app does not publish to is ignored')
-    assert.equal(platformForProvider('tiktok-business'), 'tiktok')
-  })
-
-  it('lets Postiz decide reconnects, and nothing else', () => {
-    assert.equal(syncedStatus(null, false), 'connected')
-    assert.equal(syncedStatus('connected', true), 'reconnect_required')
-    assert.equal(syncedStatus('reconnect_required', false), 'connected')
-    assert.equal(syncedStatus('developer_setup_required', false), 'developer_setup_required')
-    assert.equal(syncedStatus('approval_pending', false), 'approval_pending')
-    assert.equal(syncedStatus('manual', true), 'manual')
-  })
-
-  it('notifies once, on the change', () => {
-    assert.equal(becameReconnectRequired('connected', 'reconnect_required'), true)
-    assert.equal(becameReconnectRequired('reconnect_required', 'reconnect_required'), false)
-  })
-})

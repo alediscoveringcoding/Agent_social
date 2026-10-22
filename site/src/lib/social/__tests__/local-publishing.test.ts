@@ -15,7 +15,7 @@ import { getLocalDb } from '../../local/db.ts'
 import { createLocalAdminClient } from '../../local/admin-client.ts'
 import { setTestAdminClient } from '../../testing/admin-shim.ts'
 import { setTestAdmin } from '../../testing/auth-shim.ts'
-import { adminUser, brandId, resetSocial, rows } from '../../testing/social-fixtures.ts'
+import { adminUser, brandId, createAccount, resetSocial, rows } from '../../testing/social-fixtures.ts'
 import { routeFetch } from '../../testing/route-fetch.ts'
 import { WorkerApi } from '../fake/worker-api-client.ts'
 import { runFakeGeneratorOnce } from '../fake/fake-generator.ts'
@@ -43,7 +43,6 @@ let api: WorkerApi
 let brand: string
 let account: string
 let actor: { userId: string; email: string }
-let postizCalls = 0
 let mediaDownloads = 0
 const token = 'integration-token-0123456789abcdef0123456789'
 const spec = { template: 'mint' as const, headline: 'Pregateste declaratia', keyword: 'declaratia', stat: '16%', subline: 'Un pas simplu', alt_text: 'Card despre declaratie' }
@@ -92,8 +91,7 @@ describe('local publishing across W1-W4', () => {
         for (const [key, value] of Object.entries(req.headers)) if (value) headers.set(key, Array.isArray(value) ? value.join(',') : value)
         const request = new Request(`${base}${req.url}`, { method: req.method, headers, ...(['GET', 'HEAD'].includes(req.method ?? 'GET') ? {} : { body: Buffer.concat(chunks) }) })
         let response: Response
-        if (req.url?.startsWith('/postiz')) { postizCalls++; response = new Response('Unexpected Postiz call', { status: 500 }) }
-        else if (new URL(request.url).pathname.startsWith('/api/media/')) {
+        if (new URL(request.url).pathname.startsWith('/api/media/')) {
           mediaDownloads++
           response = await download(request, { params: Promise.resolve({ id: new URL(request.url).pathname.split('/').at(-1)! }) })
         } else response = await routeFetch(request.url, { method: request.method, headers: request.headers, body: request.method === 'POST' ? await request.text() : undefined })
@@ -116,11 +114,9 @@ describe('local publishing across W1-W4', () => {
   })
   beforeEach(async () => {
     await resetSocial(db); setTestAdmin(actor)
-    const sync = await api.post('/accounts/sync', { integrations: [{ postiz_integration_id: 'local-x', provider: 'x', name: 'Cont local', disabled: false, refresh_needed: false, rules: {} }], postiz_recent_posts: [] })
-    assert.equal(sync.status, 200)
-    account = (await rows(db, "select id from social_accounts where postiz_integration_id='local-x'"))[0].id
+    account = await createAccount(db, brand, 'x', { paused: true })
     assert.equal((await updateAccount(account, { brand_id: brand, paused: false })).ok, true)
-    postizCalls = 0; mediaDownloads = 0
+    mediaDownloads = 0
   })
 
   it('fake generator -> edit -> numeric card -> approval -> downloaded media -> published overview/calendar', async () => {
@@ -138,10 +134,7 @@ describe('local publishing across W1-W4', () => {
     assert.equal((await approve(draft.id, true)).ok, true)
     await makeDue(draft.id)
     const first = await runFakeWorkerOnce(api, { scenario: 'ok', downloadMedia: true })
-    assert.ok(first.some(step => step.action.startsWith('submitted') && step.status === 200))
-    await db.query(`update social_delivery_jobs set next_check_at=now() where destination_id in
-      (select d.id from social_destinations d join social_post_revisions r on r.id=d.revision_id where r.post_id=$1)`, [draft.id])
-    await runFakeWorkerOnce(api, { scenario: 'ok' })
+    assert.ok(first.some(step => step.action === 'published' && step.status === 200), JSON.stringify(first))
     const post = (await getPost(draft.id))!
     assert.equal(post.status, 'published')
     const url = post.destinations[0].job!.remote_url
@@ -184,7 +177,7 @@ describe('local publishing across W1-W4', () => {
     assert.ok((await getOverview()).today.some(job => job.remote_url === url))
   })
 
-  it('production worker claims, verifies media and reports published in dry run without Postiz', async () => {
+  it('production worker claims, checks the approved hash and reports published in dry run, sending nothing', async () => {
     const draft = await createDraft()
     assert.equal((await generateCards({ postId: draft.id, baseRevisionId: draft.revision.id, spec: { ...spec, stat: null } })).ok, true)
     assert.equal((await approve(draft.id, false)).ok, true)
@@ -193,15 +186,14 @@ describe('local publishing across W1-W4', () => {
     const script = `const {siteApi}=await import('./src/services/site-api.ts'); const {processJob}=await import('./src/loops/delivery.ts'); const {jobs}=await siteApi.claimDeliveries(); for(const job of jobs) await processJob(job); if(jobs.length!==1) throw new Error('Expected one claimed job');`
     const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
       cwd: workerRoot,
-      env: { ...process.env, SITE_BASE_URL: base, WORKER_TOKEN: token, WORKER_ID: 'integration-real', WORKER_DRY_RUN: 'true', POSTIZ_BASE_URL: `${base}/postiz`, POSTIZ_API_KEY: 'fake-postiz-key', ANTHROPIC_API_KEY: '', GEMINI_API_KEY: '', GENERATOR_PROVIDER: '' },
+      env: { ...process.env, SITE_BASE_URL: base, WORKER_TOKEN: token, WORKER_ID: 'integration-real', WORKER_DRY_RUN: 'true', ANTHROPIC_API_KEY: '', GEMINI_API_KEY: '', GENERATOR_PROVIDER: '' },
       stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000,
     })
     let output = ''
     child.stdout.on('data', chunk => { output += String(chunk) }); child.stderr.on('data', chunk => { output += String(chunk) })
     const [code] = await once(child, 'exit')
     assert.equal(code, 0, output)
-    assert.equal(postizCalls, 0)
-    assert.ok(mediaDownloads > 0)
+    assert.equal(mediaDownloads, 0, 'the site reads media itself; the worker downloads nothing')
     const post = (await getPost(draft.id))!
     assert.equal(post.status, 'published')
     assert.match(post.destinations[0].job!.remote_url!, /dry-run/)

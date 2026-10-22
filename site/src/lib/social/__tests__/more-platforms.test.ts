@@ -22,11 +22,11 @@ import {
   CARD_FORMATS,
   DEFAULT_OPEN_EDITOR_URLS,
   MANUAL_ONLY_PLATFORMS,
+  isDroppedPlatform,
   PLATFORMS,
   PLATFORM_CARD_FORMAT,
   PLATFORM_KIND,
   PLATFORM_LABELS,
-  PROVIDER_TO_PLATFORM,
   type Platform,
 } from '../constants.ts'
 import { findDiacritics } from '../content-rules.ts'
@@ -35,7 +35,6 @@ import { mapDraft } from '../draft-mapping.ts'
 import { buildHandoff } from '../handoff.ts'
 import { SETTINGS_FIELDS, settingsFieldKeys, settingsSummary } from '../platform-settings.ts'
 import { DraftSchema } from '../schemas.ts'
-import { platformForProvider } from '../sync-rules.ts'
 import { graphemeLength, mastodonLength, measurePlatformLength, utf8Length } from '../text-length.ts'
 import { measureLength, validateDestination, maxLengthFor, type ValidateDestinationInput } from '../validation.ts'
 import { DRAFT_FIXTURES } from '../fake/fixtures.ts'
@@ -92,21 +91,6 @@ describe('platform tables (amendment 04)', () => {
   it('the first twelve are all automatic: only Substack, Product Hunt and (second batch) YouTube are manual-only', () => {
     assert.deepEqual([...MANUAL_ONLY_PLATFORMS].slice(0, 3), ['substack', 'producthunt', 'youtube'])
     for (const p of NEW_PLATFORMS) assert.ok(!MANUAL_ONLY_PLATFORMS.includes(p), p)
-  })
-
-  it('maps every Postiz identifier of the new platforms (v2.25.0) to our platform', () => {
-    const expected: Record<string, Platform> = {
-      threads: 'threads', bluesky: 'bluesky', mastodon: 'mastodon', 'mastodon-custom': 'mastodon', linkedin: 'linkedin', reddit: 'reddit',
-      pinterest: 'pinterest', telegram: 'telegram', discord: 'discord', medium: 'medium', wrapcast: 'farcaster', nostr: 'nostr', lemmy: 'lemmy',
-    }
-    for (const [identifier, platform] of Object.entries(expected)) assert.equal(platformForProvider(identifier), platform, identifier)
-    assert.equal(platformForProvider('LinkedIn'), 'linkedin', 'case is ignored')
-    assert.equal(platformForProvider('linkedin-page'), 'linkedin-page', 'the page provider stays the page')
-    assert.equal(platformForProvider('tiktok-ads'), null, 'an unknown provider is ignored at sync')
-    for (const p of PLATFORMS) {
-      if (MANUAL_ONLY_PLATFORMS.includes(p)) continue
-      assert.ok(Object.values(PROVIDER_TO_PLATFORM).includes(p), `${p} has a Postiz identifier`)
-    }
   })
 
   it('the OpenAPI contract lists the same platforms, in the same order', async () => {
@@ -431,9 +415,10 @@ describe('migration 0008 and the flows it enables', () => {
     }
     await assert.rejects(rows(db, `insert into social_accounts (platform, mode, status, display_name) values ('vimeo', 'manual', 'manual', 'video')`), /social_accounts_platform_allowed/)
     await assert.rejects(rows(db, `insert into social_accounts (platform, mode, status, display_name) values ('twitter', 'manual', 'manual', 'video')`), /social_accounts_platform_allowed/)
+    // Dropped platforms (amendment 10) still load, but no new account is created for them.
     for (const platform of NEW_PLATFORMS) {
       const r = await createManualAccount({ brandId: brand, displayName: `Manual ${platform}`, platform })
-      assert.equal(r.ok, true, platform)
+      assert.equal(r.ok, !isDroppedPlatform(platform), platform)
     }
     assert.equal((await createManualAccount({ brandId: brand, displayName: 'Video', platform: 'vimeo' as Platform })).ok, false)
   })
@@ -479,11 +464,8 @@ describe('migration 0008 and the flows it enables', () => {
 
     const approved = await approveNow(post, true)
     assert.equal(approved.ok, true, JSON.stringify(approved))
-    const submitted = await runFakeWorkerOnce(api, { scenario: 'ok' })
-    assert.ok(submitted.some((s) => s.action === 'submitted'), JSON.stringify(submitted))
-    await db.query("update social_delivery_jobs set next_check_at = now() - interval '1 second'")
-    const polled = await runFakeWorkerOnce(api, { scenario: 'ok' })
-    assert.ok(polled.some((s) => s.action === 'poll -> published' && s.status === 200), JSON.stringify(polled))
+    const steps = await runFakeWorkerOnce(api, { scenario: 'ok' })
+    assert.ok(steps.some((s) => s.action === 'published' && s.status === 200), JSON.stringify(steps))
     const done = (await getPost(postId))!
     assert.equal(done.status, 'published')
     assert.match(done.destinations[0].job!.remote_url!, /^https:\/\/example\.com\/fake\/bluesky\//)

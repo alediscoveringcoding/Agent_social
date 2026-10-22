@@ -5,12 +5,14 @@
  *   npm run db:migrate          apply new migrations (the site also does it when it starts)
  *   npm run db:status           applied migrations and admin count
  *   npm run db:reset -- --yes   delete the local database: every draft, account and admin
+ *   npm run db:test-accounts    add one paused test account per platform (no real credentials)
  *
  * Exit code 3: the database is in use (stop npm run dev first).
  */
 
 import { existsSync, rmSync } from 'node:fs'
 import { LocalDbInUseError, assertNotInUse, localDbDir, openLocalDb } from '../src/lib/local/db.ts'
+import { insertTestAccounts } from '../src/lib/social/fake/test-accounts.ts'
 
 const command = process.argv[2] ?? 'status'
 
@@ -31,14 +33,18 @@ try {
     console.log(`Deleted ${dir}. It is rebuilt from the migrations on the next db:migrate or site start.`)
     process.exit(0)
   }
-  if (command !== 'migrate' && command !== 'status') {
-    console.error(`Unknown command "${command}": use migrate, status or reset`)
+  if (command !== 'migrate' && command !== 'status' && command !== 'test-accounts') {
+    console.error(`Unknown command "${command}": use migrate, status, test-accounts or reset`)
     process.exit(2)
   }
 
   const local = await openLocalDb()
   try {
     console.log(local.applied.length ? `Applied: ${local.applied.join(', ')}` : 'Migrations: up to date')
+    if (command === 'test-accounts') {
+      const { created, existing } = await insertTestAccounts((sql, params) => local.db.query(sql, params))
+      console.log(`Test accounts: ${created.length} added${existing.length ? `, ${existing.length} already there` : ''}. They start paused and without a brand: assign one in Conturi.`)
+    }
     if (command === 'status') {
       const done = await local.db.query<{ name: string }>('select name from local.migrations order by name')
       console.log(`Database: ${dir}`)

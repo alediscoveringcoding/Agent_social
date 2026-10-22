@@ -5,17 +5,21 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createGenerationRequest } from '@/lib/social/actions'
 import {
+  ACTIVE_PLATFORMS,
   AI_MODELS,
   CARD_TEMPLATES,
   CARD_TEMPLATE_LABELS,
   GENERATION_SOURCE_LABELS,
   GENERATION_SOURCE_TYPES,
   NEWS_WINDOW_DAYS,
-  PLATFORMS,
   PLATFORM_LABELS,
+  POST_LENGTHS,
+  POST_LENGTH_HINTS,
+  POST_LENGTH_LABELS,
   type CardTemplate,
   type GenerationSourceType,
   type Platform,
+  type PostLength,
 } from '@/lib/social/constants'
 import { HOOKS_MAX, NO_TEMPLATE_MESSAGE, RESEARCH_COST_NOTE, buildGenerationForm, hooksIssue, validateGenerationState } from '@/lib/social/news-ui'
 import { Button, Field, inputClass } from '@/components/ui'
@@ -37,6 +41,7 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
   const [focus, setFocus] = useState('')
   const [windowDays, setWindowDays] = useState(String(NEWS_WINDOW_DAYS.default))
   const [platforms, setPlatforms] = useState<Platform[]>(['x', 'linkedin-page', 'facebook', 'instagram'])
+  const [length, setLength] = useState<PostLength>('long')
   const [count, setCount] = useState(5)
   const [templates, setTemplates] = useState<CardTemplate[]>(['dark', 'light', 'mint'])
   const [aiModel, setAiModel] = useState('')
@@ -64,7 +69,7 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
     start(async () => {
       try {
         const r = await createGenerationRequest(
-          buildGenerationForm({ brandId, mode: sourceType, url, topic, hooks, focus, windowDays, webSearch, platforms, count, templates, aiModel })
+          buildGenerationForm({ brandId, mode: sourceType, url, topic, hooks, focus, windowDays, webSearch, platforms, length, count, templates, aiModel })
         )
         if (!r.ok) {
           toast.error(r.error)
@@ -183,7 +188,7 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
         <fieldset>
           <legend className="mb-2 text-sm font-semibold text-ink">Platforme</legend>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {PLATFORMS.map((p) => (
+            {ACTIVE_PLATFORMS.map((p) => (
               <label
                 key={p}
                 className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
@@ -201,6 +206,29 @@ export function GenerateForm({ brands, platformsByBrand }: Props) {
               ciorna, dar nu devin destinatii pana nu adaugi contul.
             </p>
           ) : null}
+        </fieldset>
+
+        <fieldset>
+          <legend className="mb-2 text-sm font-semibold text-ink">Lungimea postarilor</legend>
+          <div className="flex flex-wrap gap-2">
+            {POST_LENGTHS.map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => setLength(l)}
+                aria-pressed={length === l}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${
+                  length === l ? 'border-accent bg-accent-soft text-accent-dark' : 'border-line-2 text-ink-soft hover:bg-bg-mint'
+                }`}
+              >
+                {POST_LENGTH_LABELS[l]}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-xs text-ink-soft">
+            {POST_LENGTH_HINTS[length]} Aceeasi lungime pe toate platformele.
+            {length === 'long' ? ' Ciornele lungi se scriu cate 3 pe apel AI, deci 5 ciorne inseamna 2 apeluri.' : ''}
+          </p>
         </fieldset>
 
         <div className="grid gap-4 sm:grid-cols-2">
