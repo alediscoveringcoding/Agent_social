@@ -1,6 +1,6 @@
 # Amendment 08: native TypeScript social publishing
 
-Status: implementation in progress. This document is the scope and cutover record,
+Status: cutover done (amendment 10 removed Postiz and Docker Compose). This document is the scope record,
 not a claim that the replacement is complete.
 
 The first implemented batch covered Instagram, Facebook Pages, X, LinkedIn

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Social publishing worker API
-  version: 1.1.0-draft
+  version: 2.0.0
   summary: Site API consumed by the Track B worker (PRD section 10.3).
   description: |
     Draft written by Track A from the implementation in `site/src/app/api/worker/social/v1/`
@@ -16,7 +16,10 @@ info:
       from older workers; legacy payloads and immutable hash vectors remain unchanged.
     - Timestamps in responses are ISO 8601 UTC to the second with a `Z` suffix.
     - Errors are `{"error": {"code", "message", "details"?}}`.
-    - **409 = lease lost**: stop work on that job at once (do not call Postiz, do not retry the call).
+    - **409 = lease lost**: stop work on that job at once (do not ask the site to publish, do not retry the call).
+    - Amendment 10 removed Postiz: only native (directly connected) accounts are claimed, the site
+      publishes through its own adapters (`/deliveries/{id}/native`), and `/submitted` and
+      `/accounts/sync` are gone. The worker never receives a platform credential.
     - Unknown body fields are ignored, so the worker can send a field before the site reads it.
     - Leases last 10 minutes. The delivery and generation `/heartbeat` routes extend the caller's live lease.
     - Kill switch: unless the site's `SOCIAL_PUBLISHING_ENABLED` is exactly `true`, `/deliveries/claim`
@@ -29,9 +32,7 @@ info:
       worker that holds the lease as soon as 60 s have passed. A worker that finds nothing new simply
       does not report.
     - `retry` is accepted from `claimed`, `submitting` and `submitted`; the worker must only send it when
-      Postiz definitely did not create the post (otherwise `reconciling`).
-    - `/submitted` is accepted from `submitting` (normal), `reconciling` (reconcile found the post) and,
-      as a protocol slip, `claimed`: losing track of a post that exists is what causes duplicates.
+      the platform definitely did not create the post (otherwise `reconciling`).
     - A daily-cap breach found at claim time leaves the job queued (it fails as STALE when its window
       closes); no new error code was introduced.
 servers:
@@ -51,7 +52,6 @@ paths:
         It never returns platform credentials or resumable session capabilities. A lost HTTP response
         is recovered with kind=check, never a second provider create request. Unknown writes remain
         reconciling until a provider proves the outcome or a verified administrator resolves it.
-        Native IDs are stored independently; /submitted and Postiz ID fields keep their old meaning.
       parameters:
         - $ref: '#/components/parameters/JobId'
         - $ref: '#/components/parameters/WorkerId'
@@ -86,7 +86,7 @@ paths:
       description: |
         Runs the sweeper first (lease expiry, STALE, manual_due, worker_silent). Publish jobs need: status
         queued, run_at reached, backoff over, inside run_at + stale window (2 h), account auto + connected +
-        not paused + not disabled in Postiz, approval of the revision still active, and the account's daily
+        not paused + directly connected (native, with stored credentials, to a native-v1 worker), approval of the revision still active, and the account's daily
         cap not reached for that Bucharest day. Each publish claim increments `attempt_no`.
       parameters:
         - $ref: '#/components/parameters/WorkerId'
@@ -140,7 +140,7 @@ paths:
         '422': { $ref: '#/components/responses/Invalid' }
   /deliveries/{id}/submitting:
     post:
-      summary: Must succeed right before the Postiz create call
+      summary: Must succeed right before the publish call (`/native` kind=publish)
       description: |
         Last gate. Past the stale window the job fails as STALE (event delivery_stale); with the kill switch
         off, a paused / disconnected account or a revoked approval the job goes back to `queued`. All of
@@ -153,28 +153,6 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/AttemptBody' }
-      responses:
-        '200': { $ref: '#/components/responses/Ok' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/LeaseLost' }
-        '422': { $ref: '#/components/responses/Invalid' }
-  /deliveries/{id}/submitted:
-    post:
-      summary: Report the Postiz post id after create (idempotent)
-      parameters:
-        - $ref: '#/components/parameters/JobId'
-        - $ref: '#/components/parameters/WorkerId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [attempt_no, postiz_post_id]
-              properties:
-                attempt_no: { type: integer, minimum: 1 }
-                postiz_post_id: { type: string, minLength: 1, maxLength: 200 }
-                postiz_group: { type: [string, 'null'], maxLength: 200 }
       responses:
         '200': { $ref: '#/components/responses/Ok' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -340,79 +318,6 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/LeaseLost' }
         '422': { $ref: '#/components/responses/Invalid' }
-  /accounts/sync:
-    post:
-      summary: Upsert Postiz channels by integration id; report recent Postiz posts
-      description: |
-        A channel new to the site is created PAUSED, with no brand, mode auto: it publishes nothing until a
-        person assigns and unpauses it. `refresh_needed: true` sets reconnect_required (event once, on the
-        change); a later sync without it sets connected again. Statuses the site set for its own reasons
-        (developer_setup_required, approval_pending, manual) are kept. Unknown providers are ignored and
-        listed. A recent Postiz post that no job created raises foreign_post once (skipped while a job on
-        that channel is between /submitting and /submitted).
-      parameters:
-        - $ref: '#/components/parameters/WorkerId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [integrations]
-              properties:
-                integrations:
-                  type: array
-                  maxItems: 500
-                  items:
-                    type: object
-                    required: [postiz_integration_id, provider, name]
-                    properties:
-                      postiz_integration_id: { type: string }
-                      provider:
-                        type: string
-                        description: |
-                          Postiz provider identifier, the `identifier` field of Postiz's GET /public/v1/integrations
-                          (v2.25.0): x, facebook, instagram, instagram-standalone (or instagram.standalone), linkedin-page
-                          (or linkedin.page), devto (or dev.to), hashnode, threads, bluesky, mastodon (or mastodon-custom),
-                          linkedin, reddit, pinterest, telegram, discord, medium, wrapcast (Farcaster), nostr, lemmy,
-                          slack, wordpress, listmonk, vk, gmb, tumblr, dribbble, mewe, skool, whop, moltbook, kick,
-                          twitch, tiktok (or tiktok-business), youtube. A youtube channel is created as a manual
-                          account (it needs video). Any other identifier is ignored and listed in the answer.
-                      name: { type: string }
-                      picture_url: { type: [string, 'null'] }
-                      profile_url: { type: [string, 'null'] }
-                      disabled: { type: boolean }
-                      refresh_needed: { type: boolean }
-                      rules:
-                        type: [object, 'null']
-                        description: 'Channel rules from Postiz. `max_length` (or `maxLength`), when present, lowers the length limit.'
-                postiz_recent_posts:
-                  type: array
-                  maxItems: 2000
-                  items:
-                    type: object
-                    required: [postiz_post_id, integration_id]
-                    properties:
-                      postiz_post_id: { type: string }
-                      integration_id: { type: string }
-                      created_at: { type: [string, 'null'], format: date-time }
-      responses:
-        '200':
-          description: Synced
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  upserted: { type: integer }
-                  ignored:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        postiz_integration_id: { type: string }
-                        reason: { type: string }
-                  foreign_posts: { type: integer }
 components:
   securitySchemes:
     workerToken:
@@ -509,7 +414,9 @@ components:
         jobs. `kind` per platform: article for devto, hashnode, substack, medium, wordpress and listmonk; launch
         for producthunt; social for the rest.
 
-        Neutral `settings` per platform (PRD 10.5; the worker maps them to Postiz's provider settings):
+        Neutral `settings` per platform (PRD 10.5; the site's native adapters read them). Amendment 10 dropped threads, reddit,
+        pinterest, nostr, vk, gmb, tumblr, dribbble, whop, moltbook, kick, twitch, wordpress, discord and mastodon: they stay
+        in this list for older drafts, but no request, account or generated variant uses them:
 
         | Platform | Keys |
         | --- | --- |
@@ -548,7 +455,7 @@ components:
         | facebook, linkedin-page, linkedin, threads, bluesky, mastodon, telegram, nostr, vk, kick | none |
     DeliveryJob:
       type: object
-      required: [job_id, kind, attempt_no, lease_expires_at, run_at, account, destination, media, postiz, attempt_started_at]
+      required: [job_id, kind, attempt_no, lease_expires_at, run_at, account, destination, media, attempt_started_at]
       properties:
         job_id: { type: string, format: uuid }
         kind: { type: string, enum: [publish, poll, reconcile] }
@@ -557,15 +464,14 @@ components:
         run_at: { type: string, format: date-time }
         account:
           type: object
-          required: [id, platform, postiz_integration_id]
+          required: [id, platform, publishing_backend, native_provider_account_id]
           properties:
             id: { type: string, format: uuid }
             platform: { $ref: '#/components/schemas/Platform' }
-            postiz_integration_id: { type: [string, 'null'] }
             publishing_backend:
               type: string
-              const: native
-              description: Present only for direct native accounts; absent retains the legacy contract
+              enum: [native, postiz]
+              description: Always native for a claimed job since amendment 10; a worker fails a postiz one with LEGACY_POSTIZ_ACCOUNT
             native_provider_account_id: { type: [string, 'null'] }
         destination:
           type: object
@@ -593,12 +499,6 @@ components:
               mime: { type: string, enum: [image/png, image/jpeg, image/webp] }
               sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
               alt_text: { type: string }
-        postiz:
-          type: [object, 'null']
-          description: For poll and reconcile jobs, when known
-          properties:
-            post_id: { type: string }
-            group: { type: [string, 'null'] }
         attempt_started_at:
           type: [string, 'null']
           format: date-time
@@ -631,6 +531,11 @@ components:
           type: boolean
           default: false
           description: Amendment 07. Search the web before writing (2 AI calls). The worker treats a news source as research.
+        length:
+          type: string
+          enum: [short, long]
+          default: long
+          description: Amendment 10. One length for canonical_text and every social variant, the same on every platform (short 250-600, long 1200-2000 characters; a platform with a lower limit fills most of it). Requests stored before it have none and are written long without the length check.
         platforms: { type: array, items: { $ref: '#/components/schemas/Platform' } }
         kinds: { type: array, items: { type: string, enum: [social, article, launch] } }
         count: { type: integer, minimum: 1, maximum: 20 }

@@ -1,7 +1,0 @@
-# Local SQL-backed Temporal configuration.
-limit.maxIDLength:
-  - value: 255
-    constraints: {}
-system.forceSearchAttributesCacheRefreshOnRead:
-  - value: true
-    constraints: {}

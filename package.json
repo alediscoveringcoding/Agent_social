@@ -8,11 +8,11 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
     "dev:worker": "cd worker && npm run dev",
-    "dev:mock-site": "node worker/test/mock-site.mjs",
-    "dev:up": "node scripts/dev-up.mjs",
-    "dev:down": "node scripts/dev-down.mjs",
-    "health": "node scripts/health-check.mjs",
-    "backup": "node scripts/backup-local.mjs"
+    "dev:mock-site": "cd worker && node --import tsx test/mock-site.ts",
+    "dev:up": "node --experimental-strip-types --no-warnings scripts/dev-up.ts",
+    "dev:down": "node --experimental-strip-types --no-warnings scripts/dev-down.ts",
+    "health": "node --experimental-strip-types --no-warnings scripts/health-check.ts",
+    "backup": "node --experimental-strip-types --no-warnings scripts/backup-local.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "^2.1.292"

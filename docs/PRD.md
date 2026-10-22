@@ -14,6 +14,8 @@
 > the Postiz runtime with independent TypeScript adapters.
 > [Amendment 09](amendment-09-api-connections.md) defines the API-first accounts
 > workflow, conditional integrations and separate inactive-platform inventory.
+> [Amendment 10](amendment-10-postiz-removed-length.md) removes Postiz and Docker Compose,
+> drops fifteen platforms without an adapter and adds a per-request short or long post length.
 > These amendments supersede the historical Postiz and manual-only requirements
 > below for the implemented native connectors. WordPress, Discord and Mastodon
 > are excluded.

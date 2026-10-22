@@ -138,10 +138,9 @@ is checked again before publication.
 Publishing remains disabled by default. Offline validation uses
 `WORKER_DRY_RUN=true`, fake generation and fake provider clients. To deliberately
 enable real approved deliveries, set `SOCIAL_PUBLISHING_ENABLED=true` on the site
-and `WORKER_DRY_RUN=false` on the worker. Native connections do not need
-`POSTIZ_API_KEY`; leave it blank unless using historical Postiz compatibility.
-Historical compatibility also requires `POSTIZ_COMPAT_ENABLED=true`; its default
-is false, so an old key left in the worker environment does not start Postiz sync.
+and `WORKER_DRY_RUN=false` on the worker. Postiz was removed in amendment 10: old `POSTIZ_*` settings left in
+`worker/.env` are ignored, and an account first registered through Postiz must be
+connected directly before it publishes.
 Historical polls and reconciliation also stay on hold until compatibility is
 enabled; a skipped lookup never marks a potentially published post as absent.
 
@@ -171,8 +170,7 @@ temporary fixtures passed. The existing local database was not used for checks.
 Stop the app before `npm run backup`. The default backup copies PGlite, private
 media and the private environment files into `~/agent-social-backups` with
 restricted permissions. Restore the database directory together with its original
-encryption/session keys. A legacy Postiz dump is requested explicitly with
-`npm run backup -- --include-postiz`; the native backup never invokes Docker.
+encryption/session keys. The backup never invokes Docker.
 
 Official API references: [Meta Pages](https://developers.facebook.com/docs/pages-api/posts),
 [Instagram Login](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login),
