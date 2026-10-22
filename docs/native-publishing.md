@@ -8,8 +8,9 @@ Automatic connections: Instagram, Facebook Pages, X, LinkedIn profiles and
 Pages, Bluesky, Telegram, dev.to, TikTok, YouTube, Hashnode, Slack, GitHub,
 Listmonk, Stack Exchange, Farcaster and Lemmy. Medium is available only with
 an existing integration token that still works; its API is unsupported upstream.
-See [amendment 09](amendment-09-api-connections.md) for formats, access and the
-separate inactive-platform bin. WordPress, Discord and
+See [amendment 09](amendment-09-api-connections.md) for formats and access, and
+[amendment 10](amendment-10-postiz-removed-length.md) for the current inactive and
+dropped-platform groups. WordPress, Discord and
 Mastodon are excluded at the owner's request. Historical accounts and their
 approved revisions remain intact; reconnect an account directly to use the new
 publishing path. Old Postiz identifiers are never reused as native identifiers.
@@ -65,7 +66,8 @@ Connecting creates no remote posts.
 
 The accounts screen puts OAuth/API connections first. Other platforms appear
 under **Alte platforme — publicare API neactiva**, with their actual blocker.
-Missing application code is labelled separately from unverified API access.
+The eleven inactive destinations are separate from the fifteen dropped platforms,
+which cannot be used for new accounts or generation requests.
 Manual account creation is an optional collapsed advanced section.
 
 Medium and Hashnode upload attached images to platform storage. GitHub,
@@ -112,6 +114,10 @@ the session secret; previous explicit keys can be listed temporarily in
 
 ## Content, videos and publishing
 
+In **Genereaza**, choose short or long posts before submitting the request. Long
+is the default; lower platform limits still apply. Article and launch fields
+retain their own format rules. See amendment 10 for the target lengths.
+
 Drafts, image cards, exact-content approval, scheduling, daily caps, account
 pause, source verification and manual handoffs use the existing app. Edits
 create a new revision and revoke its approval.
@@ -141,8 +147,8 @@ enable real approved deliveries, set `SOCIAL_PUBLISHING_ENABLED=true` on the sit
 and `WORKER_DRY_RUN=false` on the worker. Postiz was removed in amendment 10: old `POSTIZ_*` settings left in
 `worker/.env` are ignored, and an account first registered through Postiz must be
 connected directly before it publishes.
-Historical polls and reconciliation also stay on hold until compatibility is
-enabled; a skipped lookup never marks a potentially published post as absent.
+Historical jobs that were still waiting for a result can be resolved on the post
+page after checking the platform. No retired Postiz job is resent automatically.
 
 If a remote response is lost, the app keeps a durable reconciliation record.
 YouTube resumable capabilities are encrypted, and processing is polled by ID.
@@ -163,9 +169,11 @@ Tests use temporary databases and injected clients; they never call real AI,
 platform publishing, account authorization or notification services. Live access
 and provider review cannot be established by offline tests.
 
-Verified in WSL on 2026-10-22: site CI (type check, lint, 564 tests and production
-build), worker type check and 235 tests. Launcher syntax/help and backup of
-temporary fixtures passed. The existing local database was not used for checks.
+Verified in WSL on 2026-10-22, including amendment 10: site CI (type check, lint,
+572 tests and production build), worker type check and 197 tests. Helper TypeScript
+syntax, launcher help, temporary backup fixtures, private file permissions and
+refusal to back up an active database passed. Database tests and backup checks
+used temporary fixtures. The running site and worker returned HTTP 200 to health checks.
 
 Stop the app before `npm run backup`. The default backup copies PGlite, private
 media and the private environment files into `~/agent-social-backups` with

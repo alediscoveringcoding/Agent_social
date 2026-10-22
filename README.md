@@ -17,7 +17,7 @@ Status: local v1 implemented and tested, plus 44 platforms, brand style packs, o
 
 Product requirements and the work split: [docs/PRD.md](docs/PRD.md), changed by amendments [01](docs/amendment-01-localhost-mvp.md) to [10](docs/amendment-10-postiz-removed-length.md). Where this README and the amended PRD differ, the amended PRD wins until this README is updated.
 
-Current phase: **local v1 complete on `main`**, with amendment 07 on 2026-10-10. [Amendment 03](docs/amendment-03-finish-the-site.md) defines the completed local scope; external setup follows later.
+Current phase: **local v1 and the native TypeScript runtime complete on `main`**. [Amendment 10](docs/amendment-10-postiz-removed-length.md) defines the current platform scope and short/long generation controls; live account setup follows separately.
 
 ## Progress on main
 
@@ -30,7 +30,7 @@ Current phase: **local v1 complete on `main`**, with amendment 07 on 2026-10-10.
 | Amendments 04–05: platforms | 44 platform identifiers, including nine manual channels | Complete locally; 15 dropped in amendment 10 |
 | Amendment 06: style packs | Public style rules and brand profiles, private per-brand packs with examples | Complete locally |
 | Bug-fix batch (2026-10-10) | Migration `0011` state machine fixes, one Claude call per attempt, safer delivery reconcile, login lockout and session revocation | Complete locally |
-| Amendments 08–10: native publishing | Direct adapters for 18 platform identifiers, Postiz and Docker Compose removed, dropped platforms recorded, short or long posts | Complete locally; accounts not connected yet |
+| Amendments 08–10: native publishing | Direct adapters for 18 platform identifiers, Postiz and Docker Compose removed, dropped platforms recorded, short or long posts | Offline verified: 572 site tests, production build and 197 worker tests; live account setup remains separate |
 | Amendment 07: news, sources, n8n | Opt-in web research, sources a person verifies before approval, the owner's original prompts as private briefs, automation API and four n8n workflows | Complete locally; untested against live web search and a running n8n |
 | Amendment 08: native publishing | Direct connections for nine platform families, encrypted tokens, native publishing/reconciliation and MP4 ingest; container-free startup and backups | Offline verified: 564 site tests, production build and 235 worker tests; wider feature parity incomplete |
 
@@ -234,7 +234,7 @@ From the repo root, in WSL:
 | --- | --- |
 | `bash scripts/dev-local.sh [--site-only]` | Starts the site (http://localhost:3000) and the worker (health on :8787); Ctrl+C stops both |
 | `bash scripts/update.sh [--no-pull] [--quick] [--admin-email EMAIL]` | Pull, install when needed, create missing settings, migrate, run every check. `--help` lists the options |
-| `npm run backup` | Copies `site/.local-db/` (data and private media) and private environment files to `~/agent-social-backups/<time>/`. Stop the app first; it refuses while the database is in use. A historical Postiz dump requires `--include-postiz` |
+| `npm run backup` | Copies `site/.local-db/` (data and private media) and private environment files to `~/agent-social-backups/<time>/`. Stop the app first; it refuses while the database is in use. No containers are needed. |
 | `npm run health` | Checks that the site and the worker answer; exits with an error when one is down |
 | `npm run dev:up` / `npm run dev:down` | Start or stop this checkout's native site and worker in WSL, without containers |
 | `bash scripts/n8n-local.sh [--import]` | Runs n8n in WSL without Docker (http://127.0.0.1:5678; the first run downloads it). `--import` loads the workflows from `n8n/workflows/` and exits |

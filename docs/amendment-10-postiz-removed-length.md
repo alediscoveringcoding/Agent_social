@@ -67,5 +67,15 @@ the automation API.
 
 ## 4. Checks
 
-Site CI (type check, lint, tests, production build) and the worker type check and tests run in
-WSL on temporary databases with fake clients.
+Verified in WSL on 2026-10-22:
+
+- Site `npm run ci`: type check, lint, all 572 tests and the production build passed.
+- Worker `npx --no-install tsc --noEmit && npm test`: type check and all 197 tests passed.
+- Helper TypeScript syntax and the existing WSL launcher's help command passed.
+- Backup checks used temporary data and fake environment files: data/key-file copying,
+  private permissions and refusal to copy an active database passed.
+- The running site and worker returned HTTP 200 to the local health checks.
+
+Database tests use temporary PGlite databases and injected clients. No real AI,
+social publishing or newsletter delivery was invoked by these checks. The immutable
+approval hash fixtures remain unchanged.

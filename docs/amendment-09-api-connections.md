@@ -1,5 +1,10 @@
 # Amendment 09: automatic API accounts and an inactive-platform bin
 
+This records the API-first cutover. [Amendment 10](amendment-10-postiz-removed-length.md)
+subsequently removed Postiz and moved twelve unimplemented connectors to the
+dropped-platform list. The current inventory is 18 automatic connection types,
+11 inactive destinations and 15 dropped platforms, including the three exclusions.
+
 The owner clarified that automatic publishing is the goal. Manual account
 creation must not be the main connection workflow. Implement usable direct API
 paths now and keep the other destinations in a separate, clearly labelled group.
@@ -75,8 +80,11 @@ because a response was lost. Lemmy stores the session token, not the login passw
 
 ## Validation and sources
 
-Focused adapter and SQL tests passed with 23 checks against injected clients and
-temporary PGlite databases. Full integration check results are recorded after CI.
+At this API-first cutover, site CI passed in WSL on 2026-10-22: type check, lint,
+all 581 tests and the production build. Current combined validation is recorded
+in [amendment 10](amendment-10-postiz-removed-length.md). The suite includes
+injected provider clients, temporary PGlite databases, a lost Listmonk start
+response and native account mode transitions.
 Real account connections, publishing, newsletters and AI are not invoked by checks.
 
 Primary API documentation:
