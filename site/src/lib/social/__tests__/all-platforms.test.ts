@@ -347,7 +347,7 @@ describe('migration 0009 and YouTube as a manual account', () => {
     )
   })
 
-  it('YouTube cannot be automatic, by insert or by update, and says so', async () => {
+  it('a legacy YouTube account cannot be automatic without a native connection', async () => {
     await assert.rejects(
       rows(db, `insert into social_accounts (platform, mode, status, postiz_integration_id, display_name) values ('youtube', 'auto', 'connected', 'yt-auto', 'Y')`),
       /SOCIAL_MANUAL_ONLY_PLATFORM/
@@ -355,7 +355,7 @@ describe('migration 0009 and YouTube as a manual account', () => {
     const [{ id }] = await rows(db, `insert into social_accounts (brand_id, platform, mode, status, postiz_integration_id, display_name) values ($1, 'youtube', 'manual', 'manual', 'yt-1', 'Canal') returning id`, [brand])
     const r = await updateAccount(id, { mode: 'auto' })
     assert.equal(r.ok, false)
-    if (!r.ok) assert.match(r.error, /raman manuale/)
+    if (!r.ok) assert.match(r.error, /conexiune API/)
     assert.equal((await rows(db, `select mode from social_accounts where id = $1`, [id]))[0].mode, 'manual')
   })
 

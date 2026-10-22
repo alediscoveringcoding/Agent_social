@@ -10,6 +10,14 @@
 
 > This repository is **public**. Never commit secrets, real `.env` files, account handles that are not public, or internal notes from the site repository.
 
+> Current publishing scope: [Amendment 08](amendment-08-native-platforms.md) replaces
+> the Postiz runtime with independent TypeScript adapters.
+> [Amendment 09](amendment-09-api-connections.md) defines the API-first accounts
+> workflow, conditional integrations and separate inactive-platform inventory.
+> These amendments supersede the historical Postiz and manual-only requirements
+> below for the implemented native connectors. WordPress, Discord and Mastodon
+> are excluded.
+
 ---
 
 ## 1. Summary

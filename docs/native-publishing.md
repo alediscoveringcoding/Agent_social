@@ -4,8 +4,12 @@ The native app runs the Next.js site, embedded PGlite and the TypeScript worker
 in WSL. It requires no Postiz process, Docker, Compose, Redis or Temporal. The
 implementation is independent; Postiz source code is not included.
 
-Current platform scope: Instagram, Facebook Pages, X, LinkedIn profiles and
-Pages, Bluesky, Telegram, dev.to, TikTok and YouTube. WordPress, Discord and
+Automatic connections: Instagram, Facebook Pages, X, LinkedIn profiles and
+Pages, Bluesky, Telegram, dev.to, TikTok, YouTube, Hashnode, Slack, GitHub,
+Listmonk, Stack Exchange, Farcaster and Lemmy. Medium is available only with
+an existing integration token that still works; its API is unsupported upstream.
+See [amendment 09](amendment-09-api-connections.md) for formats, access and the
+separate inactive-platform bin. WordPress, Discord and
 Mastodon are excluded at the owner's request. Historical accounts and their
 approved revisions remain intact; reconnect an account directly to use the new
 publishing path. Old Postiz identifiers are never reused as native identifiers.
@@ -45,11 +49,30 @@ In **Conturi**, choose a brand and use one of the connection forms:
 | LinkedIn | Authorize a profile, or select an administered company Page |
 | TikTok | Authorize, then review current creator/privacy options in the composer |
 | YouTube | Authorize the Google account and select its YouTube channel |
+| Medium | Existing integration token; no new OAuth integration or password login |
+| Hashnode | Personal token and publication ID; active Pro plan and publishing role |
+| Slack | Installed app token and verified channel ID |
+| GitHub | Repository token and owner/name; releases or discussions |
+| Listmonk | HTTPS instance, API user/token, sender email and list ID |
+| Stack Exchange | Stack Apps key, write_access token and site |
+| Farcaster | Neynar API key and approved signer UUID |
+| Lemmy | Existing login, optional TOTP, instance and community ID; only session stored |
 
 New accounts start paused. Check the brand, daily limit and publishing mode,
 then unpause deliberately. Reconnecting the same native identity updates its
 encrypted credentials without creating a duplicate or changing its brand/pause.
 Connecting creates no remote posts.
+
+The accounts screen puts OAuth/API connections first. Other platforms appear
+under **Alte platforme — publicare API neactiva**, with their actual blocker.
+Missing application code is labelled separately from unverified API access.
+Manual account creation is an optional collapsed advanced section.
+
+Medium and Hashnode upload attached images to platform storage. GitHub,
+Stack Exchange, Farcaster and Lemmy currently support text/links without attached
+media; validation blocks unsupported attachments before approval. Listmonk sends
+HTML campaigns with a plain text alternative and waits for the existing campaign
+to finish.
 
 ## Developer application setup
 

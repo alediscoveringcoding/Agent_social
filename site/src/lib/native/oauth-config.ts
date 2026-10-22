@@ -1,7 +1,8 @@
 import 'server-only'
 import type { OAuth2Config } from './oauth.ts'
+import { OAUTH_CONNECTIONS } from './capabilities.ts'
 
-export const OAUTH_PLATFORMS = ['facebook', 'instagram', 'x', 'linkedin', 'linkedin-page', 'tiktok', 'youtube'] as const
+export const OAUTH_PLATFORMS = OAUTH_CONNECTIONS.map(item => item.value)
 export type OAuthPlatform = typeof OAUTH_PLATFORMS[number]
 
 function required(name: string, env: Readonly<Record<string, string | undefined>>): string {

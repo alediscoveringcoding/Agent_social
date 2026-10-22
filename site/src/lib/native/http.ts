@@ -72,10 +72,11 @@ export interface NativeHttpOptions extends Omit<RequestInit, 'body'> {
   timeoutMs?: number
   maxResponseBytes?: number
   acceptStatuses?: number[]
+  responseType?: 'json' | 'text'
 }
 
 export async function nativeRequest<T>(ctx: Pick<NativeContext, 'fetch' | 'now'>, url: string | URL, options: NativeHttpOptions = {}): Promise<{ data: T; response: Response }> {
-  const { write = false, timeoutMs = 30_000, maxResponseBytes = 4_194_304, body, acceptStatuses = [], ...init } = options
+  const { write = false, timeoutMs = 30_000, maxResponseBytes = 4_194_304, body, acceptStatuses = [], responseType = 'json', ...init } = options
   const headers = new Headers(init.headers)
   let encoded: BodyInit | null | undefined
   if (body !== undefined && body !== null && Object.getPrototypeOf(body) === Object.prototype) {
@@ -104,7 +105,7 @@ export async function nativeRequest<T>(ctx: Pick<NativeContext, 'fetch' | 'now'>
   if (response.status === 204) return { data: null as T, response }
   try {
     const text = await readLimited(response, maxResponseBytes)
-    return { data: (text.trim() ? JSON.parse(text) : null) as T, response }
+    return { data: (responseType === 'text' ? text : text.trim() ? JSON.parse(text) : null) as T, response }
   } catch {
     throw new NativeProviderError(write ? 'UNKNOWN_RESULT' : 'INVALID_RESPONSE', response.status, write)
   }

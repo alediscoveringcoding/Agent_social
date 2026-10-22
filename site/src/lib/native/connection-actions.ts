@@ -3,14 +3,14 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ActionRefusal, callRpc, isUuid, runAdminAction, type ActionResult } from '../social/server/run-admin-action.ts'
-import { CONNECTION_FORMS, type CredentialPlatform } from './connections-catalog.ts'
+import { CONNECTION_FORMS, CREDENTIAL_PLATFORMS, type CredentialPlatform } from './connections-catalog.ts'
 import { sealCredentials } from './credentials.ts'
 import { NativeProviderError } from './http.ts'
 import { nativeProvider } from './providers/index.ts'
 import { accountCredentialContext, nativeContext } from './server.ts'
 
 const connectionSchema = z.object({
-  platform: z.enum(['bluesky', 'devto', 'telegram']), brandId: z.uuid(),
+  platform: z.enum(CREDENTIAL_PLATFORMS), brandId: z.uuid(),
   secrets: z.record(z.string(), z.string().max(32768)),
   instanceUrl: z.string().max(2048).optional(), destinationId: z.string().max(512).optional(),
 }).strict()
@@ -22,8 +22,13 @@ export async function connectNativeAccount(input: {
     const parsed = connectionSchema.safeParse(input)
     if (!parsed.success) throw new ActionRefusal('Completeaza platforma, brandul si datele de conectare.')
     const form = CONNECTION_FORMS.find((item) => item.platform === parsed.data.platform)!
-    const secrets = Object.fromEntries(form.fields.map((field) => [field.key, parsed.data.secrets[field.key]?.trim() || '']))
-    if (Object.values(secrets).some((value) => !value)) throw new ActionRefusal('Completeaza toate datele de conectare.')
+    const secrets = Object.fromEntries(form.fields.map(field => {
+      const value = parsed.data.secrets[field.key] || ''
+      return [field.key, field.key === 'password' ? value : value.trim()]
+    }))
+    if (form.fields.some(field => !field.optional && !secrets[field.key])) throw new ActionRefusal('Completeaza toate datele de conectare.')
+    if (form.destination && !parsed.data.destinationId?.trim()) throw new ActionRefusal('Completeaza destinatia de publicare.')
+    if (form.instance && form.platform !== 'bluesky' && !parsed.data.instanceUrl?.trim()) throw new ActionRefusal('Completeaza adresa HTTPS a instantei.')
     // Verify encryption configuration before contacting the platform.
     try { sealCredentials({ secrets }, 'native-connection-check') }
     catch { throw new ActionRefusal('Configureaza NATIVE_CREDENTIALS_KEY pe server sau secretul local de autentificare.') }

@@ -27,8 +27,8 @@ export function NativeConnectionForm({ brands }: { brands: AdminBrand[] }) {
       router.refresh()
     })
   }
-  return <Card><h2 className="mb-2 font-bold">Conecteaza un cont existent</h2>
-    <p className="mb-4 text-sm text-ink-soft">Conectare directa in aplicatie. Conturile noi pornesc pe pauza.</p>
+  return <Card><h2 className="mb-2 font-bold">Publicare automata prin API</h2>
+    <p className="mb-4 text-sm text-ink-soft">Conecteaza contul existent folosind cheia sau tokenul platformei. Dupa aprobare, workerul publica la ora programata. Conturile noi pornesc pe pauza.</p>
     <form onSubmit={submit} autoComplete="off"><fieldset disabled={pending} className="grid gap-3 md:grid-cols-2">
       <Field label="Platforma"><select className={inputClass} value={platform} onChange={(event) => setPlatform(event.target.value as CredentialPlatform)}>
         {CONNECTION_FORMS.map((item) => <option key={item.platform} value={item.platform}>{item.label}</option>)}
@@ -36,11 +36,11 @@ export function NativeConnectionForm({ brands }: { brands: AdminBrand[] }) {
       <Field label="Brand"><select className={inputClass} name="brand" required defaultValue=""><option value="" disabled>Alege brandul</option>{brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></Field>
       <p className="text-sm text-ink-soft md:col-span-2" role="note">{config.help}</p>
       {config.fields.map((field) => <Field key={`${platform}:${field.key}`} label={field.label}>
-        <input className={inputClass} name={field.key} type={field.secret ? 'password' : 'text'} required maxLength={32768} autoComplete={field.secret ? 'new-password' : 'off'} spellCheck={false} />
+        <input className={inputClass} name={field.key} type={field.secret ? 'password' : 'text'} required={!field.optional} maxLength={32768} autoComplete={field.secret ? 'new-password' : 'off'} spellCheck={false} />
       </Field>)}
-      {config.instance && <Field label="Adresa instantei" hint="Gol pentru bsky.social. Pentru alt server: adresa HTTPS."><input className={inputClass} name="instance" type="url" placeholder="https://bsky.social" maxLength={2048} /></Field>}
-      {config.destination && <Field label="Canal sau chat" hint="De exemplu @canal_exemplu sau ID-ul numeric al chatului."><input className={inputClass} name="destination" required maxLength={512} /></Field>}
-      <div className="md:col-span-2"><Button type="submit" disabled={!brands.length}>{pending ? 'Se verifica accesul...' : 'Conecteaza contul'}</Button></div>
+      {config.instance && <Field label="Adresa instantei" hint={config.instanceHint}><input className={inputClass} name="instance" type="url" required={platform !== 'bluesky'} maxLength={2048} /></Field>}
+      {config.destination && <Field label={config.destinationLabel || 'Destinatie'} hint={config.destinationHint}><input className={inputClass} name="destination" required maxLength={512} /></Field>}
+      <div className="md:col-span-2"><Button type="submit" disabled={!brands.length}>{pending ? 'Se verifica accesul...' : 'Conecteaza pentru publicare automata'}</Button></div>
     </fieldset></form>
   </Card>
 }

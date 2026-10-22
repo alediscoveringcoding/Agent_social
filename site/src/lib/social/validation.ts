@@ -760,6 +760,12 @@ export function validateDestination(input: ValidateDestinationInput): Destinatio
   }
 
   // Media: alt text always (F3), counts and shapes per platform.
+  if (input.rules?.native === true && input.media.length && ['github', 'stackexchange', 'farcaster', 'lemmy'].includes(platform)) {
+    errors.push({ code: 'NATIVE_TEXT_ONLY', field: 'media', message: `${label}: conectorul API accepta momentan text si linkuri. Elimina imaginile din aceasta destinatie; linkurile private temporare nu pot servi ca imagini permanente.` })
+  }
+  if (input.rules?.native === true && platform === 'medium' && input.media.some(media => media.mime && !['image/png', 'image/jpeg'].includes(media.mime))) {
+    errors.push({ code: 'MEDIUM_API_IMAGE_TYPE', field: 'media', message: 'Medium: conectorul API accepta imagini PNG sau JPEG.' })
+  }
   input.media.forEach((m, i) => {
     if (!m.altText.trim()) {
       errors.push({

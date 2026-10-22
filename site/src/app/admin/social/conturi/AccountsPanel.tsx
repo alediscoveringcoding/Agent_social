@@ -2,13 +2,14 @@
 import { useState, useTransition, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Badge, Button, Card, Field, inputClass } from '@/components/ui'
+import { Badge, Button, Field, inputClass } from '@/components/ui'
 import { ACCOUNT_STATUS_LABELS, PLATFORMS, PLATFORM_LABELS, type AccountStatus, type Platform } from '@/lib/social/constants'
 import { ACCOUNT_STATUS_HINTS, ACCOUNT_STATUS_TONES, STATUSES_FOR_MODE, ago, isManualOnlyPlatform, publishBlockers, type AccountMode } from '@/lib/social/accounts'
 import type { AdminAccount, AdminBrand } from '@/lib/social/accounts-queries'
 import { createManualAccount, deleteManualAccount, updateAccount } from '@/lib/social/accounts-actions'
 import { isHttpUrl } from '@/lib/social/schemas'
 import { disconnectNativeAccount } from '@/lib/native/connection-actions'
+import { EXCLUDED_NATIVE_PLATFORMS } from '@/lib/native/capabilities'
 
 function AccountRow({ account: a, brands, now }: { account: AdminAccount; brands: AdminBrand[]; now: string }) {
   const [mode, setMode] = useState<AccountMode>(a.mode)
@@ -38,7 +39,7 @@ function AccountRow({ account: a, brands, now }: { account: AdminAccount; brands
     {a.open_editor_url && isHttpUrl(a.open_editor_url) && <a href={a.open_editor_url} target="_blank" rel="noreferrer" className="text-xs text-accent-dark">Deschide editorul ↗</a>}</td>
     <td className="min-w-[32rem] p-3"><form onSubmit={submit}><fieldset disabled={pending} className="grid gap-3 sm:grid-cols-3">
       <Field label="Brand"><select className={inputClass} value={brand} onChange={(e) => { setBrand(e.target.value); if (!e.target.value) setPaused(true) }}><option value="">Atribuie un brand</option>{brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
-      <Field label="Mod"><select className={inputClass} value={mode} onChange={(e) => { const next = e.target.value as AccountMode; setMode(next); setStatus(next === 'manual' ? 'manual' : 'connected') }}><option value="manual">Manual</option><option value="auto" disabled={manualOnly || (isManualOnlyPlatform(a.platform) && !(a.platform === 'youtube' && a.publishing_backend === 'native'))}>Automat</option></select></Field>
+      <Field label="Mod"><select className={inputClass} value={mode} onChange={(e) => { const next = e.target.value as AccountMode; setMode(next); setStatus(next === 'manual' ? 'manual' : 'connected') }}><option value="manual">Manual</option><option value="auto" disabled={manualOnly || (isManualOnlyPlatform(a.platform) && !(['youtube', 'github', 'stackexchange'].includes(a.platform) && a.publishing_backend === 'native'))}>Automat</option></select></Field>
       <Field label="Stare"><select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value as AccountStatus)}>{STATUSES_FOR_MODE[mode].map((s) => <option value={s} key={s}>{ACCOUNT_STATUS_LABELS[s]}</option>)}</select></Field>
       <Field label="Limita zilnica"><input className={inputClass} type="number" name="cap" min={1} max={5} required defaultValue={a.daily_cap} /></Field>
       <Field label="Link editor"><input className={inputClass} name="editor" type="url" maxLength={2048} defaultValue={a.open_editor_url ?? ''} /></Field>
@@ -68,13 +69,13 @@ export function AccountsPanel({ accounts, brands, now }: { accounts: AdminAccoun
     })
   }
   const sorted = [...accounts].sort((a, b) => Number(!!a.brand_id) - Number(!!b.brand_id))
-  return <div className="space-y-5"><Card><h2 className="mb-3 font-bold">Cont nou pentru publicare manuala</h2><form onSubmit={create}><fieldset disabled={pending} className="grid gap-3 md:grid-cols-3">
-    <Field label="Platforma"><select className={inputClass} name="platform" defaultValue="substack">{PLATFORMS.map((p) => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}</select></Field>
+  return <div className="space-y-5"><details className="rounded-card border border-line bg-card p-4"><summary className="cursor-pointer font-bold">Optiuni avansate: publicare manuala</summary><p className="my-3 text-sm text-ink-soft">Optional: pregateste continut pentru publicare de mana. Pentru publicare automata, foloseste conexiunile API de mai sus.</p><form onSubmit={create}><fieldset disabled={pending} className="grid gap-3 md:grid-cols-3">
+    <Field label="Platforma"><select className={inputClass} name="platform" defaultValue="substack">{PLATFORMS.filter(p => !EXCLUDED_NATIVE_PLATFORMS.includes(p)).map((p) => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}</select></Field>
     <Field label="Brand"><select className={inputClass} name="brand" required defaultValue=""><option value="" disabled>Alege brandul</option>{brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
     <Field label="Nume" hint="Pentru Forum si Presa: numele forumului sau al publicatiei (un cont pe forum sau redactie)."><input className={inputClass} name="name" required maxLength={120} /></Field>
     <Field label="Link editor" hint="Gol: editorul implicit al platformei. La Forum si Presa: pagina forumului sau de contact a redactiei (https)."><input className={inputClass} name="editor" type="url" maxLength={2048} /></Field>
     <Field label="Profil"><input className={inputClass} name="profile" type="url" maxLength={2048} /></Field>
     <Field label="Limita zilnica"><input className={inputClass} name="cap" type="number" min={1} max={5} defaultValue={5} required /></Field>
-    <Button type="submit" disabled={!brands.length}>Creeaza cont manual</Button></fieldset></form></Card>
-    <div className="overflow-x-auto rounded-card border border-line bg-card"><table className="w-full text-left"><caption className="p-3 text-left text-sm text-ink-soft">Conturile fara brand apar primele si raman pe pauza pana la atribuire.</caption><thead><tr><th className="p-3">Cont</th><th className="p-3">Configurare</th></tr></thead><tbody>{sorted.map((a) => <AccountRow key={`${a.id}:${a.updated_at}`} account={a} brands={brands} now={now} />)}</tbody></table>{!accounts.length && <p className="p-4 text-sm text-ink-soft">Niciun cont. Ruleaza sincronizarea workerului sau creeaza un cont manual.</p>}</div></div>
+    <Button type="submit" disabled={!brands.length}>Creeaza cont manual</Button></fieldset></form></details>
+    <div className="overflow-x-auto rounded-card border border-line bg-card"><table className="w-full text-left"><caption className="p-3 text-left text-sm text-ink-soft">Conturile fara brand apar primele si raman pe pauza pana la atribuire.</caption><thead><tr><th className="p-3">Cont</th><th className="p-3">Configurare</th></tr></thead><tbody>{sorted.map((a) => <AccountRow key={`${a.id}:${a.updated_at}`} account={a} brands={brands} now={now} />)}</tbody></table>{!accounts.length && <p className="p-4 text-sm text-ink-soft">Niciun cont conectat. Alege o conexiune API de mai sus pentru publicare automata.</p>}</div></div>
 }

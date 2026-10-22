@@ -4,10 +4,13 @@ Infrastructure for cross-posting and automation behind `/admin/social` on thecry
 
 **Native TypeScript publishing:** the app now has direct account connections and
 delivery adapters for Instagram, Facebook Pages, X, LinkedIn, Bluesky, Telegram,
-dev.to, TikTok and YouTube. Start the site and worker with
+dev.to, TikTok, YouTube, Hashnode, Slack, GitHub, Listmonk, Stack Exchange,
+Farcaster and Lemmy, plus a conditional existing-token Medium connector.
+Other platforms are listed in a separate inactive group, with their blockers:
+[amendment 09](docs/amendment-09-api-connections.md). Start the site and worker with
 `wsl.exe -e bash /mnt/r/Repos/Agent_social/scripts/dev-local.sh`; no Postiz or Docker
 process is required. See [native setup and current limits](docs/native-publishing.md)
-and [amendment 08](docs/amendment-08-native-platforms.md). The older Postiz setup
+and [amendment 09](docs/amendment-09-api-connections.md). The older Postiz setup
 below remains historical compatibility documentation; full feature parity is
 still in progress.
 
@@ -15,7 +18,7 @@ This repo contains the admin site, database migrations, approval rules, the AI d
 
 Status: local v1 implemented and tested, plus 44 platforms, brand style packs, opt-in web research with human-verified sources, and local n8n automations. External platform connections and VPS deployment remain pending. Publishing always requires admin approval.
 
-Product requirements and the work split: [docs/PRD.md](docs/PRD.md), changed by amendments [01](docs/amendment-01-localhost-mvp.md) to [08](docs/amendment-08-native-platforms.md). Where this README and the amended PRD differ, the amended PRD wins until this README is updated.
+Product requirements and the work split: [docs/PRD.md](docs/PRD.md), changed by amendments [01](docs/amendment-01-localhost-mvp.md) to [09](docs/amendment-09-api-connections.md). Where this README and the amended PRD differ, the amended PRD wins until this README is updated.
 
 Current phase: **local v1 complete on `main`**, with amendment 07 on 2026-10-10. [Amendment 03](docs/amendment-03-finish-the-site.md) defines the completed local scope; external setup follows later.
 
@@ -110,7 +113,7 @@ The VPS phase (Caddy, two subdomains, n8n, `.github/workflows/`) comes later —
 
 | Service | Purpose | Notes |
 | --- | --- | --- |
-| Postiz | Platform connections, publishing, analytics | Pin the image version. Recent versions need Temporal |
+| Postiz (legacy only) | Historical account compatibility | Optional; native connections do not use this service |
 | PostgreSQL + Redis | Postiz data and job queue | Not exposed publicly |
 | Temporal | Workflow engine required by recent Postiz | Its own database |
 | n8n | Scheduled draft requests and email alerts through the automation API | Runs locally in WSL now (`scripts/n8n-local.sh`); its own data folder and credentials |
@@ -133,7 +136,7 @@ Everything runs in **WSL (Linux)**. The Windows folder `R:\Repos\Agent_social` a
 - WSL with Node 22.6 or newer (`nvm install 22 && nvm alias default 22`).
 - An authenticator app (TOTP) for the admin login.
 - Optional: a Claude (`ANTHROPIC_API_KEY`) or Gemini (`GEMINI_API_KEY`) key for real drafts. Without one, the fake generator writes test drafts.
-- Optional: Docker, only for the Postiz stack (real publishing, not set up yet).
+- Optional: Docker, only for historical Postiz compatibility.
 - Optional: an SMTP account for the n8n email alerts.
 
 ### First-time setup
@@ -187,7 +190,7 @@ The admin pages:
 - **Ciorne**: edit drafts, cards and images.
 - **Postari**: schedule, check figures, approve.
 - **Calendar**: see what is scheduled.
-- **Conturi**: assign accounts to brands, pause them, create manual accounts.
+- **Conturi**: connect existing accounts through OAuth/API credentials, assign brands and pause accounts. Other destinations appear in the inactive API section; manual setup is an advanced option.
 - **Media**: the image library.
 - **Manual**: copy-and-paste handoffs for platforms without an API.
 
@@ -334,18 +337,19 @@ Conventions:
 
 ## Platform coverage
 
-| Platform | Target mode after setup |
+| Platform | Current native publishing support |
 | --- | --- |
-| dev.to, Hashnode, X, Facebook, Instagram | Automatic when the channel and permissions are configured; X needs a billing cap |
-| LinkedIn (company page and personal profile) | Manual until developer approval, then automatic |
-| Threads, Bluesky, Mastodon, Reddit, Pinterest, Telegram, Discord, Medium, Farcaster, Nostr, Lemmy | Automatic through Postiz once the channel is connected ([amendment 04](docs/amendment-04-more-platforms.md)); most need a developer app or platform approval first (check each platform's current terms), and an account can wait in manual mode meanwhile |
-| Slack, WordPress, Listmonk, VK, Google Business, Tumblr, Dribbble, MeWe, Skool, Whop, Moltbook, Kick, Twitch, TikTok (photo posts) | Automatic through Postiz once the channel is connected (amendment 04, second batch) |
-| Substack, Product Hunt, YouTube | Manual handoff (YouTube needs video, which is uploaded by hand) |
-| Quora, LinkedIn (articol), TradingView, Investing.com, Indie Hackers, Stack Exchange, GitHub, Forum, Presa (comunicat) | Manual handoff, always ([amendment 05](docs/amendment-05-manual-channels.md); forum and press accounts are one per forum or outlet, created by hand; the per-site research is in [visibility-channels](docs/visibility-channels.md)) |
+| Instagram, Facebook Pages, X, LinkedIn profiles and Pages, Bluesky, Telegram, dev.to, TikTok, YouTube | Direct automatic adapters; developer applications, permissions and account access still apply |
+| Hashnode | Direct articles and cover upload; requires Pro and a publishing role |
+| Medium | Conditional legacy API connector; requires an existing integration token that still works |
+| Slack, GitHub, Listmonk, Stack Exchange, Farcaster, Lemmy | Direct automatic adapters with the formats and credential requirements in [native setup](docs/native-publishing.md) |
+| Threads, Reddit, Pinterest, Nostr, VK, Google Business, Tumblr, Dribbble, Whop, Moltbook, Kick, Twitch | Inactive bin: direct adapters are not implemented in this application |
+| Substack, Product Hunt, Quora, LinkedIn articles, TradingView, Investing.com, Indie Hackers, MeWe, Skool, Forum, Presa | Inactive bin: official integration/access still needs verification, or a specific site's API is required |
+| WordPress, Discord, Mastodon | Excluded at the owner's request |
 
-Forty-four platforms in all: every provider of the pinned Postiz `v2.25.0` (36 identifiers, of which four are aliases) plus Substack, Product Hunt and the nine manual channels of amendment 05. Some need a field the generator cannot know (a subreddit, a Pinterest board, a Discord or Slack channel, a Lemmy community, a Listmonk list): a person fills it in the composer, and approval waits for it. Limits and sources are in the [PRD platform tables](docs/PRD.md#5-scope-brands-accounts-platforms); server variables per provider are in [setup.md](docs/setup.md).
+The historical inventory has 44 platform identifiers: 18 now have native connection paths (including conditional Medium), 23 are inactive and 3 are excluded. The accounts screen uses the implemented capability inventory, not historical Postiz support. Destinations still need their approved fields, such as a channel, community or mailing list. See [amendment 09](docs/amendment-09-api-connections.md) for current scope and the [PRD platform tables](docs/PRD.md#5-scope-brands-accounts-platforms) for historical content requirements.
 
-Images are supported in local v1; video is outside its scope, so TikTok gets photo posts and YouTube a manual handoff. Real platform connections and controlled posts remain pending; [PRD section 5](docs/PRD.md#5-scope-brands-accounts-platforms) owns the platform requirements.
+Native delivery supports images and MP4 video on the implemented video paths, including YouTube resumable upload. GitHub, Stack Exchange, Farcaster and Lemmy currently accept text/links without attachments. Real platform connections and controlled posts remain pending; offline checks use injected clients only.
 
 Every account shows one of: connected, reconnect required, developer setup required, approval pending, manual publishing.
 
@@ -402,7 +406,7 @@ Data rules:
 - No Supabase service-role key, approval permission or Postiz key is ever given to n8n. Its `N8N_AUTOMATION_TOKEN` (32+ characters, constant-time check) only opens draft requests, the event feed and the run log.
 - AI keys and optional historical Postiz keys live only in `worker/.env`. Native platform developer credentials and the encryption key live in private `site/.env.local`.
 - Real names, handles and posts stay in the git-ignored `posts_framework/` and `prompts/private/`. The repository is public.
-- Native account tokens are encrypted in private site storage and never sent to the worker or browser. Social passwords are entered on the platform's authorization page; Bluesky accepts an app password to establish its token session.
+- Native account tokens are encrypted in private site storage and never sent to the worker or browser. OAuth passwords stay on the platform's authorization page. Bluesky uses an app password; Lemmy exchanges an existing login for a stored session token and does not retain the password.
 - `.env` never enters git. Pin container versions, no `latest`.
 
 ## Backups and restore

@@ -3,10 +3,11 @@
 Status: implementation in progress. This document is the scope and cutover record,
 not a claim that the replacement is complete.
 
-Owner's current platform scope: Instagram, Facebook Pages, X, LinkedIn profiles
-and Pages, Bluesky, Telegram, dev.to, TikTok and YouTube. WordPress, Discord and
-Mastodon are explicitly excluded. Other platform rows below remain an inventory
-of the original parity request, rather than a claim that their adapters exist.
+The first implemented batch covered Instagram, Facebook Pages, X, LinkedIn
+profiles and Pages, Bluesky, Telegram, dev.to, TikTok and YouTube. The current
+API-first scope and the separate inactive-platform bin are defined in
+[amendment 09](amendment-09-api-connections.md). WordPress, Discord and Mastodon
+remain excluded. The platform table below records the first batch's inventory.
 
 ## Decision
 

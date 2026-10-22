@@ -144,7 +144,7 @@ describe('accounts screen: actions and queries (W3)', () => {
     assert.match(errorOf(await updateAccount('00000000-0000-4000-8000-000000000000', { paused: true })), /nu mai exista/)
   })
 
-  it('auto needs a Postiz channel; Substack and Product Hunt stay manual', async () => {
+  it('auto needs a publishing connection; historical manual accounts stay manual', async () => {
     const r = await createManualAccount({ platform: 'linkedin-page', brandId: brand, displayName: 'Pagina LinkedIn (test)' })
     assert.equal(r.ok, true)
     const id = (r as { accountId: string }).accountId
@@ -156,7 +156,7 @@ describe('accounts screen: actions and queries (W3)', () => {
        values ($1, 'substack', 'manual', 'manual', 'odd-substack', 'Substack') returning id`,
       [brand]
     )
-    assert.match(errorOf(await updateAccount(sub, { mode: 'auto' })), /raman manuale/)
+    assert.match(errorOf(await updateAccount(sub, { mode: 'auto' })), /conexiune API/)
   })
 
   it('daily cap: 1 to 5, and never below what is already scheduled on a coming day', async () => {

@@ -43,6 +43,16 @@ describe('native connections on a temporary migrated database', () => {
     await rows(db, `select social_admin_update_account($1, '{"paused":false}'::jsonb, $2)`, [id, actor])
   })
 
+  it('creates API-connected YouTube, GitHub and Stack Exchange accounts as automatic without changing historical manual accounts', async () => {
+    for (const platform of ['youtube', 'github', 'stackexchange']) {
+      const [{ id }] = await rows(db, `select social_native_connect($1,'api-example','','Example',null,null,$2,$3,'{}',null,$4) as id`, [platform, brand, encrypted, actor])
+      assert.deepEqual((await rows(db, 'select mode,status,paused from social_accounts where id=$1', [id]))[0], { mode: 'auto', status: 'connected', paused: true })
+      await rows(db, `select social_admin_update_account($1,'{"mode":"manual","status":"manual"}',$2)`, [id, actor])
+      await rows(db, `select social_admin_update_account($1,'{"mode":"auto","status":"connected"}',$2)`, [id, actor])
+      await assert.rejects(rows(db, `insert into social_accounts(platform,mode,status,display_name) values($1,'auto','connected','Legacy')`, [platform]), /MANUAL_ONLY/)
+    }
+  })
+
   it('reconnects one identity without duplicating the account, changing its brand or unpausing it', async () => {
     const first = await connect('did:example:account-2')
     const second = await connect('did:example:account-2')

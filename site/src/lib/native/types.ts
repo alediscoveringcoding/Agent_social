@@ -5,7 +5,7 @@ export const NATIVE_PLATFORMS = [
   'threads', 'bluesky', 'mastodon', 'linkedin', 'reddit', 'pinterest',
   'telegram', 'discord', 'medium', 'farcaster', 'nostr', 'lemmy',
   'slack', 'wordpress', 'listmonk', 'vk', 'gmb', 'tumblr', 'dribbble',
-  'mewe', 'skool', 'whop', 'moltbook', 'kick', 'twitch', 'tiktok', 'youtube',
+  'mewe', 'skool', 'whop', 'moltbook', 'kick', 'twitch', 'tiktok', 'youtube', 'github', 'stackexchange',
 ] as const satisfies readonly Platform[]
 
 export type NativePlatform = (typeof NATIVE_PLATFORMS)[number]
